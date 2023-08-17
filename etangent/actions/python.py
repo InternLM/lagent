@@ -29,10 +29,28 @@ class GenericRuntime:
         return eval(expr, self._global_vars)
 
 
+DEFAULT_DESCRIPTION = """用来执行Python代码。代码必须是一个函数，
+函数名必须得是 'solution'，代码对应你的思考过程。代码实例格式如下：
+```python
+# import 依赖包
+import xxx
+def solution():
+    # 初始化一些变量
+    variable_names_with_real_meaning = xxx
+    # 步骤一
+    mid_variable = func(variable_names_with_real_meaning)
+    # 步骤 x
+    mid_variable = func(mid_variable)
+    # 最后结果
+    final_answer =  func(mid_variable)
+    return final_answer
+```"""
+
+
 class PythonExecutor(BaseAction):
 
     def __init__(self,
-                 description='',
+                 description=DEFAULT_DESCRIPTION,
                  answer_symbol: Optional[str] = None,
                  answer_expr: Optional[str] = 'solution()',
                  answer_from_stdout: bool = False,
@@ -49,17 +67,16 @@ class PythonExecutor(BaseAction):
 
     def __call__(self, command):
         self.runtime = GenericRuntime()
-        tool_return = ActionReturn(url=None, args=None)
         try:
             tool_return = func_set_timeout(self.timeout)(self._call)(command)
         except FunctionTimedOut as e:
+            tool_return = ActionReturn(url=None, args=None, type=self.name)
             tool_return.errmsg = repr(e)
-            tool_return.type = self.name
             tool_return.state = ActionStatusCode.API_ERROR
         return tool_return
 
     def _call(self, command):
-        tool_return = ActionReturn(url=None, args=None)
+        tool_return = ActionReturn(url=None, args=None, type=self.name)
         try:
             if '```python' in command:
                 command = command.split('```python')[1].split('```')[0]

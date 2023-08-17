@@ -58,7 +58,7 @@ class AgentStatusCode(Enum):
 class AgentReturn:
     actions: List[ActionReturn] = field(default_factory=list)
     response: str = ''
-    history: List = field(default_factory=list)
+    inner_steps: List = field(default_factory=list)
     errmsg: Optional[str] = None
 
 
