@@ -137,7 +137,10 @@ class LMTemplateParser:
             self.roles.get(self.roles[prompt['role']].get('fallback_role')))
         res = merged_prompt.get('begin', '')
         if last and merged_prompt.get('generate', False):
-            res += merged_prompt.get('content', '')
-            return res, False
-        res += merged_prompt.get('content', '') + merged_prompt.get('end', '')
+            res += prompt.get('content', '')
+            return res
+        res += prompt.get('content', '') + merged_prompt.get('end', '')
+        if last and merged_prompt['role'] != 'assistant':
+            res += self.roles['assistant']['begin']
+            return res
         return res
