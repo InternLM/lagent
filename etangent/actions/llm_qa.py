@@ -21,7 +21,11 @@ class LLMQA(BaseAction):
 
     def __call__(self, query):
         tool_return = ActionReturn(url=None, args=None)
-        response = self._llm.generate_from_template(query, 512)
-        tool_return.result = dict(text=str(response))
-        tool_return.state = ActionStatusCode.SUCCESS
+        try:
+            response = self._llm.generate_from_template(query, 512)
+            tool_return.result = dict(text=str(response))
+            tool_return.state = ActionStatusCode.SUCCESS
+        except Exception as e:
+            tool_return.result = dict(text=str(e))
+            tool_return.state = ActionStatusCode.API_ERROR
         return tool_return

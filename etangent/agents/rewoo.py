@@ -1,10 +1,11 @@
 import re
+import warnings
 
 from etangent.actions import ActionExecutor
 from etangent.schema import ActionReturn, ActionStatusCode, AgentReturn
 from .base_agent import BaseAgent
 
-CALL_PROTOCOL = """你是一个任务分解器, 你需要将用户的问题拆分成多个简单的子任务。
+PLANER_PROMPT = """你是一个任务分解器, 你需要将用户的问题拆分成多个简单的子任务。
 请拆分出多个子任务项，从而能够得到充分的信息以解决问题, 返回格式如下：
 ```
 Plan: 当前子任务要解决的问题
@@ -32,26 +33,21 @@ class ReWOOProtocol:
 
     def __init__(
         self,
-        response=dict(role='RESPONSE', begin='Response', end='\n'),
-        thought=dict(role='THOUGHT', begin='Thought', end='\n'),
-        call_protocol=CALL_PROTOCOL,
+        planner_prompt=PLANER_PROMPT,
+        solver_prompt=SOLVER_PROMPT,
     ) -> None:
-        self.call_protocol = call_protocol
-        self.response = response
-        self.thought = thought
+        self.planner_prompt = planner_prompt
+        self.solver_prompt = solver_prompt
 
-    def format(self,
-               chat_history,
-               inner_step,
-               action_executor: ActionExecutor,
-               reformat_request='') -> list:
-        call_protocol = self.call_protocol.format(
-            tool_description=action_executor.get_actions_info(),
-            response=self.response['begin'],
-            # example=EXAMPLE,
-        )
+    def format_planner(self,
+                       chat_history,
+                       inner_step,
+                       action_executor: ActionExecutor,
+                       reformat_request='') -> list:
+        planner_prompt = self.planner_prompt.format(
+            tool_description=action_executor.get_actions_info(), )
         formatted = []
-        formatted.append(dict(role='system', content=call_protocol))
+        formatted.append(dict(role='system', content=planner_prompt))
         formatted += chat_history
         formatted += inner_step
         if reformat_request != '':
@@ -61,7 +57,7 @@ class ReWOOProtocol:
                     content='回答格式错误: %s. 请重新重新回答: ' % reformat_request))
         return formatted
 
-    def parse(
+    def parse_worker(
         self,
         message,
         action_executor: ActionExecutor,
@@ -81,19 +77,19 @@ class ReWOOProtocol:
             thought_list.append(thought.strip())
         return thought_list, action_list, action_input_list
 
-    def format_response(self, thought_list, action_return_list):
-        responses = ''
+    def format_solver(self, question, thought_list, action_return_list):
+        worker_log = ''
         for thought, action_return in zip(thought_list, action_return_list):
-            response = self.thought['begin'] + ': ' + thought + self.thought[
-                'end']
-            response += self.response['begin'] + ': '
+            response = 'Thought: ' + thought + '\n'
+            response += 'Response: '
             if action_return.state == ActionStatusCode.SUCCESS:
                 response += action_return.result['text']
             else:
                 response += action_return.errmsg
-            response += self.response['end']
-            responses += response
-        return responses
+            worker_log += response + '\n'
+        solver_prompt = self.solver_prompt.format(
+            question=question, worker_log=worker_log)
+        return solver_prompt, worker_log
 
 
 class ReWOO(BaseAgent):
@@ -116,30 +112,30 @@ class ReWOO(BaseAgent):
         # planner
         turn_id = 0
         reformat_request = ''
-        while turn_id <= self.max_turn:
-            prompt = self._prompter.format(
+        while turn_id < self.max_turn:
+            planner_prompt = self._prompter.format_planner(
                 chat_history=self.session_history,
                 inner_step=self._inner_history,
                 action_executor=self._action_executor,
                 reformat_request=reformat_request)
-            response = self._llm.generate_from_template(prompt, 512)
+            response = self._llm.generate_from_template(planner_prompt, 512)
             self._inner_history.append(
                 dict(role='assistant', content=response))
             try:
-                thoughts, actions, actions_input = self._prompter.parse(
+                thoughts, actions, actions_input = self._prompter.parse_worker(
                     response, self._action_executor)
                 break
             except Exception as e:
                 turn_id += 1
                 reformat_request = str(e)
 
-        if turn_id > self.max_turn:
-            print('[Warning] Unable to parse LLM response for workers'
-                  '[Warning] Directly request solver for question answer...')
+        if turn_id >= self.max_turn:
+            warnings.warn('\nUnable to parse LLM responses in %d turns, '
+                          'directly request solver for question answer...' %
+                          self.max_turn)
             actions = []
             thoughts = []
             action_responses = []
-
         # workers
         action_responses = []
         for action_id in range(len(actions)):
@@ -153,14 +149,10 @@ class ReWOO(BaseAgent):
                 actions[action_id], actions_input[action_id])
             action_responses.append(action_return)
 
-        worker_log = self._prompter.format_response(thoughts, action_responses)
+        solver_prompt, worker_log = self._prompter.format_solver(
+            message, thoughts, action_responses)
         self._inner_history.append(dict(role='system', content=worker_log))
 
-        # solver
-        solver_prompt = SOLVER_PROMPT.format(
-            worker_log=worker_log,
-            question=message,
-        )
         final_response = self._llm.generate_from_template(solver_prompt, 512)
         self._inner_history.append(
             dict(role='assistant', content=final_response))
