@@ -1,10 +1,27 @@
+from typing import Optional
+
+from etangent.schema import ActionReturn
+
+
 class BaseAction:
+    """Base class for all actions.
+
+    Args:
+        description (str, optional): The description of the action. Defaults to
+            None.
+        name (str, optional): The name of the action. If None, the name will
+            be class nameDefaults to None.
+        enable (bool, optional): Whether the action is enabled. Defaults to
+            True.
+        disable_description (str, optional): The description of the action when
+            it is disabled. Defaults to None.
+    """
 
     def __init__(self,
-                 description=None,
-                 name=None,
-                 enable=True,
-                 disable_description=None):
+                 description: Optional[str] = None,
+                 name: Optional[str] = None,
+                 enable: bool = True,
+                 disable_description: Optional[str] = None) -> None:
         if name is None:
             name = self.__class__.__name__
         self._name = name
@@ -12,7 +29,7 @@ class BaseAction:
         self._disable_description = disable_description
         self._enable = enable
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs) -> ActionReturn:
         raise NotImplementedError
 
     def __repr__(self):
@@ -21,7 +38,7 @@ class BaseAction:
     def __str__(self):
         return self.__repr__()
 
-    def run(self, *args, **kwargs):
+    def run(self, *args, **kwargs) -> ActionReturn:
         return self.__call__(*args, **kwargs)
 
     @property

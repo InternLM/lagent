@@ -1,6 +1,6 @@
 from etangent.actions.action_executor import ActionExecutor
-from etangent.actions.finish_action import FinishAction
-from etangent.actions.python import PythonExecutor
+from etangent.actions.builtin_actions import FinishAction
+from etangent.actions.python_interpreter import PythonInterpreter
 from etangent.agents.autogpt import AutoGPT
 from etangent.llms.openai import GPTAPI
 
@@ -18,7 +18,7 @@ def main():
         llm=model,
         action_executor=ActionExecutor(
             actions=[
-                PythonExecutor(),
+                PythonInterpreter(),
             ],
             finish_action=FinishAction(
                 description=(

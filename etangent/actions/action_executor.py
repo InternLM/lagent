@@ -1,20 +1,31 @@
-from typing import List, Union
+from typing import Any, Dict, List, Union
 
 from etangent.schema import ActionReturn, ActionValidCode
 from .base_action import BaseAction
-from .finish_action import FinishAction
-from .invalid_action import InvalidAction
-from .no_action import NoAction
+from .builtin_actions import FinishAction, InvalidAction, NoAction
 
 
 class ActionExecutor:
+    """The action executor class.
+
+    Args:
+        actions (Union[BaseAction, List[BaseAction]]): The action or actions.
+        invalid_action (BaseAction, optional): The invalid action. Defaults to
+            InvalidAction().
+        no_action (BaseAction, optional): The no action.
+            Defaults to NoAction().
+        finish_action (BaseAction, optional): The finish action. Defaults to
+            FinishAction().
+        finish_in_action (bool, optional): Whether the finish action is in the
+            action list. Defaults to False.
+    """
 
     def __init__(self,
                  actions: Union[BaseAction, List[BaseAction]],
-                 invalid_action=InvalidAction(),
-                 no_action=NoAction(),
-                 finish_action=FinishAction(),
-                 finish_in_action=False):
+                 invalid_action: BaseAction = InvalidAction(),
+                 no_action: BaseAction = NoAction(),
+                 finish_action: BaseAction = FinishAction(),
+                 finish_in_action: bool = False):
         if isinstance(actions, BaseAction):
             actions = [actions]
 
@@ -28,7 +39,7 @@ class ActionExecutor:
         self.no_action = no_action
         self.finish_action = finish_action
 
-    def get_actions_info(self, only_enable: bool = True):
+    def get_actions_info(self, only_enable: bool = True) -> Dict:
         if only_enable:
             return {
                 k: v.description
@@ -55,7 +66,7 @@ class ActionExecutor:
         if name in self.actions:
             del self.actions[name]
 
-    def __call__(self, name, command) -> ActionReturn:
+    def __call__(self, name: str, command: Any) -> ActionReturn:
         if isinstance(command, str):
             args, kwargs = (command, ), {}
         else:

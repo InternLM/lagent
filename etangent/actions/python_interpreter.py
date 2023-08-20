@@ -47,7 +47,7 @@ def solution():
 ```"""
 
 
-class PythonExecutor(BaseAction):
+class PythonInterpreter(BaseAction):
 
     def __init__(self,
                  description=DEFAULT_DESCRIPTION,
