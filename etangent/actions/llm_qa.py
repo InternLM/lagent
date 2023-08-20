@@ -1,3 +1,7 @@
+from typing import Optional, Union
+
+from etangent.llms.base_api import BaseAPIModel
+from etangent.llms.base_llm import BaseModel
 from etangent.schema import ActionReturn, ActionStatusCode
 from .base_action import BaseAction
 
@@ -7,19 +11,40 @@ DEFAULT_DESCRIPTION = """一个像你一样的大语言预训练模型，当你�
 
 
 class LLMQA(BaseAction):
-    """An LLM Wrapper as BaseAction type."""
+    """An LLM Wrapper as BaseAction type.
+
+    Args:
+        llm (BaseModel or BaseAPIModel): a LLM service which can chat.
+        description (str): The description of the action. Defaults to
+            None.
+        name (str, optional): The name of the action. If None, the name will
+            be class nameDefaults to None.
+        enable (bool, optional): Whether the action is enabled. Defaults to
+            True.
+        disable_description (str, optional): The description of the action when
+            it is disabled. Defaults to None.
+    """
 
     def __init__(self,
-                 llm,
-                 description=DEFAULT_DESCRIPTION,
-                 name=None,
-                 enable=True,
-                 disable_description=None):
+                 llm: Union[BaseModel, BaseAPIModel],
+                 description: str = DEFAULT_DESCRIPTION,
+                 name: Optional[str] = None,
+                 enable: bool = True,
+                 disable_description: Optional[str] = None) -> None:
         super().__init__(description, name, enable, disable_description)
 
         self._llm = llm
 
-    def __call__(self, query):
+    def __call__(self, query: str) -> ActionReturn:
+        """Return the QA response.
+
+        Args:
+            query (str): The query content.
+
+        Returns:
+            ActionReturn: The action return.
+        """
+
         tool_return = ActionReturn(url=None, args=None)
         try:
             response = self._llm.generate_from_template(query, 512)

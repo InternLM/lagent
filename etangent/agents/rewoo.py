@@ -1,7 +1,10 @@
 import re
 import warnings
+from typing import Dict, List, Optional, Tuple, Union
 
 from etangent.actions import ActionExecutor
+from etangent.llms.base_api import BaseAPIModel
+from etangent.llms.base_llm import BaseModel
 from etangent.schema import ActionReturn, ActionStatusCode, AgentReturn
 from .base_agent import BaseAgent
 
@@ -34,22 +37,42 @@ SOLVER_PROMPT = """解决接下来的任务或者问题。为了帮助你，我�
 
 
 class ReWOOProtocol:
+    """A wrapper of ReWOO prompt which manages the response from LLM and
+    generate desired prompts in a ReWOO format.
+
+    Args:
+        planner_prompt (str): prompt template for planner
+        solver_prompt (str): prompt template for solver
+    """
 
     def __init__(
         self,
-        planner_prompt=PLANER_PROMPT,
-        worker_prompt=WORKER_PROMPT,
-        solver_prompt=SOLVER_PROMPT,
+        planner_prompt: str = PLANER_PROMPT,
+        worker_prompt: str = WORKER_PROMPT,
+        solver_prompt: str = SOLVER_PROMPT,
     ) -> None:
         self.planner_prompt = planner_prompt
         self.worker_prompt = worker_prompt
         self.solver_prompt = solver_prompt
 
     def format_planner(self,
-                       chat_history,
-                       inner_step,
+                       chat_history: List[Dict],
+                       inner_step: List[Dict],
                        action_executor: ActionExecutor,
-                       reformat_request='') -> list:
+                       reformat_request: Optional[str] = '') -> List[Dict]:
+        """Generate the planner prompt required by ReWOO.
+
+        Args:
+            chat_history (List[Dict]): The history log in previous runs.
+            inner_step (List[Dict]): The log in the current run.
+            action_executor (ActionExecutor): the action manager to execute
+                 actions.
+            reformat_request (str): the error feedback if the LLM fails to
+                generate required format for planner.
+
+        Returns:
+            List[Dict]: ReWOO format prompt for planner.
+        """
         planner_prompt = self.planner_prompt.format(
             tool_description=action_executor.get_actions_info(), )
         formatted = []
@@ -65,8 +88,22 @@ class ReWOOProtocol:
 
     def parse_worker(
         self,
-        message,
-    ):
+        message: str,
+    ) -> Tuple[List[str], List[str], List[str]]:
+        """Parse the LLM generated planner response and convert it into the
+        worker format.
+
+        Args:
+            message (str): The response from LLM with ReWOO planner format.
+
+        Returns:
+            tuple: the return value is a tuple contains:
+                - thought_list (List(str)): contain LLM thoughts of the user
+                    request.
+                - action_list (List(str)): contain actions scheduled by LLM.
+                - action_input_list (List(str)): contain the required action
+                     input for above actions.
+        """
         action_list = []
         action_input_list = []
         thought_list = []
@@ -82,7 +119,25 @@ class ReWOOProtocol:
             thought_list.append(thought.strip())
         return thought_list, action_list, action_input_list
 
-    def format_solver(self, question, thought_list, action_return_list):
+    def format_solver(
+            self, question: str, thought_list: List[str],
+            action_return_list: List[ActionReturn]) -> Tuple[str, str]:
+        """Generate the prompt for solver in a ReWOO format.
+
+        Args:
+            question (str): The user request in the current run.
+            thought_list (List[str]): thoughts generated from LLM for
+                each action.
+            action_return_list (List[ActionReturn]): action returns
+                from workers.
+
+        Returns:
+            tuple: the return value is a tuple contains:
+                - solver_prompt (str): the generated prompt for solver
+                     in a ReWOO format.
+                - worker_log (str): contain action responses from workers.
+                    Used for inner log.
+        """
         worker_log = ''
         for thought, action_return in zip(thought_list, action_return_list):
             if action_return.state == ActionStatusCode.SUCCESS:
@@ -98,18 +153,30 @@ class ReWOOProtocol:
 
 
 class ReWOO(BaseAgent):
+    """An implementation of ReWOO (https://arxiv.org/abs/2305.18323)
+
+    Args:
+        llm (BaseModel or BaseAPIModel): a LLM service which can chat
+            and act as planner / solver.
+        action_executor (ActionExecutor): an action executor to manage
+            all actions and their response.
+        prompter (ReWOOProtocol): a wrapper to generate prompt and
+            parse the response from LLM / actions.
+        max_turn (int): the maximum number of trails for LLM to generate
+            plans that can be successfully parsed by ReWOO protocol.
+    """
 
     def __init__(self,
-                 llm,
-                 action_executor,
-                 max_turn=2,
-                 prompter=ReWOOProtocol()):
+                 llm: Union[BaseModel, BaseAPIModel],
+                 action_executor: ActionExecutor,
+                 prompter: ReWOOProtocol = ReWOOProtocol(),
+                 max_turn: int = 2) -> None:
         super().__init__(
             llm=llm, action_executor=action_executor, prompter=prompter)
 
         self.max_turn = max_turn
 
-    def chat(self, message):
+    def chat(self, message: str) -> AgentReturn:
         self._inner_history = []
         self._inner_history.append(dict(role='user', content=message))
         agent_return = AgentReturn()
