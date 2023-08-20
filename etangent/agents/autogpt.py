@@ -1,10 +1,13 @@
 # flake8: noqa
 import ast
 import platform
+from typing import Dict, List, Optional, Tuple, Union
 
 from jsonschema import Draft7Validator
 
 from etangent.actions import ActionExecutor
+from etangent.llms.base_api import BaseAPIModel
+from etangent.llms.base_llm import BaseModel
 from etangent.schema import ActionReturn, ActionStatusCode, AgentReturn
 from .base_agent import BaseAgent
 
@@ -111,14 +114,26 @@ DEFAULT_SCHEMA = {
 
 
 class AutoGPTProtocol:
+    """A wrapper of AutoGPT prompt which manages the response from LLM and
+    generate desired prompts in a AutoGPT format.
+
+    Args:
+        ai_name (str): the name of the agent, default to 'AutoGPT'
+        role_description (str): description of the role, e.g., System, User
+        prefix (str): the prefix prompt for AutoGPT
+        call_protocol (str): the request prompt which defines the protocol
+            of return format from LLM.
+        valid_schema (dict): defines the schema of the return format.
+        triggering_prompt (str): the predefined trigger prompt.
+    """
 
     def __init__(self,
-                 ai_name='AutoGPT',
-                 role_description='',
-                 prefix=DEFAULT_PREFIX,
-                 call_protocol=DEFAULT_CALL_PROTOCOL,
-                 valid_schema=DEFAULT_SCHEMA,
-                 triggering_prompt=DEFAULT_TRIGGERING_PROMPT) -> None:
+                 ai_name: Optional[str] = 'AutoGPT',
+                 role_description: Optional[str] = '',
+                 prefix: str = DEFAULT_PREFIX,
+                 call_protocol: str = DEFAULT_CALL_PROTOCOL,
+                 valid_schema: str = DEFAULT_SCHEMA,
+                 triggering_prompt: str = DEFAULT_TRIGGERING_PROMPT) -> None:
         self.ai_name = ai_name
         self.role_description = role_description
         self.prefix = prefix
@@ -126,7 +141,20 @@ class AutoGPTProtocol:
         self.valid_schema = valid_schema
         self.triggering_prompt = triggering_prompt
 
-    def parse(self, response, action_executor: ActionExecutor):
+    def parse(self, response: str,
+              action_executor: ActionExecutor) -> Tuple[str, str]:
+        """Parse the action returns in a AutoGPT format.
+
+        Args:
+            response (str): The response from LLM with AutoGPT format.
+            action_executor (ActionExecutor): Action executor to
+                provide no_action/finish_action name.
+
+        Returns:
+            tuple: the return value is a tuple contains:
+                - action (str): the extracted action name.
+                - action_input (str): the corresponding action input.
+        """
         try:
             if response.startswith('```') and response.endswith('```'):
                 # Discard the first and last ```, then re-join in case the response naturally included ```
@@ -159,7 +187,18 @@ class AutoGPTProtocol:
         except SyntaxError as e:
             return action_executor.no_action, f'Your response could not be parsed: {repr(e)} \nRemember to only respond using the specified format above!'
 
-    def format(self, goal, inner_history, action_executor: ActionExecutor):
+    def format(self, goal: str, inner_history: List[Dict],
+               action_executor: ActionExecutor) -> List[Dict]:
+        """Generate the AutoGPT format prompt.
+
+        Args:
+            goal (str): The user request.
+            inner_history (List[Dict]): The log in the current run.
+            action_executor (ActionExecutor): the action manager to
+                execute actions.
+        Returns:
+            List[Dict]: AutoGPT format prompt.
+        """
         import distro
         formatted_data = []
         os_name = platform.system()
@@ -181,6 +220,14 @@ class AutoGPTProtocol:
         return formatted_data
 
     def format_response(self, action_return):
+        """format the final response at current step.
+
+        Args:
+            action_return (ActionReturn): return value of the current action.
+
+        Returns:
+            str: the final response at current step.
+        """
         if action_return.state == ActionStatusCode.SUCCESS:
             response = action_return.result['text']
             response = f'Command {action_return.type} returned: {response}'
@@ -190,17 +237,30 @@ class AutoGPTProtocol:
 
 
 class AutoGPT(BaseAgent):
+    """An implementation of AutoGPT (https://github.com/Significant-
+    Gravitas/Auto-GPT)
+
+    Args:
+        llm (BaseModel or BaseAPIModel): a LLM service which can chat
+            and act as backend.
+        action_executor (ActionExecutor): an action executor to manage
+            all actions and their response.
+        prompter (ReActProtocol): a wrapper to generate prompt and
+            parse the response from LLM / actions.
+        max_turn (int): the maximum number of trails for LLM to generate
+            plans that can be successfully parsed by ReWOO protocol.
+    """
 
     def __init__(self,
-                 llm,
+                 llm: Union[BaseModel, BaseAPIModel],
                  action_executor: ActionExecutor,
-                 prompter=AutoGPTProtocol(),
-                 max_turn=2):
+                 prompter: AutoGPTProtocol = AutoGPTProtocol(),
+                 max_turn: int = 2):
         self.max_turn = max_turn
         super().__init__(
             llm=llm, action_executor=action_executor, prompter=prompter)
 
-    def chat(self, goal):
+    def chat(self, goal: str) -> AgentReturn:
         self._inner_history = []
         agent_return = AgentReturn()
         default_response = '对不起，我无法回答你的问题'
