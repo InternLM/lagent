@@ -6,7 +6,7 @@ This chapter introduces you to the framework of Lagent, and provides links to de
 
 Lagent is an open source LLM agent framework, which enables people to efficiently turn a large language model to agent. It also provides some typical tools to enlighten the ablility of LLM, and the whole framework is shown below:
 
-![image](<>)
+![image](https://github.com/InternLM/lagent/assets/24351120/e104171e-4baf-43b3-8e6d-90cff1b298b6)
 
 Lagent consists of 3 main parts, agents, llms, and actions.
 
