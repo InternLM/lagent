@@ -22,6 +22,10 @@ Plan: 当前子任务要解决的问题
 注意: 每个Plan后有且仅能跟随一个#E。
 开始！"""
 
+WORKER_PROMPT = """
+Thought: {thought}\nResponse: {action_resp}\n
+"""
+
 SOLVER_PROMPT = """解决接下来的任务或者问题。为了帮助你，我们提供了一些相关的计划
 和相应的解答。注意其中一些信息可能存在噪声，因此你需要谨慎的使用它们。\n
 {question}\n{worker_log}\n现在开始回答这个任务或者问题。请直接回答这个问题，
@@ -34,9 +38,11 @@ class ReWOOProtocol:
     def __init__(
         self,
         planner_prompt=PLANER_PROMPT,
+        worker_prompt=WORKER_PROMPT,
         solver_prompt=SOLVER_PROMPT,
     ) -> None:
         self.planner_prompt = planner_prompt
+        self.worker_prompt = worker_prompt
         self.solver_prompt = solver_prompt
 
     def format_planner(self,
@@ -60,7 +66,6 @@ class ReWOOProtocol:
     def parse_worker(
         self,
         message,
-        action_executor: ActionExecutor,
     ):
         action_list = []
         action_input_list = []
@@ -80,13 +85,13 @@ class ReWOOProtocol:
     def format_solver(self, question, thought_list, action_return_list):
         worker_log = ''
         for thought, action_return in zip(thought_list, action_return_list):
-            response = 'Thought: ' + thought + '\n'
-            response += 'Response: '
             if action_return.state == ActionStatusCode.SUCCESS:
-                response += action_return.result['text']
+                action_resp = action_return.result['text']
             else:
-                response += action_return.errmsg
-            worker_log += response + '\n'
+                action_resp = action_return.errmsg
+            worker_response = self.worker_prompt.format(
+                thought=thought, action_resp=action_resp)
+            worker_log += worker_response
         solver_prompt = self.solver_prompt.format(
             question=question, worker_log=worker_log)
         return solver_prompt, worker_log
@@ -123,7 +128,7 @@ class ReWOO(BaseAgent):
                 dict(role='assistant', content=response))
             try:
                 thoughts, actions, actions_input = self._prompter.parse_worker(
-                    response, self._action_executor)
+                    response)
                 break
             except Exception as e:
                 turn_id += 1
