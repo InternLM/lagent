@@ -1,6 +1,5 @@
+import json
 from unittest import TestCase, mock
-
-import mmengine
 
 from lagent.actions import SerperSearch
 from lagent.schema import ActionStatusCode
@@ -10,7 +9,7 @@ class TestSerperSearch(TestCase):
 
     @mock.patch.object(SerperSearch, '_search')
     def test_search_tool(self, mock_search_func):
-        mock_response = (200, mmengine.load('tests/data/search.json'))
+        mock_response = (200, json.load('tests/data/search.json'))
         mock_search_func.return_value = mock_response
         search_tool = SerperSearch(api_key='abc')
         tool_return = search_tool.run("What's the capital of China?")
