@@ -1,4 +1,8 @@
+from typing import Dict, List, Tuple, Union
+
 from etangent.actions import ActionExecutor
+from etangent.llms.base_api import BaseAPIModel
+from etangent.llms.base_llm import BaseModel
 from etangent.schema import ActionReturn, ActionStatusCode, AgentReturn
 from .base_agent import BaseAgent
 
@@ -23,20 +27,34 @@ CALL_PROTOCOL = """你是一个可以调用外部工具的助手，可以使用�
 
 
 class ReACTProtocol:
+    """A wrapper of ReACT prompt which manages the response from LLM and
+    generate desired prompts in a ReACT format.
+
+    Args:
+        thought (dict): the information of thought pattern
+        action (dict): the information of action pattern
+        action_input (dict): the information of action_input pattern
+        response (dict): the information of response pattern
+        finish (dict): the information of finish pattern
+        call_protocol (str): the format of ReACT
+        force_stop (str): the prompt to force LLM to generate response
+    """
 
     def __init__(self,
-                 thought=dict(
+                 thought: dict = dict(
                      role='THOUGHT',
                      begin='Thought:',
                      end='\n',
                      belong='assistant'),
-                 action=dict(role='ACTION', begin='Action:', end='\n'),
-                 action_input=dict(
+                 action: dict = dict(role='ACTION', begin='Action:', end='\n'),
+                 action_input: dict = dict(
                      role='ARGS', begin='ActionInput:', end='\n'),
-                 response=dict(role='RESPONSE', begin='Response:', end='\n'),
-                 finish=dict(role='FINISH', begin='FinalAnswer:', end='\n'),
-                 call_protocol=CALL_PROTOCOL,
-                 force_stop='你需要基于历史消息返回一个最终结果') -> None:
+                 response: dict = dict(
+                     role='RESPONSE', begin='Response:', end='\n'),
+                 finish: dict = dict(
+                     role='FINISH', begin='FinalAnswer:', end='\n'),
+                 call_protocol: str = CALL_PROTOCOL,
+                 force_stop: str = '你需要基于历史消息返回一个最终结果') -> None:
         self.call_protocol = call_protocol
         self.force_stop = force_stop
         self.thought = thought
@@ -46,10 +64,24 @@ class ReACTProtocol:
         self.finish = finish
 
     def format(self,
-               chat_history,
-               inner_step,
+               chat_history: List[Dict],
+               inner_step: List[Dict],
                action_executor: ActionExecutor,
-               force_stop=False) -> list:
+               force_stop: bool = False) -> list:
+        """Generate the ReACT format prompt.
+
+        Args:
+            chat_history (List[Dict]): The history log in previous runs.
+            inner_step (List[Dict]): The log in the current run.
+            action_executor (ActionExecutor): the action manager to
+                execute actions.
+            force_stop (boolean): whether force the agent to give responses
+                under pre-defined turns.
+
+        Returns:
+            List[Dict]: ReACT format prompt.
+        """
+
         call_protocol = self.call_protocol.format(
             tool_description=action_executor.get_actions_info(),
             action_names=action_executor.action_names(),
@@ -69,9 +101,24 @@ class ReACTProtocol:
 
     def parse(
         self,
-        message,
+        message: str,
         action_executor: ActionExecutor,
-    ):
+    ) -> Tuple[str, str, str]:
+        """Parse the action returns in a ReACT format.
+
+        Args:
+            message (str): The response from LLM with ReACT format.
+            action_executor (ActionExecutor): Action executor to
+                provide no_action/finish_action name.
+
+        Returns:
+            tuple: the return value is a tuple contains:
+                - thought (str): contain LLM thought of the current step.
+                - action (str): contain action scheduled by LLM.
+                - action_input (str): contain the required action input
+                    for current action.
+        """
+
         import re
         thought = message.split(self.action['begin'])[0]
         thought = thought.split(self.thought['begin'])[-1]
@@ -93,7 +140,15 @@ class ReACTProtocol:
         action_input = arg_match[-1]
         return thought, action.strip(), action_input.strip().strip('"')
 
-    def format_response(self, action_return: ActionReturn):
+    def format_response(self, action_return: ActionReturn) -> str:
+        """format the final response at current step.
+
+        Args:
+            action_return (ActionReturn): return value of the current action.
+
+        Returns:
+            str: the final response at current step.
+        """
         if action_return.state == ActionStatusCode.SUCCESS:
             response = action_return.result['text']
         else:
@@ -102,17 +157,29 @@ class ReACTProtocol:
 
 
 class ReACT(BaseAgent):
+    """An implementation of ReACT (https://arxiv.org/abs/2210.03629)
+
+    Args:
+        llm (BaseModel or BaseAPIModel): a LLM service which can chat
+            and act as backend.
+        action_executor (ActionExecutor): an action executor to manage
+            all actions and their response.
+        prompter (ReActProtocol): a wrapper to generate prompt and
+            parse the response from LLM / actions.
+        max_turn (int): the maximum number of trails for LLM to generate
+            plans that can be successfully parsed by ReWOO protocol.
+    """
 
     def __init__(self,
-                 llm,
-                 action_executor,
-                 prompter=ReACTProtocol(),
-                 max_turn=2):
+                 llm: Union[BaseModel, BaseAPIModel],
+                 action_executor: ActionExecutor,
+                 prompter: ReACTProtocol = ReACTProtocol(),
+                 max_turn: int = 2) -> None:
         self.max_turn = max_turn
         super().__init__(
             llm=llm, action_executor=action_executor, prompter=prompter)
 
-    def chat(self, message):
+    def chat(self, message: str) -> AgentReturn:
         self._inner_history = []
         self._inner_history.append(dict(role='user', content=message))
         agent_return = AgentReturn()

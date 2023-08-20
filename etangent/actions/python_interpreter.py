@@ -48,16 +48,34 @@ def solution():
 
 
 class PythonInterpreter(BaseAction):
+    """A Python executor that can execute Python scripts.
+
+    Args:
+        description (str): The description of the action. Defaults to
+            DEFAULT_DESCRIPTION.
+        answer_symbol (str, Optional): the answer symbol from LLM
+        answer_expr (str, Optional): the answer function name of the Python
+            script. Default to 'solution()'.
+        answer_from_stdout (boolean): whether the execution results is from
+            stdout.
+        name (str, optional): The name of the action. If None, the name will
+            be class nameDefaults to None.
+        enable (bool, optional): Whether the action is enabled. Defaults to
+            True.
+        disable_description (str, optional): The description of the action when
+            it is disabled. Defaults to None.
+        timeout (int): Upper bound of waiting time for Python script execution.
+    """
 
     def __init__(self,
-                 description=DEFAULT_DESCRIPTION,
+                 description: str = DEFAULT_DESCRIPTION,
                  answer_symbol: Optional[str] = None,
                  answer_expr: Optional[str] = 'solution()',
                  answer_from_stdout: bool = False,
-                 name=None,
-                 enable=True,
-                 disable_description=None,
-                 timeout=30):
+                 name: Optional[str] = None,
+                 enable: bool = True,
+                 disable_description: Optional[str] = None,
+                 timeout: int = 20) -> None:
         super().__init__(description, name, enable, disable_description)
 
         self.answer_symbol = answer_symbol
@@ -65,7 +83,7 @@ class PythonInterpreter(BaseAction):
         self.answer_from_stdout = answer_from_stdout
         self.timeout = timeout
 
-    def __call__(self, command):
+    def __call__(self, command: str) -> ActionReturn:
         self.runtime = GenericRuntime()
         try:
             tool_return = func_set_timeout(self.timeout)(self._call)(command)
@@ -75,7 +93,7 @@ class PythonInterpreter(BaseAction):
             tool_return.state = ActionStatusCode.API_ERROR
         return tool_return
 
-    def _call(self, command):
+    def _call(self, command: str) -> ActionReturn:
         tool_return = ActionReturn(url=None, args=None, type=self.name)
         try:
             if '```python' in command:

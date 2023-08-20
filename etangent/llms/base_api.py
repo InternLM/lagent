@@ -106,7 +106,7 @@ class APITemplateParser:
                     'role in meta prompt must be unique!'
                 self.roles[item['role']] = item.copy()
 
-    def parse_template(self, dialog):
+    def parse_template(self, dialog: List[Union[str, List]]):
         """Parse the intermidate prompt template, and wrap it with meta
         template if applicable. When the meta template is set and the input is
         a list, the return value will be a list containing the full
@@ -217,10 +217,10 @@ class TokenBucket:
     """A token bucket for rate limiting.
 
     Args:
-        query_per_second (float): The rate of the token bucket.
+        rate (float): The rate of the token bucket.
     """
 
-    def __init__(self, rate):
+    def __init__(self, rate: float) -> None:
         self._rate = rate
         self._tokens = threading.Semaphore(0)
         self.started = False
