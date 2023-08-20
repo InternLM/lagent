@@ -160,7 +160,7 @@ class ReWOO(BaseAgent):
             and act as planner / solver.
         action_executor (ActionExecutor): an action executor to manage
             all actions and their response.
-        prompter (ReWOOProtocol): a wrapper to generate prompt and
+        protocol (ReWOOProtocol): a wrapper to generate prompt and
             parse the response from LLM / actions.
         max_turn (int): the maximum number of trails for LLM to generate
             plans that can be successfully parsed by ReWOO protocol.
@@ -169,10 +169,10 @@ class ReWOO(BaseAgent):
     def __init__(self,
                  llm: Union[BaseModel, BaseAPIModel],
                  action_executor: ActionExecutor,
-                 prompter: ReWOOProtocol = ReWOOProtocol(),
+                 protocol: ReWOOProtocol = ReWOOProtocol(),
                  max_turn: int = 2) -> None:
         super().__init__(
-            llm=llm, action_executor=action_executor, prompter=prompter)
+            llm=llm, action_executor=action_executor, protocol=protocol)
 
         self.max_turn = max_turn
 
@@ -185,7 +185,7 @@ class ReWOO(BaseAgent):
         turn_id = 0
         reformat_request = ''
         while turn_id < self.max_turn:
-            planner_prompt = self._prompter.format_planner(
+            planner_prompt = self._protocol.format_planner(
                 chat_history=self.session_history,
                 inner_step=self._inner_history,
                 action_executor=self._action_executor,
@@ -194,7 +194,7 @@ class ReWOO(BaseAgent):
             self._inner_history.append(
                 dict(role='assistant', content=response))
             try:
-                thoughts, actions, actions_input = self._prompter.parse_worker(
+                thoughts, actions, actions_input = self._protocol.parse_worker(
                     response)
                 break
             except Exception as e:
@@ -221,7 +221,7 @@ class ReWOO(BaseAgent):
                 actions[action_id], actions_input[action_id])
             action_responses.append(action_return)
 
-        solver_prompt, worker_log = self._prompter.format_solver(
+        solver_prompt, worker_log = self._protocol.format_solver(
             message, thoughts, action_responses)
         self._inner_history.append(dict(role='system', content=worker_log))
 
