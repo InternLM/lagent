@@ -27,7 +27,7 @@ cd lagent
 pip install -e .
 ```
 
-#### Run a ReAct agent with GPT3.5 backend
+### Run a ReAct agent with GPT3.5 backend
 
 ```python
 from lagent.agents import ReAct
@@ -49,7 +49,7 @@ print(response['response'])
 >>> They are both film directors.
 ```
 
-#### Run a ReAct model with HuggingFace backend.
+### Run a ReAct model with HuggingFace backend.
 
 NOTE: If you want to run a HuggingFace model, please run `pip install -e . [all]` first.
 
