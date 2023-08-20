@@ -1,10 +1,10 @@
 from unittest import TestCase, mock
 
-from etangent.actions import ActionExecutor
-from etangent.actions.llm_qa import LLMQA
-from etangent.actions.serper_search import SerperSearch
-from etangent.agents.rewoo import ReWOO, ReWOOProtocol
-from etangent.schema import ActionReturn, ActionStatusCode
+from lagent.actions import ActionExecutor
+from lagent.actions.llm_qa import LLMQA
+from lagent.actions.serper_search import SerperSearch
+from lagent.agents.rewoo import ReWOO, ReWOOProtocol
+from lagent.schema import ActionReturn, ActionStatusCode
 
 
 class TestReWOO(TestCase):

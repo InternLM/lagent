@@ -2,7 +2,7 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Union
 
-from etangent.utils import is_module_exist
+from lagent.utils import is_module_exist
 
 
 def enum_dict_factory(inputs):

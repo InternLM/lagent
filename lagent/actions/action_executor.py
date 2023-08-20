@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Union
 
-from etangent.schema import ActionReturn, ActionValidCode
+from lagent.schema import ActionReturn, ActionValidCode
 from .base_action import BaseAction
 from .builtin_actions import FinishAction, InvalidAction, NoAction
 

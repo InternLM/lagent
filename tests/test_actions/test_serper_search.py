@@ -2,8 +2,8 @@ from unittest import TestCase, mock
 
 import mmengine
 
-from etangent.actions import SerperSearch
-from etangent.schema import ActionStatusCode
+from lagent.actions import SerperSearch
+from lagent.schema import ActionStatusCode
 
 
 class TestSerperSearch(TestCase):
