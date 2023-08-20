@@ -1,5 +1,5 @@
 from etangent.actions.action_executor import ActionExecutor
-from etangent.actions.python import PythonExecutor
+from etangent.actions.python_interpreter import PythonInterpreter
 from etangent.agents.react import ReACT
 from etangent.llms.huggingface import HuggingFace
 
@@ -14,7 +14,7 @@ model = HuggingFace(
 
 chatbot = ReACT(
     llm=model,
-    action_executor=ActionExecutor(actions=[PythonExecutor()]),
+    action_executor=ActionExecutor(actions=[PythonInterpreter()]),
 )
 
 
