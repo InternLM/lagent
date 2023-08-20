@@ -16,13 +16,42 @@ LAgent是一个开源的LLM代理框架，支持用户快速地将一个大语�
 
 - **灵活支持多个大语言模型.** 我们提供了多种大语言模型支持，包括 InternLM、Llama-2 等开源模型和 GPT-4/3.5 等基于 API 的闭源模型。
 
-## 安装
-
-请参考[快速入门文档](docs/get_started.md)进行安装。
-
 ## 教程
 
-请阅读[概述](docs/overview.md)对LAgent进行初步的了解。同时, 我们提供了一个非常简单的code帮助你快速入门。 你也可以阅读[examples](examples/)获得更多的例子参考。
+请阅读[概述](docs/overview.md)对LAgent进行初步的了解。同时, 我们提供了两个非常简单的code帮助你快速入门。 你也可以阅读[examples](examples/)获得更多的例子参考。
+
+### 安装
+
+```
+cd lagent
+pip install -e .
+```
+
+### 用GPT3.5构建一个ReAct代理
+
+```python
+from lagent.agents import ReAct
+from lagent.llms import GPTAPI
+from lagent.tools import SerperSearch, PythonInterpreter
+
+llm = GPTAPI(model_type='gpt-3.5-turbo')
+search_tool = SerperSearch()
+python_interpreter = PythonInterpreter()
+
+chatbot = ReAct(
+    llm=model,
+    action_executor=ActionExecutor(
+        actions=[search_tool, python_interpreter]),
+)
+
+response = chatbot.chat('What profession does Nicholas Ray and Elia Kazan have in common')
+print(response['response'])
+>>> They are both film directors.
+```
+
+### 用HuggingFace构建一个ReAct代理
+
+注意：如果你想要启动一个HuggingFace的模型，请先运行`pip install -e . [all]`。
 
 ```python
 from lagent.agents import ReAct

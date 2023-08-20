@@ -16,13 +16,42 @@ LAgent is an open source LLM agent framework, which enables people to efficientl
 
 - **Support various large language models.** We support different LLMs, including API-based (GPT3.5/4) and HuggingFace-based (LLaMa2, InternLM) models.
 
-## Installation
-
-Please refer to [Installation](docs/get_started.md) for installation instructions.
-
 ## Getting Started
 
-Please see [Overview](docs/overview.md) for the general introduction of LAgent. Meanwhile, we provide an extremely simple code for quick start. You may refer to [examples](examples/) for more details.
+Please see [Overview](docs/overview.md) for the general introduction of LAgent. Meanwhile, we provide extremely simple code for quick start. You may refer to [examples](examples/) for more details.
+
+### Installation
+
+```
+cd lagent
+pip install -e .
+```
+
+#### Run a ReAct agent with GPT3.5 backend
+
+```python
+from lagent.agents import ReAct
+from lagent.llms import GPTAPI
+from lagent.tools import SerperSearch, PythonInterpreter
+
+llm = GPTAPI(model_type='gpt-3.5-turbo')
+search_tool = SerperSearch()
+python_interpreter = PythonInterpreter()
+
+chatbot = ReAct(
+    llm=model,
+    action_executor=ActionExecutor(
+        actions=[search_tool, python_interpreter]),
+)
+
+response = chatbot.chat('What profession does Nicholas Ray and Elia Kazan have in common')
+print(response['response'])
+>>> They are both film directors.
+```
+
+#### Run a ReAct model with HuggingFace backend.
+
+NOTE: If you want to run a HuggingFace model, please run `pip install -e . [all]` first.
 
 ```python
 from lagent.agents import ReAct
