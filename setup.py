@@ -99,5 +99,9 @@ if __name__ == '__main__':
         long_description_content_type='text/markdown',
         data_files=[('.', ['README.md'])],
         keywords=['artificial general intelligence', 'agent', 'agi', 'llm'],
-        install_requires=parse_requirements('requirements.txt'),
+        install_requires=parse_requirements('requirements/runtime.txt'),
+        extras_require={
+            'all': parse_requirements('requirements.txt'),
+            'optional': parse_requirements('requirements/optional.txt'),
+        },
     )
