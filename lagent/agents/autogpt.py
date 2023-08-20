@@ -245,7 +245,7 @@ class AutoGPT(BaseAgent):
             and act as backend.
         action_executor (ActionExecutor): an action executor to manage
             all actions and their response.
-        prompter (ReActProtocol): a wrapper to generate prompt and
+        protocol (ReActProtocol): a wrapper to generate prompt and
             parse the response from LLM / actions.
         max_turn (int): the maximum number of trails for LLM to generate
             plans that can be successfully parsed by ReWOO protocol.
@@ -254,25 +254,25 @@ class AutoGPT(BaseAgent):
     def __init__(self,
                  llm: Union[BaseModel, BaseAPIModel],
                  action_executor: ActionExecutor,
-                 prompter: AutoGPTProtocol = AutoGPTProtocol(),
+                 protocol: AutoGPTProtocol = AutoGPTProtocol(),
                  max_turn: int = 2):
         self.max_turn = max_turn
         super().__init__(
-            llm=llm, action_executor=action_executor, prompter=prompter)
+            llm=llm, action_executor=action_executor, protocol=protocol)
 
     def chat(self, goal: str) -> AgentReturn:
         self._inner_history = []
         agent_return = AgentReturn()
         default_response = '对不起，我无法回答你的问题'
         for _ in range(self.max_turn):
-            prompt = self._prompter.format(
+            prompt = self._protocol.format(
                 goal=goal,
                 inner_history=self._inner_history,
                 action_executor=self._action_executor)
             response = self._llm.generate_from_template(prompt, 512)
             self._inner_history.append(
                 dict(role='assistant', content=response))
-            action, action_input = self._prompter.parse(
+            action, action_input = self._protocol.parse(
                 response, self._action_executor)
             action_return: ActionReturn = self._action_executor(
                 action, action_input)
@@ -283,6 +283,6 @@ class AutoGPT(BaseAgent):
             self._inner_history.append(
                 dict(
                     role='system',
-                    content=self._prompter.format_response(action_return)))
+                    content=self._protocol.format_response(action_return)))
         agent_return.response = default_response
         return agent_return
