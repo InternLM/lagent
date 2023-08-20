@@ -2,6 +2,13 @@ from pathlib import Path
 from setuptools import find_packages, setup
 
 
+def get_version():
+    version_file = 'lagent/version.py'
+    with open(version_file, encoding='utf-8') as f:
+        exec(compile(f.read(), version_file, 'exec'))
+    return locals()['__version__']
+
+
 def parse_requirements(fname='requirements.txt', with_version=True):
     """Parse the package dependencies listed in a requirements file but strip
     specific version information.
@@ -85,14 +92,12 @@ if __name__ == '__main__':
         name='lagent',
         packages=find_packages(),
         include_package_data=True,
-        version='0.0.1',
+        version=get_version(),
         license='Apache 2.0',
         description='An open-source framework for language agent research.',
         long_description=long_description,
         long_description_content_type='text/markdown',
         data_files=[('.', ['README.md'])],
-        keywords=[
-            'artificial general intelligence', 'language model', 'agi', 'llm'
-        ],
+        keywords=['artificial general intelligence', 'agent', 'agi', 'llm'],
         install_requires=parse_requirements('requirements.txt'),
     )
