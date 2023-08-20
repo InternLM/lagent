@@ -13,13 +13,16 @@ class ActionExecutor:
                  actions: Union[BaseAction, List[BaseAction]],
                  invalid_action=InvalidAction(),
                  no_action=NoAction(),
-                 finish_action=FinishAction()):
+                 finish_action=FinishAction(),
+                 finish_in_action=False):
         if isinstance(actions, BaseAction):
             actions = [actions]
 
         for action in actions:
             assert isinstance(action, BaseAction), \
                 f'action must be BaseAction, but got {type(action)}'
+        if finish_in_action:
+            actions.append(finish_action)
         self.actions = {action.name: action for action in actions}
         self.invalid_action = invalid_action
         self.no_action = no_action
@@ -53,14 +56,18 @@ class ActionExecutor:
             del self.actions[name]
 
     def __call__(self, name, command) -> ActionReturn:
+        if isinstance(command, str):
+            args, kwargs = (command, ), {}
+        else:
+            args, kwargs = (), command
         if not self.is_valid(name):
             if name == self.no_action.name:
-                action_return = self.no_action.run(command)
+                action_return = self.no_action.run(*args, **kwargs)
             elif name == self.finish_action.name:
-                action_return = self.finish_action.run(command)
+                action_return = self.finish_action.run(*args, **kwargs)
             else:
-                action_return = self.invalid_action(command)
+                action_return = self.invalid_action(*args, **kwargs)
         else:
-            action_return = self.actions[name].run(command)
+            action_return = self.actions[name].run(*args, **kwargs)
             action_return.valid = ActionValidCode.OPEN
         return action_return
