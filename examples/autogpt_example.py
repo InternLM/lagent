@@ -1,8 +1,8 @@
-from etangent.actions.action_executor import ActionExecutor
-from etangent.actions.builtin_actions import FinishAction
-from etangent.actions.python_interpreter import PythonInterpreter
-from etangent.agents.autogpt import AutoGPT
-from etangent.llms.openai import GPTAPI
+from lagent.actions.action_executor import ActionExecutor
+from lagent.actions.builtin_actions import FinishAction
+from lagent.actions.python_interpreter import PythonInterpreter
+from lagent.agents.autogpt import AutoGPT
+from lagent.llms.openai import GPTAPI
 
 
 def input_prompt():

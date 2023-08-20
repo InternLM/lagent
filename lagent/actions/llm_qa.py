@@ -1,8 +1,8 @@
 from typing import Optional, Union
 
-from etangent.llms.base_api import BaseAPIModel
-from etangent.llms.base_llm import BaseModel
-from etangent.schema import ActionReturn, ActionStatusCode
+from lagent.llms.base_api import BaseAPIModel
+from lagent.llms.base_llm import BaseModel
+from lagent.schema import ActionReturn, ActionStatusCode
 from .base_action import BaseAction
 
 DEFAULT_DESCRIPTION = """一个像你一样的大语言预训练模型，当你需要获得一些常识或简单世界知识时可以问它。

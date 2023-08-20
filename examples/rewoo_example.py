@@ -1,8 +1,8 @@
-from etangent.actions.action_executor import ActionExecutor
-from etangent.actions.llm_qa import LLMQA
-from etangent.actions.serper_search import SerperSearch
-from etangent.agents.rewoo import ReWOO
-from etangent.llms.openai import GPTAPI
+from lagent.actions.action_executor import ActionExecutor
+from lagent.actions.llm_qa import LLMQA
+from lagent.actions.serper_search import SerperSearch
+from lagent.agents.rewoo import ReWOO
+from lagent.llms.openai import GPTAPI
 
 model = GPTAPI(model_type='gpt-3.5-turbo')
 

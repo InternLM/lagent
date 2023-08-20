@@ -82,12 +82,12 @@ if __name__ == '__main__':
         long_description = file.read()
 
     setup(
-        name='etangent',
+        name='lagent',
         packages=find_packages(),
         include_package_data=True,
         version='0.0.1',
         license='Apache 2.0',
-        description='An open-source framework for sft data processing',
+        description='An open-source framework for language agent research.',
         long_description=long_description,
         long_description_content_type='text/markdown',
         data_files=[('.', ['README.md'])],

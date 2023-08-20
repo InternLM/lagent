@@ -1,9 +1,9 @@
 from typing import Union
 
-from etangent.actions import ActionExecutor
-from etangent.actions.base_action import BaseAction
-from etangent.llms.base_api import BaseAPIModel
-from etangent.llms.base_llm import BaseModel
+from lagent.actions import ActionExecutor
+from lagent.actions.base_action import BaseAction
+from lagent.llms.base_api import BaseAPIModel
+from lagent.llms.base_llm import BaseModel
 
 
 class BaseAgent:

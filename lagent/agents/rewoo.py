@@ -2,10 +2,10 @@ import re
 import warnings
 from typing import Dict, List, Optional, Tuple, Union
 
-from etangent.actions import ActionExecutor
-from etangent.llms.base_api import BaseAPIModel
-from etangent.llms.base_llm import BaseModel
-from etangent.schema import ActionReturn, ActionStatusCode, AgentReturn
+from lagent.actions import ActionExecutor
+from lagent.llms.base_api import BaseAPIModel
+from lagent.llms.base_llm import BaseModel
+from lagent.schema import ActionReturn, ActionStatusCode, AgentReturn
 from .base_agent import BaseAgent
 
 PLANER_PROMPT = """你是一个任务分解器, 你需要将用户的问题拆分成多个简单的子任务。

@@ -5,8 +5,8 @@ from typing import Any, Optional
 
 from func_timeout import FunctionTimedOut, func_set_timeout
 
-from etangent.actions.base_action import BaseAction
-from etangent.schema import ActionReturn, ActionStatusCode
+from lagent.actions.base_action import BaseAction
+from lagent.schema import ActionReturn, ActionStatusCode
 
 
 class GenericRuntime:

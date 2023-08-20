@@ -1,7 +1,7 @@
 from unittest import TestCase
 
-from etangent.actions.python_interpreter import PythonInterpreter
-from etangent.schema import ActionStatusCode
+from lagent.actions.python_interpreter import PythonInterpreter
+from lagent.schema import ActionStatusCode
 
 
 class TestPythonInterpreter(TestCase):

@@ -1,7 +1,7 @@
 from typing import Optional
 
-from etangent.actions.base_action import BaseAction
-from etangent.schema import ActionReturn, ActionStatusCode, ActionValidCode
+from lagent.actions.base_action import BaseAction
+from lagent.schema import ActionReturn, ActionStatusCode, ActionValidCode
 
 
 class InvalidAction(BaseAction):
