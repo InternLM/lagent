@@ -31,6 +31,7 @@ pip install -e .
 
 ```python
 from lagent.agents import ReAct
+from lagent.actions.action_executor import ActionExecutor
 from lagent.llms import GPTAPI
 from lagent.tools import SerperSearch, PythonInterpreter
 
@@ -49,12 +50,13 @@ print(response['response'])
 >>> They are both film directors.
 ```
 
-### Run a ReAct model with HuggingFace backend.
+### Run a ReAct model with HuggingFace backend
 
 NOTE: If you want to run a HuggingFace model, please run `pip install -e . [all]` first.
 
 ```python
 from lagent.agents import ReAct
+from lagent.actions.action_executor import ActionExecutor
 from lagent.llms import HFTransformer
 from lagent.tools import SerperSearch, PythonInterpreter
 
@@ -62,7 +64,11 @@ llm = HFTransformer('internlm/internlm-7b-chat')
 search_tool = SerperSearch()
 python_interpreter = PythonInterpreter()
 
-chatbot = ReAct(llm=llm, tools=[search_tool, get_weather_tool])
+chatbot = ReAct(
+    llm=model,
+    action_executor=ActionExecutor(
+        actions=[search_tool, python_interpreter]),
+)
 
 response = chatbot.chat('若$z=-1+\sqrt{3}i$,则$\frac{z}{{z\overline{z}-1}}=\left(\ \ \right)$ (A) $-1+\sqrt{3}i$ (B) $-1-\sqrt{3}i$ (C) $-\frac{1}{3}+\frac{{\sqrt{3}}}{3}i$ (D) $-\frac{1}{3}-\frac{{\sqrt{3}}}{3}i$')
 print(response['response'])
