@@ -1,9 +1,9 @@
 from lagent.actions.action_executor import ActionExecutor
 from lagent.actions.python_interpreter import PythonInterpreter
 from lagent.agents.react import ReACT
-from lagent.llms.huggingface import HuggingFace
+from lagent.llms.huggingface import HFTransformer
 
-model = HuggingFace(
+model = HFTransformer(
     path='internlm/internlm-chat-7b',
     meta_template=[
         dict(role='system', begin='<|System|>:', end='<TOKENS_UNUSED_2>\n'),
