@@ -1,3 +1,2 @@
-func_timeout
-requests
-tiktoken
+-r requirements/optional.txt
+-r requirements/runtime.txt
