@@ -1,14 +1,14 @@
 # OVERVIEW
 
-This chapter introduces you to the framework of Lagent, and provides links to detailed tutorials about Lagent.
+This chapter introduces you to the framework of LAgent, and provides links to detailed tutorials about LAgent.
 
-## What is Lagent
+## What is LAgent
 
-Lagent is an open source LLM agent framework, which enables people to efficiently turn a large language model to agent. It also provides some typical tools to enlighten the ablility of LLM, and the whole framework is shown below:
+LAgent is an open source LLM agent framework, which enables people to efficiently turn a large language model to agent. It also provides some typical tools to enlighten the ablility of LLM, and the whole framework is shown below:
 
 ![image](https://github.com/InternLM/lagent/assets/24351120/e104171e-4baf-43b3-8e6d-90cff1b298b6)
 
-Lagent consists of 3 main parts, agents, llms, and actions.
+LAgent consists of 3 main parts, agents, llms, and actions.
 
 - **agents** provides agent implementation, such as ReAct, AutoGPT.
 - **llms** supports various large language models, including open-sourced models (Llama-2, InterLM) through HuggingFace models or closed-source models like GPT3.5/4.
@@ -16,8 +16,8 @@ Lagent consists of 3 main parts, agents, llms, and actions.
 
 ## How to Use
 
-Here is a detailed step-by-step guide to learn more about Lagent:
+Here is a detailed step-by-step guide to learn more about LAgent:
 
 1. For installation instructions, please see [get_started](get_started.md).
 
-2. We provide several examples to build agents with Lagent in [examples](examples/) by simply run `python examples/react_example.py`.
+2. We provide several examples to build agents with LAgent in [examples](examples/) by simply run `python examples/react_example.py`.
