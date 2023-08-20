@@ -1,6 +1,6 @@
 from argparse import ArgumentParser
 
-from etangent.llms.openai import GPTAPI
+from lagent.llms.openai import GPTAPI
 
 
 def parse_args():

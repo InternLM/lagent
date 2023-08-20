@@ -1,8 +1,8 @@
 from unittest import TestCase
 
-from etangent.actions.builtin_actions import (FinishAction, InvalidAction,
-                                              NoAction)
-from etangent.schema import ActionStatusCode
+from lagent.actions.builtin_actions import (FinishAction, InvalidAction,
+                                            NoAction)
+from lagent.schema import ActionStatusCode
 
 
 class TestFinishAction(TestCase):

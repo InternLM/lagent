@@ -3,7 +3,7 @@ from typing import List, Optional, Tuple, Union
 
 import requests
 
-from etangent.schema import ActionReturn, ActionStatusCode
+from lagent.schema import ActionReturn, ActionStatusCode
 from .base_action import BaseAction
 
 DEFAULT_DESCRIPTION = """一个可以从谷歌搜索结果的API。

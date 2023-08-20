@@ -5,10 +5,10 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from jsonschema import Draft7Validator
 
-from etangent.actions import ActionExecutor
-from etangent.llms.base_api import BaseAPIModel
-from etangent.llms.base_llm import BaseModel
-from etangent.schema import ActionReturn, ActionStatusCode, AgentReturn
+from lagent.actions import ActionExecutor
+from lagent.llms.base_api import BaseAPIModel
+from lagent.llms.base_llm import BaseModel
+from lagent.schema import ActionReturn, ActionStatusCode, AgentReturn
 from .base_agent import BaseAgent
 
 DEFAULT_TRIGGERING_PROMPT = ('Determine exactly one command to use based on '

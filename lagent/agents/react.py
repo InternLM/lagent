@@ -1,9 +1,9 @@
 from typing import Dict, List, Tuple, Union
 
-from etangent.actions import ActionExecutor
-from etangent.llms.base_api import BaseAPIModel
-from etangent.llms.base_llm import BaseModel
-from etangent.schema import ActionReturn, ActionStatusCode, AgentReturn
+from lagent.actions import ActionExecutor
+from lagent.llms.base_api import BaseAPIModel
+from lagent.llms.base_llm import BaseModel
+from lagent.schema import ActionReturn, ActionStatusCode, AgentReturn
 from .base_agent import BaseAgent
 
 CALL_PROTOCOL = """你是一个可以调用外部工具的助手，可以使用的工具包括：

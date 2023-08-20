@@ -1,7 +1,7 @@
-from etangent.actions.action_executor import ActionExecutor
-from etangent.actions.python_interpreter import PythonInterpreter
-from etangent.agents.react import ReACT
-from etangent.llms.openai import GPTAPI
+from lagent.actions.action_executor import ActionExecutor
+from lagent.actions.python_interpreter import PythonInterpreter
+from lagent.agents.react import ReACT
+from lagent.llms.openai import GPTAPI
 
 
 def input_prompt():

@@ -1,6 +1,6 @@
 from typing import Optional
 
-from etangent.schema import ActionReturn
+from lagent.schema import ActionReturn
 
 
 class BaseAction:
