@@ -5,7 +5,7 @@ import torch
 from .base_llm import BaseModel
 
 
-class HuggingFace(BaseModel):
+class HFTransformer(BaseModel):
     """Model wrapper around HuggingFace general models.
 
     Adapted from OpenCompass (https://github.com/InternLM/opencompass
@@ -119,7 +119,7 @@ class HuggingFace(BaseModel):
             '').strip()
 
 
-class HuggingFaceCasualLM(HuggingFace):
+class HFTransformerCasualLM(HFTransformer):
 
     def _load_model(self, path: str, model_kwargs: dict):
         from transformers import AutoModelForCausalLM
