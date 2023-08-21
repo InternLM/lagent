@@ -23,6 +23,7 @@ LAgent是一个开源的LLM代理框架，支持用户快速地将一个大语�
 ### 安装
 
 ```
+git clone https://github.com/InternLM/lagent.git
 cd lagent
 pip install -e .
 ```

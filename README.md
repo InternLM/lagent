@@ -23,6 +23,7 @@ Please see [Overview](docs/overview.md) for the general introduction of LAgent. 
 ### Installation
 
 ```
+git clone https://github.com/InternLM/lagent.git
 cd lagent
 pip install -e .
 ```
