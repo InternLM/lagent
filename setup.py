@@ -94,11 +94,12 @@ if __name__ == '__main__':
         include_package_data=True,
         version=get_version(),
         license='Apache 2.0',
-        description='An open-source framework for language agent research.',
+        description='A lightweight framework for building LLM-based agents',
         long_description=long_description,
         long_description_content_type='text/markdown',
         data_files=[('.', ['README.md'])],
         keywords=['artificial general intelligence', 'agent', 'agi', 'llm'],
+        url='https://github.com/InternLM/lagent',
         install_requires=parse_requirements('requirements/runtime.txt'),
         extras_require={
             'all': parse_requirements('requirements.txt'),
