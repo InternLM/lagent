@@ -33,14 +33,14 @@ pip install -e .
 ```python
 from lagent.agents import ReAct
 from lagent.llms import GPTAPI
-from lagent.tools import SerperSearch, PythonInterpreter
+from lagent.tools import GoogleSearch, PythonInterpreter
 
 llm = GPTAPI(model_type='gpt-3.5-turbo')
-search_tool = SerperSearch()
+search_tool = GoogleSearch()
 python_interpreter = PythonInterpreter()
 
 chatbot = ReAct(
-    llm=model,
+    llm=llm,
     action_executor=ActionExecutor(
         actions=[search_tool, python_interpreter]),
 )
@@ -58,14 +58,14 @@ print(response['response'])
 from lagent.agents import ReAct
 from lagent.actions.action_executor import ActionExecutor
 from lagent.llms import HFTransformer
-from lagent.tools import SerperSearch, PythonInterpreter
+from lagent.tools import GoogleSearch, PythonInterpreter
 
 llm = HFTransformer('internlm/internlm-7b-chat')
-search_tool = SerperSearch()
+search_tool = GoogleSearch()
 python_interpreter = PythonInterpreter()
 
 chatbot = ReAct(
-    llm=model,
+    llm=llm,
     action_executor=ActionExecutor(
         actions=[search_tool, python_interpreter]),
 )
