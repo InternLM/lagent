@@ -59,7 +59,7 @@ from lagent.agents import ReAct
 from lagent.actions import ActionExecutor, GoogleSearch, PythonInterpreter
 from lagent.llms import HFTransformer
 
-llm = HFTransformer('internlm/internlm-7b-chat')
+llm = HFTransformer('internlm/internlm-7b-chat-v1.1')
 search_tool = GoogleSearch()
 python_interpreter = PythonInterpreter()
 
