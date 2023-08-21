@@ -5,19 +5,14 @@ from lagent.agents.rewoo import ReWOO
 from lagent.llms.openai import GPTAPI
 
 model = GPTAPI(model_type='gpt-3.5-turbo')
+# please set the serper search API key
+search_tool = SerperSearch(api_key=None)
+llmqa_tool = LLMQA(model)
 
 chatbot = ReWOO(
     llm=model,
-    action_executor=ActionExecutor(
-        actions=[LLMQA(model), SerperSearch(api_key=None)]),
+    action_executor=ActionExecutor(actions=[llmqa_tool, search_tool]),
 )
-
-
-def input_prompt():
-    print('\ndouble enter to end input >>> ', end='')
-    sentinel = ''  # ends when this string is seen
-    return '\n'.join(iter(input, sentinel))
-
 
 prompt = 'What profession does Nicholas Ray and Elia Kazan have in common'
 
