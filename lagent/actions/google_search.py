@@ -12,7 +12,7 @@ DEFAULT_DESCRIPTION = """一个可以从谷歌搜索结果的API。
 """
 
 
-class SerperSearch(BaseAction):
+class GoogleSearch(BaseAction):
     """Wrapper around the Serper.dev Google Search API.
 
     To use, you should pass your serper API key to the constructor.
