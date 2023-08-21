@@ -28,29 +28,29 @@ cd lagent
 pip install -e .
 ```
 
-### Run a ReAct agent with GPT3.5 backend
+### Run a ReWOO agent with GPT3.5
 
 ```python
-from lagent.agents import ReAct
-from lagent.actions import ActionExecutor, GoogleSearch, PythonInterpreter
+from lagent.agents import ReWOO
+from lagent.actions import ActionExecutor, GoogleSearch, LLMQA
 from lagent.llms import GPTAPI
 
-llm = GPTAPI(model_type='gpt-3.5-turbo')
-search_tool = GoogleSearch()
-python_interpreter = PythonInterpreter()
+llm = GPTAPI(model_type='gpt-3.5-turbo', key=['OPENAI_API_KEY'])
+search_tool = GoogleSearch(api_key='SERPER_API_KEY')
+llmqa_tool = LLMQA(llm)
 
-chatbot = ReAct(
+chatbot = ReWOO(
     llm=llm,
     action_executor=ActionExecutor(
-        actions=[search_tool, python_interpreter]),
+        actions=[search_tool, llmqa_tool]),
 )
 
 response = chatbot.chat('What profession does Nicholas Ray and Elia Kazan have in common')
-print(response['response'])
->>> They are both film directors.
+print(response.response)
+>>> Film director.
 ```
 
-### Run a ReAct model with HuggingFace backend
+### Run a ReAct agent with InternLM
 
 NOTE: If you want to run a HuggingFace model, please run `pip install -e .[all]` first.
 

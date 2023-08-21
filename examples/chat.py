@@ -12,7 +12,8 @@ def parse_args():
 
 def main():
     args = parse_args()
-    model = GPTAPI(model_type='gpt-3.5-turbo', )
+    # set OPEN_API_KEY in your environment or directly pass it with key=''
+    model = GPTAPI(model_type='gpt-3.5-turbo')
     history = []
     while True:
         try:

@@ -28,49 +28,49 @@ cd lagent
 pip install -e .
 ```
 
-### 用GPT3.5构建一个ReAct代理
+### 用GPT3.5构建一个ReWOO代理
 
 ```python
-from lagent.agents import ReAct
-from lagent.actions import ActionExecutor, GoogleSearch, PythonInterpreter
+from lagent.agents import ReWOO
+from lagent.actions import ActionExecutor, GoogleSearch, LLMQA
 from lagent.llms import GPTAPI
 
-llm = GPTAPI(model_type='gpt-3.5-turbo')
-search_tool = GoogleSearch()
-python_interpreter = PythonInterpreter()
+llm = GPTAPI(model_type='gpt-3.5-turbo', key='OPENAI_API_KEY')
+search_tool = GoogleSearch(api_key='SERPER_API_KEY')
+llmqa_tool = LLMQA(llm)
 
-chatbot = ReAct(
+chatbot = ReWOO(
     llm=llm,
     action_executor=ActionExecutor(
-        actions=[search_tool, python_interpreter]),
+        actions=[search_tool, llmqa_tool]),
 )
 
 response = chatbot.chat('What profession does Nicholas Ray and Elia Kazan have in common')
-print(response['response'])
->>> They are both film directors.
+print(response.response)
+>>> Film director.
 ```
 
-### 用HuggingFace构建一个ReAct代理
+### 用InternLM构建一个ReAct代理
 
 注意：如果你想要启动一个HuggingFace的模型，请先运行`pip install -e .[all]`。
 
 ```python
-from lagent.agents import ReAct
+from lagent.agents import ReACT
 from lagent.actions import ActionExecutor, GoogleSearch, PythonInterpreter
 from lagent.llms import HFTransformer
 
-llm = HFTransformer('internlm/internlm-7b-chat')
-search_tool = GoogleSearch()
+llm = HFTransformer('internlm/internlm-7b-chat-v1.1')
+search_tool = GoogleSearch(api_key='SERPER_API_KEY')
 python_interpreter = PythonInterpreter()
 
-chatbot = ReAct(
+chatbot = ReACT(
     llm=llm,
     action_executor=ActionExecutor(
         actions=[search_tool, python_interpreter]),
 )
 
 response = chatbot.chat('若$z=-1+\sqrt{3}i$,则$\frac{z}{{z\overline{z}-1}}=\left(\ \ \right)$ (A) $-1+\sqrt{3}i$ (B) $-1-\sqrt{3}i$ (C) $-\frac{1}{3}+\frac{{\sqrt{3}}}{3}i$ (D) $-\frac{1}{3}-\frac{{\sqrt{3}}}{3}i$')
-print(response['response'])
+print(response.response)
 >>> 根据已有的信息，可以求得$z=-1+\\sqrt{3}i$，然后代入计算，得到结果为$-\\frac{1}{3}+\\frac{{\\sqrt{3}}}{3}i$。因此，答案是（C）。
 ```
 

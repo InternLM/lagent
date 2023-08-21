@@ -54,7 +54,7 @@ FORCE_STOP_PROMPT_EN = """You should directly give results
  based on history information."""
 
 
-class ReACTProtocol:
+class ReActProtocol:
     """A wrapper of ReACT prompt which manages the response from LLM and
     generate desired prompts in a ReACT format.
 
@@ -184,7 +184,7 @@ class ReACTProtocol:
         return self.response['begin'] + response + self.response['end']
 
 
-class ReACT(BaseAgent):
+class ReAct(BaseAgent):
     """An implementation of ReACT (https://arxiv.org/abs/2210.03629)
 
     Args:
@@ -201,7 +201,7 @@ class ReACT(BaseAgent):
     def __init__(self,
                  llm: Union[BaseModel, BaseAPIModel],
                  action_executor: ActionExecutor,
-                 protocol: ReACTProtocol = ReACTProtocol(),
+                 protocol: ReActProtocol = ReActProtocol(),
                  max_turn: int = 2) -> None:
         self.max_turn = max_turn
         super().__init__(
