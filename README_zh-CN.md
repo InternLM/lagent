@@ -28,7 +28,7 @@ cd lagent
 pip install -e .
 ```
 
-### 用GPT3.5构建一个ReWOO代理
+### 用 GPT3.5 构建一个 ReWOO 代理
 
 ```python
 from lagent.agents import ReWOO
@@ -50,7 +50,7 @@ print(response.response)
 >>> Film director.
 ```
 
-### 用InternLM构建一个ReAct代理
+### 用 InternLM 构建一个 ReAct 代理
 
 注意：如果你想要启动一个HuggingFace的模型，请先运行`pip install -e .[all]`。
 
