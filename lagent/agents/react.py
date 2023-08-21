@@ -6,7 +6,9 @@ from lagent.llms.base_llm import BaseModel
 from lagent.schema import ActionReturn, ActionStatusCode, AgentReturn
 from .base_agent import BaseAgent
 
-CALL_PROTOCOL = """你是一个可以调用外部工具的助手，可以使用的工具包括：
+# The Chinese prompts for ReAct
+
+CALL_PROTOCOL_CN = """你是一个可以调用外部工具的助手，可以使用的工具包括：
 {tool_description}
 如果使用工具请遵循以下格式回复：
 ```
@@ -24,6 +26,32 @@ CALL_PROTOCOL = """你是一个可以调用外部工具的助手，可以使用�
 {finish}最终答案
 ```
 开始!"""
+
+FORCE_STOP_PROMPT_CN = '你需要基于历史消息返回一个最终结果'
+
+# The English prompts for ReAct
+
+CALL_PROTOCOL_EN = """You are a helper who can utilize external tools.
+To use a tool, please use the following format:
+```
+{thought}: Think what you need to solve, do you need to use tools?
+{action}: the tool name, should be one of [{action_names}]
+{action_input}: the input to the action
+```
+The response after utilizing tools should using the following format:
+```
+{response}: the results after call the tool.
+``
+If you already know the answer, or you do not need to use tools,
+please using the following format to reply:
+```
+{thought}the thought process to get the final answer
+{finish}final answer
+```
+Begin!"""
+
+FORCE_STOP_PROMPT_EN = """You should directly give results
+ based on history information."""
 
 
 class ReACTProtocol:
@@ -53,8 +81,8 @@ class ReACTProtocol:
                      role='RESPONSE', begin='Response:', end='\n'),
                  finish: dict = dict(
                      role='FINISH', begin='FinalAnswer:', end='\n'),
-                 call_protocol: str = CALL_PROTOCOL,
-                 force_stop: str = '你需要基于历史消息返回一个最终结果') -> None:
+                 call_protocol: str = CALL_PROTOCOL_CN,
+                 force_stop: str = FORCE_STOP_PROMPT_CN) -> None:
         self.call_protocol = call_protocol
         self.force_stop = force_stop
         self.thought = thought
