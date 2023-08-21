@@ -1,10 +1,10 @@
-# LAgent: Large Language Model as Agent
+# Lagent: Large Language Model as Agent
 
 English | [简体中文](README_zh-CN.md)
 
 ## Introduction
 
-LAgent is an open source LLM agent framework, which enables people to efficiently turn a large language model to agent. It also provides some typical tools to enlighten the ablility of LLM. The overview of our framework is shown below:
+Lagent is an open source LLM agent framework, which enables people to efficiently turn a large language model to agent. It also provides some typical tools to enlighten the ablility of LLM. The overview of our framework is shown below:
 
 ![image](https://github.com/InternLM/lagent/assets/24351120/e104171e-4baf-43b3-8e6d-90cff1b298b6)
 
@@ -18,7 +18,7 @@ LAgent is an open source LLM agent framework, which enables people to efficientl
 
 ## Getting Started
 
-Please see [Overview](docs/overview.md) for the general introduction of LAgent. Meanwhile, we provide extremely simple code for quick start. You may refer to [examples](examples/) for more details.
+Please see [Overview](docs/overview.md) for the general introduction of Lagent. Meanwhile, we provide extremely simple code for quick start. You may refer to [examples](examples/) for more details.
 
 ### Installation
 
@@ -34,14 +34,14 @@ pip install -e .
 from lagent.agents import ReAct
 from lagent.actions.action_executor import ActionExecutor
 from lagent.llms import GPTAPI
-from lagent.tools import SerperSearch, PythonInterpreter
+from lagent.tools import GoogleSearch, PythonInterpreter
 
 llm = GPTAPI(model_type='gpt-3.5-turbo')
-search_tool = SerperSearch()
+search_tool = GoogleSearch()
 python_interpreter = PythonInterpreter()
 
 chatbot = ReAct(
-    llm=model,
+    llm=llm,
     action_executor=ActionExecutor(
         actions=[search_tool, python_interpreter]),
 )
@@ -53,20 +53,20 @@ print(response['response'])
 
 ### Run a ReAct model with HuggingFace backend
 
-NOTE: If you want to run a HuggingFace model, please run `pip install -e . [all]` first.
+NOTE: If you want to run a HuggingFace model, please run `pip install -e .[all]` first.
 
 ```python
 from lagent.agents import ReAct
 from lagent.actions.action_executor import ActionExecutor
 from lagent.llms import HFTransformer
-from lagent.tools import SerperSearch, PythonInterpreter
+from lagent.tools import GoogleSearch, PythonInterpreter
 
 llm = HFTransformer('internlm/internlm-7b-chat')
-search_tool = SerperSearch()
+search_tool = GoogleSearch()
 python_interpreter = PythonInterpreter()
 
 chatbot = ReAct(
-    llm=model,
+    llm=llm,
     action_executor=ActionExecutor(
         actions=[search_tool, python_interpreter]),
 )
