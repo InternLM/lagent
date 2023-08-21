@@ -18,7 +18,7 @@ Lagent是一个开源的LLM代理框架，支持用户快速地将一个大语�
 
 ## 教程
 
-请阅读[概述](docs/overview.md)对Lagent进行初步的了解。同时, 我们提供了两个非常简单的code帮助你快速入门。 你也可以阅读[examples](examples/)获得更多的例子参考。
+请阅读[概述](docs/en/get_started/overview.md)对Lagent进行初步的了解。同时, 我们提供了两个非常简单的code帮助你快速入门。 你也可以阅读[examples](examples/)获得更多的例子参考。
 
 ### 安装
 
