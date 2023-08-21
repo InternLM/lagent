@@ -12,7 +12,7 @@ def input_prompt():
 
 
 def main():
-    # set OPEN_API_KEY in your environment
+    # set OPEN_API_KEY in your environment or directly pass it with key=''
     model = GPTAPI(model_type='gpt-3.5-turbo')
 
     chatbot = AutoGPT(

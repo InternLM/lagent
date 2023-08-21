@@ -1,6 +1,6 @@
 from .autogpt import AutoGPT
 from .base_agent import BaseAgent
-from .react import ReACT
+from .react import ReAct
 from .rewoo import ReWOO
 
-__all__ = ['BaseAgent', 'ReACT', 'AutoGPT', 'ReWOO']
+__all__ = ['BaseAgent', 'ReAct', 'AutoGPT', 'ReWOO']

@@ -38,16 +38,28 @@ class HFTransformer(BaseModel):
         whitespaces, which is harmful for Python programming tasks.
     """
 
-    def __init__(self,
-                 path: str,
-                 max_seq_len: int = 2048,
-                 tokenizer_path: Optional[str] = None,
-                 tokenizer_kwargs: dict = dict(),
-                 tokenizer_only: bool = False,
-                 model_kwargs: dict = dict(device_map='auto'),
-                 meta_template: Optional[Dict] = None,
-                 extract_pred_after_decode: bool = False,
-                 batch_padding: bool = False):
+    def __init__(
+            self,
+            path: str,
+            max_seq_len: int = 2048,
+            tokenizer_path: Optional[str] = None,
+            tokenizer_kwargs: dict = dict(),
+            tokenizer_only: bool = False,
+            model_kwargs: dict = dict(device_map='auto'),
+            meta_template: Optional[Dict] = [
+                dict(
+                    role='system',
+                    begin='<|System|>:',
+                    end='<TOKENS_UNUSED_2>\n'),
+                dict(role='user', begin='<|User|>:', end='<eoh>\n'),
+                dict(
+                    role='assistant',
+                    begin='<|Bot|>:',
+                    end='<eoa>\n',
+                    generate=True)
+            ],  # default meta template for InternLM-7b
+            extract_pred_after_decode: bool = False,
+            batch_padding: bool = False):
         super().__init__(
             path=path,
             max_seq_len=max_seq_len,
