@@ -1,10 +1,10 @@
-# LAgent: Large Language Model as Agent
+# Lagent: Large Language Model as Agent
 
 English | [简体中文](README_zh-CN.md)
 
 ## Introduction
 
-LAgent is an open source LLM agent framework, which enables people to efficiently turn a large language model to agent. It also provides some typical tools to enlighten the ablility of LLM. The overview of our framework is shown below:
+Lagent is an open source LLM agent framework, which enables people to efficiently turn a large language model to agent. It also provides some typical tools to enlighten the ablility of LLM. The overview of our framework is shown below:
 
 ![image](https://github.com/InternLM/lagent/assets/24351120/e104171e-4baf-43b3-8e6d-90cff1b298b6)
 
@@ -18,7 +18,7 @@ LAgent is an open source LLM agent framework, which enables people to efficientl
 
 ## Getting Started
 
-Please see [Overview](docs/overview.md) for the general introduction of LAgent. Meanwhile, we provide extremely simple code for quick start. You may refer to [examples](examples/) for more details.
+Please see [Overview](docs/overview.md) for the general introduction of Lagent. Meanwhile, we provide extremely simple code for quick start. You may refer to [examples](examples/) for more details.
 
 ### Installation
 

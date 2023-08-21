@@ -1,10 +1,10 @@
-# LAgent: Large Language Model as Agent
+# Lagent: Large Language Model as Agent
 
 [English](README.md) | 简体中文
 
 ## 简介
 
-LAgent是一个开源的LLM代理框架，支持用户快速地将一个大语言模型转变为多种类型的智能体，并提供了一些典型工具为大语言模型赋能。它的整个框架图如下:
+Lagent是一个开源的LLM代理框架，支持用户快速地将一个大语言模型转变为多种类型的智能体，并提供了一些典型工具为大语言模型赋能。它的整个框架图如下:
 
 ![image](https://github.com/InternLM/lagent/assets/24351120/e104171e-4baf-43b3-8e6d-90cff1b298b6)
 
@@ -18,7 +18,7 @@ LAgent是一个开源的LLM代理框架，支持用户快速地将一个大语�
 
 ## 教程
 
-请阅读[概述](docs/overview.md)对LAgent进行初步的了解。同时, 我们提供了两个非常简单的code帮助你快速入门。 你也可以阅读[examples](examples/)获得更多的例子参考。
+请阅读[概述](docs/overview.md)对Lagent进行初步的了解。同时, 我们提供了两个非常简单的code帮助你快速入门。 你也可以阅读[examples](examples/)获得更多的例子参考。
 
 ### 安装
 
