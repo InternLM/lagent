@@ -1,0 +1,144 @@
+{
+    "searchParameters": {
+        "q": "What is the capital of China?",
+        "gl": "us",
+        "hl": "en",
+        "num": 10,
+        "type": "search"
+    },
+    "answerBox": {
+        "title": "China / Capital",
+        "answer": "Beijing"
+    },
+    "organic": [
+        {
+            "title": "Beijing - Wikipedia",
+            "link": "https://en.wikipedia.org/wiki/Beijing",
+            "snippet": "With over 21 million residents, Beijing is the world's most populous national capital city as well as China's second largest city after Shanghai.",
+            "sitelinks": [
+                {
+                    "title": "Etymology",
+                    "link": "https://en.wikipedia.org/wiki/Beijing#Etymology"
+                },
+                {
+                    "title": "History",
+                    "link": "https://en.wikipedia.org/wiki/Beijing#History"
+                },
+                {
+                    "title": "Geography",
+                    "link": "https://en.wikipedia.org/wiki/Beijing#Geography"
+                }
+            ],
+            "position": 1
+        },
+        {
+            "title": "What is the Capital of China? - Mappr",
+            "link": "https://www.mappr.co/capital-cities/china/",
+            "snippet": "Beijing, also known as Peking, is the capital of China and one of the most populous cities in the world. It is the country's political, educational, ...",
+            "position": 2
+        },
+        {
+            "title": "Google Map of the City of Beijing, capital of P.R. China - Nations Online Project",
+            "link": "https://www.nationsonline.org/oneworld/map/google_map_Beijing.htm",
+            "snippet": "Google Earth: Searchable map/satellite view of Beijing, capital city of P.R. China. City Coordinates: 39°54′50″N 116°23′30″E, Bookmark/share this page ...",
+            "position": 3
+        },
+        {
+            "title": "Capital City of China - CountryReports.org",
+            "link": "https://www.countryreports.org/country/china/capital-city.htm",
+            "snippet": "Capital City, Beijing ; Capital location, 39 55 N, 116 23 E ; Capital - history, (Peking) Founded about 3,000 years ago on the site of a former Chinese capital, ...",
+            "position": 4
+        },
+        {
+            "title": "Capital of China - Beijing",
+            "link": "https://www.chinahighlights.com/beijing/capital-of-china.htm",
+            "snippet": "In Chinese, Beijing means 'Northern Capital'. Bei means 'north' and jing means 'capital'. In the history of China, Beijing's name has changed ...",
+            "date": "Dec 15, 2022",
+            "position": 5
+        },
+        {
+            "title": "Beijing is the capital of the People's Republic of China. It is the world's most populous capital city, with over 21 million residents within an... | By DL&D Consult | Facebook",
+            "link": "https://facebook.com/dldconsult/videos/beijing-capital-city-of-china/373001500555301/",
+            "snippet": "Beijing is an important world capital and global power ...",
+            "date": "Oct 19, 2020",
+            "attributes": {
+                "Duration": "2:58",
+                "Posted": "Oct 19, 2020"
+            },
+            "imageUrl": "https://encrypted-tbn1.gstatic.com/images?q=tbn:ANd9GcQExx68yUr7xP_1wcRapEKlT5bxe4ptMa6WaLnwXdVAtAdloa7WeTIvCoJp",
+            "position": 6
+        },
+        {
+            "title": "What is the Capital of China? - WorldAtlas",
+            "link": "https://www.worldatlas.com/articles/what-is-the-capital-of-china.html",
+            "snippet": "The capital of China is Beijing.",
+            "date": "Jul 3, 2018",
+            "position": 7
+        },
+        {
+            "title": "A Chinese capital that's not Beijing - BBC Travel",
+            "link": "https://www.bbc.com/travel/article/20151008-a-chinese-capital-thats-not-beijing",
+            "snippet": "Beijing may be the capital of China today, but for many centuries the country was ruled from Nanjing, a historic city located on the shores ...",
+            "date": "Oct 13, 2015",
+            "position": 8
+        },
+        {
+            "title": "Beijing | Province, City, History, Map, & Facts - Britannica",
+            "link": "https://www.britannica.com/place/Beijing",
+            "snippet": "Beijing, city, province-level shi (municipality), and capital of the People's Republic of China. The city has been an integral part of China's history over ...",
+            "position": 9
+        }
+    ],
+    "peopleAlsoAsk": [
+        {
+            "question": "Does China have 2 capitals?",
+            "snippet": "There are traditionally four major historical capitals of China referred to as\nthe 'Four Great Ancient Capitals of China' (simplified Chinese: 中国四大古都;\ntraditional Chinese: 中國四大古都; pinyin: Zhōngguó Sì Dà Gǔ Dū). The four are\nBeijing, Nanjing, Luoyang and Xi\"an (Chang\"an).",
+            "title": "Historical capitals of China - Wikipedia",
+            "link": "https://en.wikipedia.org/wiki/Historical_capitals_of_China"
+        },
+        {
+            "question": "What is the capital city of China USA?",
+            "snippet": "Capital City\nBeijing\nCapital - time difference\nUTC+8 (13 hours ahead of Washington, DC, during Standard Time) note; despite its\nsize, all of China falls within one time zone",
+            "title": "Capital City of China - CountryReports.org",
+            "link": "https://www.countryreports.org/country/china/capital-city.htm"
+        },
+        {
+            "question": "Is Hong Kong is a part of China?",
+            "snippet": "Hong Kong (US: /ˈhɒŋkɒŋ/ or UK: /hɒŋˈkɒŋ/; Chinese: 香港, Cantonese: [hœ́ːŋ.kɔ̌ːŋ]\n( listen)), officially the Hong Kong Special Administrative Region of the\nPeople's Republic of China (abbr. Hong Kong SAR or HKSAR), is a city and a\nspecial administrative region in China.",
+            "title": "Hong Kong - Wikipedia",
+            "link": "https://en.wikipedia.org/wiki/Hong_Kong"
+        },
+        {
+            "question": "Why China changed its capital?",
+            "snippet": "Once in charge, it wasn't uncommon for a new emperor to shift the imperial\ncapital in order to: Rebuild after a great loss, as in the Han era when Liu Bang\nmoved the capital from Xianyang to nearby Chang'an (now Xi'an), after the former\nwas destroyed during a rebellion.",
+            "title": "Why do they keep moving the Capital? - China Simplified",
+            "link": "https://www.chinasimplified.com/2014/09/29/why-do-they-keep-moving-the-capital/"
+        }
+    ],
+    "relatedSearches": [
+        {
+            "query": "China map"
+        },
+        {
+            "query": "Where is the capital of china on a map"
+        },
+        {
+            "query": "Beijing population"
+        },
+        {
+            "query": "Capital of Korea"
+        },
+        {
+            "query": "Beijing pronunciation"
+        },
+        {
+            "query": "What is the capital of India"
+        },
+        {
+            "query": "What is the capital of Japan"
+        },
+        {
+            "query": "What is the capital of Pakistan"
+        }
+    ]
+}
