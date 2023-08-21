@@ -1,1 +1,1 @@
-var collapsedSections = ['Migration Guides', 'API Reference']
+var collapsedSections = ['API Reference']

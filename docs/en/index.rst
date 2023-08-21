@@ -1,4 +1,4 @@
-Welcome to MMOCR's documentation!
+Welcome to Lagent's documentation!
 =======================================
 
 You can switch between English and Chinese in the lower-left corner of the layout.
