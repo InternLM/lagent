@@ -32,8 +32,8 @@ pip install -e .
 
 ```python
 from lagent.agents import ReAct
+from lagent.actions import ActionExecutor, GoogleSearch, PythonInterpreter
 from lagent.llms import GPTAPI
-from lagent.tools import GoogleSearch, PythonInterpreter
 
 llm = GPTAPI(model_type='gpt-3.5-turbo')
 search_tool = GoogleSearch()
@@ -56,9 +56,8 @@ print(response['response'])
 
 ```python
 from lagent.agents import ReAct
-from lagent.actions.action_executor import ActionExecutor
+from lagent.actions import ActionExecutor, GoogleSearch, PythonInterpreter
 from lagent.llms import HFTransformer
-from lagent.tools import GoogleSearch, PythonInterpreter
 
 llm = HFTransformer('internlm/internlm-7b-chat')
 search_tool = GoogleSearch()
