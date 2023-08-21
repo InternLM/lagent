@@ -18,7 +18,7 @@ Lagent is an open source LLM agent framework, which enables people to efficientl
 
 ## Getting Started
 
-Please see [Overview](docs/overview.md) for the general introduction of Lagent. Meanwhile, we provide extremely simple code for quick start. You may refer to [examples](examples/) for more details.
+Please see [Overview](docs/en/get_started/overview.md) for the general introduction of Lagent. Meanwhile, we provide extremely simple code for quick start. You may refer to [examples](examples/) for more details.
 
 ### Installation
 
