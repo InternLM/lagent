@@ -1,26 +1,26 @@
 # LAgent: Large Language Model as Agent
 
-English | [简体中文](README_zh-CN.md)
+[English](README.md) | 简体中文
 
-## Introduction
+## 简介
 
-LAgent is an open source LLM agent framework, which enables people to efficiently turn a large language model to agent. It also provides some typical tools to enlighten the ablility of LLM. The overview of our framework is shown below:
+LAgent是一个开源的LLM代理框架，支持用户快速地将一个大语言模型转变为多种类型的智能体，并提供了一些典型工具为大语言模型赋能。它的整个框架图如下:
 
 ![image](https://github.com/InternLM/lagent/assets/24351120/e104171e-4baf-43b3-8e6d-90cff1b298b6)
 
-### Major Features
+### 主要特点
 
-- **Support multiple agent frameworks out of box.** We implement ReAct, AutoGPT and ReWOO, which enables the agents to drive LLMs for multiple trails of reasoning and tool utilization.
+- **实现了多种类型的智能体，** 我们支持了经典的 ReAct，AutoGPT 和 ReWoo 等智能体，这些智能体能够调用大语言模型进行多轮的推理和工具调用。
 
-- **Extremely simple and easy to extend.** The framework is quite simple with clear project structure. With only 20 lines of code, you are able to construct your own agent. It also supports three typical tools: Python interpreter, API call, and google search.
+- **框架简单易拓展.** 框架的代码结构清晰且简单，只需要不到20行代码你就能够创造出一个你自己的agent。同时我们支持了Python解释器、API 调用和搜索三类常用典型工具。
 
-- **Support various large language models.** We support different LLMs, including API-based (GPT3.5/4) and HuggingFace-based (LLaMa2, InternLM) models.
+- **灵活支持多个大语言模型.** 我们提供了多种大语言模型支持，包括 InternLM、Llama-2 等开源模型和 GPT-4/3.5 等基于 API 的闭源模型。
 
-## Getting Started
+## 教程
 
-Please see [Overview](docs/overview.md) for the general introduction of LAgent. Meanwhile, we provide extremely simple code for quick start. You may refer to [examples](examples/) for more details.
+请阅读[概述](docs/overview.md)对LAgent进行初步的了解。同时, 我们提供了两个非常简单的code帮助你快速入门。 你也可以阅读[examples](examples/)获得更多的例子参考。
 
-### Installation
+### 安装
 
 ```
 git clone https://github.com/InternLM/lagent.git
@@ -28,11 +28,10 @@ cd lagent
 pip install -e .
 ```
 
-### Run a ReAct agent with GPT3.5 backend
+### 用GPT3.5构建一个ReAct代理
 
 ```python
 from lagent.agents import ReAct
-from lagent.actions.action_executor import ActionExecutor
 from lagent.llms import GPTAPI
 from lagent.tools import SerperSearch, PythonInterpreter
 
@@ -51,9 +50,9 @@ print(response['response'])
 >>> They are both film directors.
 ```
 
-### Run a ReAct model with HuggingFace backend
+### 用HuggingFace构建一个ReAct代理
 
-NOTE: If you want to run a HuggingFace model, please run `pip install -e . [all]` first.
+注意：如果你想要启动一个HuggingFace的模型，请先运行`pip install -e . [all]`。
 
 ```python
 from lagent.agents import ReAct
@@ -76,6 +75,6 @@ print(response['response'])
 >>> 根据已有的信息，可以求得$z=-1+\\sqrt{3}i$，然后代入计算，得到结果为$-\\frac{1}{3}+\\frac{{\\sqrt{3}}}{3}i$。因此，答案是（C）。
 ```
 
-## License
+## 开源许可证
 
-This project is released under the [Apache 2.0 license](LICENSE).
+该项目采用[Apache 2.0 开源许可证](LICENSE)。
