@@ -55,8 +55,8 @@ FORCE_STOP_PROMPT_EN = """You should directly give results
 
 
 class ReActProtocol:
-    """A wrapper of ReACT prompt which manages the response from LLM and
-    generate desired prompts in a ReACT format.
+    """A wrapper of ReAct prompt which manages the response from LLM and
+    generate desired prompts in a ReAct format.
 
     Args:
         thought (dict): the information of thought pattern
@@ -64,7 +64,7 @@ class ReActProtocol:
         action_input (dict): the information of action_input pattern
         response (dict): the information of response pattern
         finish (dict): the information of finish pattern
-        call_protocol (str): the format of ReACT
+        call_protocol (str): the format of ReAct
         force_stop (str): the prompt to force LLM to generate response
     """
 
@@ -96,7 +96,7 @@ class ReActProtocol:
                inner_step: List[Dict],
                action_executor: ActionExecutor,
                force_stop: bool = False) -> list:
-        """Generate the ReACT format prompt.
+        """Generate the ReAct format prompt.
 
         Args:
             chat_history (List[Dict]): The history log in previous runs.
@@ -107,7 +107,7 @@ class ReActProtocol:
                 under pre-defined turns.
 
         Returns:
-            List[Dict]: ReACT format prompt.
+            List[Dict]: ReAct format prompt.
         """
 
         call_protocol = self.call_protocol.format(
@@ -132,10 +132,10 @@ class ReActProtocol:
         message: str,
         action_executor: ActionExecutor,
     ) -> Tuple[str, str, str]:
-        """Parse the action returns in a ReACT format.
+        """Parse the action returns in a ReAct format.
 
         Args:
-            message (str): The response from LLM with ReACT format.
+            message (str): The response from LLM with ReAct format.
             action_executor (ActionExecutor): Action executor to
                 provide no_action/finish_action name.
 
@@ -185,7 +185,7 @@ class ReActProtocol:
 
 
 class ReAct(BaseAgent):
-    """An implementation of ReACT (https://arxiv.org/abs/2210.03629)
+    """An implementation of ReAct (https://arxiv.org/abs/2210.03629)
 
     Args:
         llm (BaseModel or BaseAPIModel): a LLM service which can chat

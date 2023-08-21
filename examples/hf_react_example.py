@@ -1,6 +1,6 @@
 from lagent.actions.action_executor import ActionExecutor
 from lagent.actions.python_interpreter import PythonInterpreter
-from lagent.agents.react import ReACT
+from lagent.agents.react import ReAct
 from lagent.llms.huggingface import HFTransformer
 
 model = HFTransformer(
@@ -12,7 +12,7 @@ model = HFTransformer(
     ],
 )
 
-chatbot = ReACT(
+chatbot = ReAct(
     llm=model,
     action_executor=ActionExecutor(actions=[PythonInterpreter()]),
 )

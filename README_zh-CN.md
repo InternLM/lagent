@@ -55,7 +55,7 @@ print(response.response)
 注意：如果你想要启动一个HuggingFace的模型，请先运行`pip install -e .[all]`。
 
 ```python
-from lagent.agents import ReACT
+from lagent.agents import ReAct
 from lagent.actions import ActionExecutor, GoogleSearch, PythonInterpreter
 from lagent.llms import HFTransformer
 
@@ -63,7 +63,7 @@ llm = HFTransformer('internlm/internlm-7b-chat-v1.1')
 search_tool = GoogleSearch(api_key='SERPER_API_KEY')
 python_interpreter = PythonInterpreter()
 
-chatbot = ReACT(
+chatbot = ReAct(
     llm=llm,
     action_executor=ActionExecutor(
         actions=[search_tool, python_interpreter]),

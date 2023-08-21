@@ -1,6 +1,6 @@
 from lagent.actions.action_executor import ActionExecutor
 from lagent.actions.python_interpreter import PythonInterpreter
-from lagent.agents.react import ReACT
+from lagent.agents.react import ReAct
 from lagent.llms.openai import GPTAPI
 
 
@@ -14,7 +14,7 @@ def main():
     # set OPEN_API_KEY in your environment or directly pass it with key=''
     model = GPTAPI(model_type='gpt-3.5-turbo')
 
-    chatbot = ReACT(
+    chatbot = ReAct(
         llm=model,
         action_executor=ActionExecutor(actions=[PythonInterpreter()]),
     )
