@@ -31,7 +31,7 @@ FORCE_STOP_PROMPT_CN = '你需要基于历史消息返回一个最终结果'
 
 # The English prompts for ReAct
 
-CALL_PROTOCOL_EN = """You are a helper who can utilize external tools.
+CALL_PROTOCOL_EN = """You are a assistant who can utilize external tools.
 To use a tool, please use the following format:
 ```
 {thought}: Think what you need to solve, do you need to use tools?
