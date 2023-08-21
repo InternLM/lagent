@@ -22,6 +22,14 @@ Please see [Overview](docs/en/get_started/overview.md) for the general introduct
 
 ### Installation
 
+Install with pip (Recommended).
+
+```
+pip install lagent
+```
+
+Optionally, you could also build Lagent from source in case you want to modify the code:
+
 ```
 git clone https://github.com/InternLM/lagent.git
 cd lagent
