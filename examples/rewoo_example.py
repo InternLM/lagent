@@ -1,12 +1,10 @@
-from lagent.actions.action_executor import ActionExecutor
-from lagent.actions.llm_qa import LLMQA
-from lagent.actions.serper_search import SerperSearch
-from lagent.agents.rewoo import ReWOO
+from lagent.actions import LLMQA, ActionExecutor, GoogleSearch
+from lagent.agents import ReWOO
 from lagent.llms.openai import GPTAPI
 
 model = GPTAPI(model_type='gpt-3.5-turbo')
 # please set the serper search API key
-search_tool = SerperSearch(api_key=None)
+search_tool = GoogleSearch(api_key=None)
 llmqa_tool = LLMQA(model)
 
 chatbot = ReWOO(
