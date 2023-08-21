@@ -18,6 +18,6 @@ Lagent consists of 3 main parts, agents, llms, and actions.
 
 Here is a detailed step-by-step guide to learn more about Lagent:
 
-1. For installation instructions, please see [get_started](get_started.md).
+1. For installation instructions, please see [README](../README.md).
 
 2. We provide several examples to build agents with Lagent in [examples](examples/) by simply run `python examples/react_example.py`.

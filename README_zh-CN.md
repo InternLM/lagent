@@ -52,7 +52,7 @@ print(response['response'])
 
 ### 用HuggingFace构建一个ReAct代理
 
-注意：如果你想要启动一个HuggingFace的模型，请先运行`pip install -e . [all]`。
+注意：如果你想要启动一个HuggingFace的模型，请先运行`pip install -e .[all]`。
 
 ```python
 from lagent.agents import ReAct

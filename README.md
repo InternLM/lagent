@@ -53,7 +53,7 @@ print(response['response'])
 
 ### Run a ReAct model with HuggingFace backend
 
-NOTE: If you want to run a HuggingFace model, please run `pip install -e . [all]` first.
+NOTE: If you want to run a HuggingFace model, please run `pip install -e .[all]` first.
 
 ```python
 from lagent.agents import ReAct
