@@ -4,6 +4,7 @@ from lagent.actions.serper_search import SerperSearch
 from lagent.agents.rewoo import ReWOO
 from lagent.llms.openai import GPTAPI
 
+# set OPEN_API_KEY in your environment
 model = GPTAPI(model_type='gpt-3.5-turbo')
 # please set the serper search API key
 search_tool = SerperSearch(api_key=None)
