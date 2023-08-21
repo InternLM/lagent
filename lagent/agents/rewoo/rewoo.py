@@ -7,7 +7,7 @@ from lagent.agents.base_agent import BaseAgent
 from lagent.llms.base_api import BaseAPIModel
 from lagent.llms.base_llm import BaseModel
 from lagent.schema import ActionReturn, ActionStatusCode, AgentReturn
-from .prompt_CN import (PLANER_PROMPT, REFORMAT_PROMPT, SOLVER_PROMPT,
+from .prompt_cn import (PLANER_PROMPT, REFORMAT_PROMPT, SOLVER_PROMPT,
                         WORKER_PROMPT)
 
 
