@@ -4,7 +4,7 @@ from lagent.agents.react import ReAct
 from lagent.llms.huggingface import HFTransformer
 
 model = HFTransformer(
-    path='internlm/internlm-chat-7b-v1.1',
+    path='internlm/internlm-chat-7b-v1_1',
     meta_template=[
         dict(role='system', begin='<|System|>:', end='<TOKENS_UNUSED_2>\n'),
         dict(role='user', begin='<|User|>:', end='<eoh>\n'),
