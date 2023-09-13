@@ -33,15 +33,16 @@ FORCE_STOP_PROMPT_CN = '你需要基于历史消息返回一个最终结果'
 # The English prompts for ReAct
 
 CALL_PROTOCOL_EN = """You are a assistant who can utilize external tools.
+{tool_description}
 To use a tool, please use the following format:
 ```
-{thought}: Think what you need to solve, do you need to use tools?
-{action}: the tool name, should be one of [{action_names}]
-{action_input}: the input to the action
+{thought}Think what you need to solve, do you need to use tools?
+{action}the tool name, should be one of [{action_names}]
+{action_input}the input to the action
 ```
 The response after utilizing tools should using the following format:
 ```
-{response}: the results after call the tool.
+{response}the results after call the tool.
 ``
 If you already know the answer, or you do not need to use tools,
 please using the following format to reply:
