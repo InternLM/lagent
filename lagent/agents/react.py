@@ -1,3 +1,4 @@
+import copy
 from typing import Dict, List, Tuple, Union
 
 from lagent.actions import ActionExecutor
@@ -81,8 +82,8 @@ class ReActProtocol:
                      role='RESPONSE', begin='Response:', end='\n'),
                  finish: dict = dict(
                      role='FINISH', begin='FinalAnswer:', end='\n'),
-                 call_protocol: str = CALL_PROTOCOL_CN,
-                 force_stop: str = FORCE_STOP_PROMPT_CN) -> None:
+                 call_protocol: str = CALL_PROTOCOL_EN,
+                 force_stop: str = FORCE_STOP_PROMPT_EN) -> None:
         self.call_protocol = call_protocol
         self.force_stop = force_stop
         self.thought = thought
@@ -212,7 +213,7 @@ class ReAct(BaseAgent):
         self._inner_history.append(dict(role='user', content=message))
         agent_return = AgentReturn()
         force_stop = False
-        default_response = '对不起，我无法回答你的问题'
+        default_response = 'Sorry that I cannot answer your question.'
         for turn in range(self.max_turn):
             prompt = self._protocol.format(
                 chat_history=self.session_history,
@@ -230,14 +231,17 @@ class ReAct(BaseAgent):
             agent_return.actions.append(action_return)
             if action_return.type == self._action_executor.finish_action.name:
                 agent_return.response = action_return.result['text']
-                return agent_return
+                break
             self._inner_history.append(
                 dict(
                     role='system',
                     content=self._protocol.format_response(action_return)))
             if turn == self.max_turn - 1:
                 force_stop = True
+        else:
+            agent_return.response = default_response
         agent_return.response = default_response
+        agent_return.inner_steps = copy.deepcopy(self._inner_history)
         # only append the user and final response
         self._session_history.append(dict(role='user', content=message))
         self._session_history.append(
