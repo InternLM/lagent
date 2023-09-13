@@ -1,3 +1,4 @@
+import copy
 import re
 import warnings
 from typing import Dict, List, Optional, Tuple, Union
@@ -94,10 +95,10 @@ class ReWOOProtocol:
 
     def __init__(
         self,
-        planner_prompt: str = PLANNER_PROMPT_CN,
-        worker_prompt: str = WORKER_PROMPT_CN,
-        solver_prompt: str = SOLVER_PROMPT_CN,
-        reformat_prompt: str = REFORMAT_PROMPT_CN,
+        planner_prompt: str = PLANNER_PROMPT_EN,
+        worker_prompt: str = WORKER_PROMPT_EN,
+        solver_prompt: str = SOLVER_PROMPT_EN,
+        reformat_prompt: str = REFORMAT_PROMPT_EN,
     ) -> None:
         self.planner_prompt = planner_prompt
         self.worker_prompt = worker_prompt
@@ -278,5 +279,6 @@ class ReWOO(BaseAgent):
         final_response = self._llm.generate_from_template(solver_prompt, 512)
         self._inner_history.append(
             dict(role='assistant', content=final_response))
+        agent_return.inner_steps = copy.deepcopy(self._inner_history)
         agent_return.response = final_response
         return agent_return
