@@ -78,11 +78,11 @@ class ReActProtocol:
                      belong='assistant'),
                  action: dict = dict(role='ACTION', begin='Action:', end='\n'),
                  action_input: dict = dict(
-                     role='ARGS', begin='ActionInput:', end='\n'),
+                     role='ARGS', begin='Action Input:', end='\n'),
                  response: dict = dict(
                      role='RESPONSE', begin='Response:', end='\n'),
                  finish: dict = dict(
-                     role='FINISH', begin='FinalAnswer:', end='\n'),
+                     role='FINISH', begin='Final Answer:', end='\n'),
                  call_protocol: str = CALL_PROTOCOL_EN,
                  force_stop: str = FORCE_STOP_PROMPT_EN) -> None:
         self.call_protocol = call_protocol
@@ -197,14 +197,15 @@ class ReAct(BaseAgent):
         protocol (ReActProtocol): a wrapper to generate prompt and
             parse the response from LLM / actions.
         max_turn (int): the maximum number of trails for LLM to generate
-            plans that can be successfully parsed by ReWOO protocol.
+            plans that can be successfully parsed by ReAct protocol.
+            Defaults to 4.
     """
 
     def __init__(self,
                  llm: Union[BaseModel, BaseAPIModel],
                  action_executor: ActionExecutor,
                  protocol: ReActProtocol = ReActProtocol(),
-                 max_turn: int = 2) -> None:
+                 max_turn: int = 4) -> None:
         self.max_turn = max_turn
         super().__init__(
             llm=llm, action_executor=action_executor, protocol=protocol)
@@ -213,14 +214,13 @@ class ReAct(BaseAgent):
         self._inner_history = []
         self._inner_history.append(dict(role='user', content=message))
         agent_return = AgentReturn()
-        force_stop = False
         default_response = 'Sorry that I cannot answer your question.'
         for turn in range(self.max_turn):
             prompt = self._protocol.format(
                 chat_history=self.session_history,
                 inner_step=self._inner_history,
                 action_executor=self._action_executor,
-                force_stop=force_stop)
+                force_stop=(turn == self.max_turn - 1))
             response = self._llm.generate_from_template(prompt, 512)
             self._inner_history.append(
                 dict(role='assistant', content=response))
@@ -237,11 +237,8 @@ class ReAct(BaseAgent):
                 dict(
                     role='system',
                     content=self._protocol.format_response(action_return)))
-            if turn == self.max_turn - 1:
-                force_stop = True
         else:
             agent_return.response = default_response
-        agent_return.response = default_response
         agent_return.inner_steps = copy.deepcopy(self._inner_history)
         # only append the user and final response
         self._session_history.append(dict(role='user', content=message))
