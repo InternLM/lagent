@@ -1,4 +1,11 @@
-# Lagent: A lightweight framework for building LLM-based agents
+<div align="center">
+  <img src="docs/imgs/lagent_logo.png" width="450"/>
+
+[![docs](https://img.shields.io/badge/docs-latest-blue)](https://lagent.readthedocs.io/en/latest/)
+[![PyPI](https://img.shields.io/pypi/v/lagent)](https://pypi.org/project/lagent)
+[![license](https://img.shields.io/github/license/InternLM/lagent.svg)](https://github.com/InternLM/lagent/tree/main/LICENSE)
+[![issue resolution](https://img.shields.io/github/issues-closed-raw/InternLM/lagent)](https://github.com/InternLM/lagent/issues)
+[![open issues](https://img.shields.io/github/issues-raw/InternLM/lagent)](https://github.com/InternLM/lagent/issues)
 
 English | [简体中文](README_zh-CN.md)
 
@@ -35,6 +42,16 @@ git clone https://github.com/InternLM/lagent.git
 cd lagent
 pip install -e .
 ```
+
+### Run ReAct Web Demo
+
+```bash
+# You need to install streamlit first
+# pip install streamlit
+streamlit run examples/react_web_demo.py
+```
+
+Then you can chat through the UI shown as below
 
 ### Run a ReWOO agent with GPT-3.5
 
