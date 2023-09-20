@@ -9,7 +9,11 @@
 
 English | [简体中文](README_zh-CN.md)
 
-## Introduction
+</div>
+
+<p align="center">
+    👋 join us on <a href="https://twitter.com/intern_lm" target="_blank">Twitter</a>, <a href="https://discord.gg/xa29JuW87d" target="_blank">Discord</a> and <a href="https://r.vansin.top/?r=internwx" target="_blank">WeChat</a>
+</p>## Introduction
 
 Lagent is a lightweight open-source framework that allows users to efficiently build large language model(LLM)-based agents. It also provides some typical tools to augment LLM. The overview of our framework is shown below:
 
@@ -52,7 +56,7 @@ streamlit run examples/react_web_demo.py
 ```
 
 Then you can chat through the UI shown as below
-![image](docs/imgs/math_demo.jpg)
+![image](https://github.com/InternLM/lagent/assets/24622904/3aebb8b4-07d1-42a2-9da3-46080c556f68)
 
 ### Run a ReWOO agent with GPT-3.5
 

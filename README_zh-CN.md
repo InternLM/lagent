@@ -7,7 +7,7 @@
 [![issue resolution](https://img.shields.io/github/issues-closed-raw/InternLM/lagent)](https://github.com/InternLM/lagent/issues)
 [![open issues](https://img.shields.io/github/issues-raw/InternLM/lagent)](https://github.com/InternLM/lagent/issues)
 
-English | [简体中文](README_zh-CN.md)
+[English](README.md) | 简体中文
 
 </div>
 
@@ -59,7 +59,7 @@ streamlit run examples/react_web_demo.py
 
 然后你就可以在网页端和智能体进行对话了，效果如下图所示
 
-![image](docs/imgs/math_demo.jpg)
+![image](https://github.com/InternLM/lagent/assets/24622904/3aebb8b4-07d1-42a2-9da3-46080c556f68)
 
 ### 用 GPT-3.5 构建一个 ReWOO 智能体
 
