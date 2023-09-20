@@ -47,11 +47,8 @@ class HFTransformer(BaseModel):
             tokenizer_only: bool = False,
             model_kwargs: dict = dict(device_map='auto'),
             meta_template: Optional[Dict] = [
-                dict(
-                    role='system',
-                    begin='<|System|>:',
-                    end='<TOKENS_UNUSED_2>\n'),
-                dict(role='user', begin='<|User|>:', end='<eoh>\n'),
+                dict(role='system', begin='<|System|>:', end='\n'),
+                dict(role='user', begin='<|User|>:', end='\n'),
                 dict(
                     role='assistant',
                     begin='<|Bot|>:',
