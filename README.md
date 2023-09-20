@@ -52,6 +52,7 @@ streamlit run examples/react_web_demo.py
 ```
 
 Then you can chat through the UI shown as below
+![image](docs/imgs/math_demo.jpg)
 
 ### Run a ReWOO agent with GPT-3.5
 

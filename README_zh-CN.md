@@ -59,6 +59,8 @@ streamlit run examples/react_web_demo.py
 
 然后你就可以在网页端和智能体进行对话了，效果如下图所示
 
+![image](docs/imgs/math_demo.jpg)
+
 ### 用 GPT-3.5 构建一个 ReWOO 智能体
 
 ```python
