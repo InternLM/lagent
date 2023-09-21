@@ -25,7 +25,7 @@ class TritonClient(Chatbot, BaseModel):
                  sequence_end: bool = True,
                  *args,
                  **kwargs):
-        """Start a new round conversion of a session. Return the chat
+        """Start a new round conversation of a session. Return the chat
         completions in non-stream mode.
 
         Args:
@@ -35,6 +35,7 @@ class TritonClient(Chatbot, BaseModel):
             max_out_len (int): the expected generated token numbers
             sequence_start (bool): start flag of a session
             sequence_end (bool): end flag of a session
+
         Returns:
             tuple(Status, str, int): status, text/chat completion,
             generated token number
