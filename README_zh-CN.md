@@ -1,4 +1,19 @@
-# Lagent: A lightweight framework for building LLM-based agents
+<div align="center">
+  <img src="docs/imgs/lagent_logo.png" width="450"/>
+
+[![docs](https://img.shields.io/badge/docs-latest-blue)](https://lagent.readthedocs.io/en/latest/)
+[![PyPI](https://img.shields.io/pypi/v/lagent)](https://pypi.org/project/lagent)
+[![license](https://img.shields.io/github/license/InternLM/lagent.svg)](https://github.com/InternLM/lagent/tree/main/LICENSE)
+[![issue resolution](https://img.shields.io/github/issues-closed-raw/InternLM/lagent)](https://github.com/InternLM/lagent/issues)
+[![open issues](https://img.shields.io/github/issues-raw/InternLM/lagent)](https://github.com/InternLM/lagent/issues)
+
+[English](README.md) | 简体中文
+
+</div>
+
+<p align="center">
+    👋 join us on <a href="https://twitter.com/intern_lm" target="_blank">Twitter</a>, <a href="https://discord.gg/xa29JuW87d" target="_blank">Discord</a> and <a href="https://r.vansin.top/?r=internwx" target="_blank">WeChat</a>
+</p>
 
 [English](README.md) | 简体中文
 
@@ -34,6 +49,18 @@ cd lagent
 pip install -e .
 ```
 
+### 运行一个 ReAct 智能体的网页样例
+
+```bash
+# 可能先需要安装 streamlit 包
+# pip install streamlit
+streamlit run examples/react_web_demo.py
+```
+
+然后你就可以在网页端和智能体进行对话了，效果如下图所示
+
+![image](https://github.com/InternLM/lagent/assets/24622904/3aebb8b4-07d1-42a2-9da3-46080c556f68)
+
 ### 用 GPT-3.5 构建一个 ReWOO 智能体
 
 ```python
@@ -65,7 +92,7 @@ from lagent.agents import ReAct
 from lagent.actions import ActionExecutor, GoogleSearch, PythonInterpreter
 from lagent.llms import HFTransformer
 
-llm = HFTransformer('internlm/internlm-7b-chat-v1.1')
+llm = HFTransformer('internlm/internlm-chat-7b-v1_1')
 search_tool = GoogleSearch(api_key='SERPER_API_KEY')
 python_interpreter = PythonInterpreter()
 

@@ -1,3 +1,4 @@
+import copy
 from typing import Dict, List, Tuple, Union
 
 from lagent.actions import ActionExecutor
@@ -32,15 +33,16 @@ FORCE_STOP_PROMPT_CN = '你需要基于历史消息返回一个最终结果'
 # The English prompts for ReAct
 
 CALL_PROTOCOL_EN = """You are a assistant who can utilize external tools.
+{tool_description}
 To use a tool, please use the following format:
 ```
-{thought}: Think what you need to solve, do you need to use tools?
-{action}: the tool name, should be one of [{action_names}]
-{action_input}: the input to the action
+{thought}Think what you need to solve, do you need to use tools?
+{action}the tool name, should be one of [{action_names}]
+{action_input}the input to the action
 ```
 The response after utilizing tools should using the following format:
 ```
-{response}: the results after call the tool.
+{response}the results after call the tool.
 ``
 If you already know the answer, or you do not need to use tools,
 please using the following format to reply:
@@ -76,13 +78,13 @@ class ReActProtocol:
                      belong='assistant'),
                  action: dict = dict(role='ACTION', begin='Action:', end='\n'),
                  action_input: dict = dict(
-                     role='ARGS', begin='ActionInput:', end='\n'),
+                     role='ARGS', begin='Action Input:', end='\n'),
                  response: dict = dict(
                      role='RESPONSE', begin='Response:', end='\n'),
                  finish: dict = dict(
-                     role='FINISH', begin='FinalAnswer:', end='\n'),
-                 call_protocol: str = CALL_PROTOCOL_CN,
-                 force_stop: str = FORCE_STOP_PROMPT_CN) -> None:
+                     role='FINISH', begin='Final Answer:', end='\n'),
+                 call_protocol: str = CALL_PROTOCOL_EN,
+                 force_stop: str = FORCE_STOP_PROMPT_EN) -> None:
         self.call_protocol = call_protocol
         self.force_stop = force_stop
         self.thought = thought
@@ -195,14 +197,15 @@ class ReAct(BaseAgent):
         protocol (ReActProtocol): a wrapper to generate prompt and
             parse the response from LLM / actions.
         max_turn (int): the maximum number of trails for LLM to generate
-            plans that can be successfully parsed by ReWOO protocol.
+            plans that can be successfully parsed by ReAct protocol.
+            Defaults to 4.
     """
 
     def __init__(self,
                  llm: Union[BaseModel, BaseAPIModel],
                  action_executor: ActionExecutor,
                  protocol: ReActProtocol = ReActProtocol(),
-                 max_turn: int = 2) -> None:
+                 max_turn: int = 4) -> None:
         self.max_turn = max_turn
         super().__init__(
             llm=llm, action_executor=action_executor, protocol=protocol)
@@ -211,14 +214,13 @@ class ReAct(BaseAgent):
         self._inner_history = []
         self._inner_history.append(dict(role='user', content=message))
         agent_return = AgentReturn()
-        force_stop = False
-        default_response = '对不起，我无法回答你的问题'
+        default_response = 'Sorry that I cannot answer your question.'
         for turn in range(self.max_turn):
             prompt = self._protocol.format(
                 chat_history=self.session_history,
                 inner_step=self._inner_history,
                 action_executor=self._action_executor,
-                force_stop=force_stop)
+                force_stop=(turn == self.max_turn - 1))
             response = self._llm.generate_from_template(prompt, 512)
             self._inner_history.append(
                 dict(role='assistant', content=response))
@@ -230,14 +232,14 @@ class ReAct(BaseAgent):
             agent_return.actions.append(action_return)
             if action_return.type == self._action_executor.finish_action.name:
                 agent_return.response = action_return.result['text']
-                return agent_return
+                break
             self._inner_history.append(
                 dict(
                     role='system',
                     content=self._protocol.format_response(action_return)))
-            if turn == self.max_turn - 1:
-                force_stop = True
-        agent_return.response = default_response
+        else:
+            agent_return.response = default_response
+        agent_return.inner_steps = copy.deepcopy(self._inner_history)
         # only append the user and final response
         self._session_history.append(dict(role='user', content=message))
         self._session_history.append(

@@ -8,3 +8,7 @@ __all__ = ['BaseModel', 'BaseAPIModel', 'GPTAPI']
 if is_module_exist('transformers'):
     from .huggingface import HFTransformer, HFTransformerCasualLM  # noqa: F401
     __all__.extend(['HFTransformer', 'HFTransformerCasualLM'])
+
+if is_module_exist('lmdeploy'):
+    from .lmdeploy import TritonClient  # noqa: F401
+    __all__.append('TritonClient')

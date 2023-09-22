@@ -76,7 +76,7 @@ class GoogleSearch(BaseAction):
             ActionReturn: The action return.
         """
 
-        tool_return = ActionReturn(url=None, args=None)
+        tool_return = ActionReturn(url=None, args=None, type=self.name)
         status_code, response = self._search(
             query, search_type=self.search_type, k=self.k)
         # convert search results to ToolReturn format

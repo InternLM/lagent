@@ -1,5 +1,6 @@
 # flake8: noqa
 import ast
+import copy
 import platform
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -263,7 +264,7 @@ class AutoGPT(BaseAgent):
     def chat(self, goal: str) -> AgentReturn:
         self._inner_history = []
         agent_return = AgentReturn()
-        default_response = '对不起，我无法回答你的问题'
+        default_response = 'Sorry that I cannot answer your question.'
         for _ in range(self.max_turn):
             prompt = self._protocol.format(
                 goal=goal,
@@ -284,5 +285,6 @@ class AutoGPT(BaseAgent):
                 dict(
                     role='system',
                     content=self._protocol.format_response(action_return)))
+        agent_return.inner_steps = copy.deepcopy(self._inner_history)
         agent_return.response = default_response
         return agent_return

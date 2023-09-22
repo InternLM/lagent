@@ -1,8 +1,19 @@
-# Lagent: A lightweight framework for building LLM-based agents
+<div align="center">
+  <img src="docs/imgs/lagent_logo.png" width="450"/>
+
+[![docs](https://img.shields.io/badge/docs-latest-blue)](https://lagent.readthedocs.io/en/latest/)
+[![PyPI](https://img.shields.io/pypi/v/lagent)](https://pypi.org/project/lagent)
+[![license](https://img.shields.io/github/license/InternLM/lagent.svg)](https://github.com/InternLM/lagent/tree/main/LICENSE)
+[![issue resolution](https://img.shields.io/github/issues-closed-raw/InternLM/lagent)](https://github.com/InternLM/lagent/issues)
+[![open issues](https://img.shields.io/github/issues-raw/InternLM/lagent)](https://github.com/InternLM/lagent/issues)
 
 English | [简体中文](README_zh-CN.md)
 
-## Introduction
+</div>
+
+<p align="center">
+    👋 join us on <a href="https://twitter.com/intern_lm" target="_blank">Twitter</a>, <a href="https://discord.gg/xa29JuW87d" target="_blank">Discord</a> and <a href="https://r.vansin.top/?r=internwx" target="_blank">WeChat</a>
+</p>## Introduction
 
 Lagent is a lightweight open-source framework that allows users to efficiently build large language model(LLM)-based agents. It also provides some typical tools to augment LLM. The overview of our framework is shown below:
 
@@ -35,6 +46,17 @@ git clone https://github.com/InternLM/lagent.git
 cd lagent
 pip install -e .
 ```
+
+### Run ReAct Web Demo
+
+```bash
+# You need to install streamlit first
+# pip install streamlit
+streamlit run examples/react_web_demo.py
+```
+
+Then you can chat through the UI shown as below
+![image](https://github.com/InternLM/lagent/assets/24622904/3aebb8b4-07d1-42a2-9da3-46080c556f68)
 
 ### Run a ReWOO agent with GPT-3.5
 
@@ -69,7 +91,7 @@ from lagent.agents import ReAct
 from lagent.actions import ActionExecutor, GoogleSearch, PythonInterpreter
 from lagent.llms import HFTransformer
 
-llm = HFTransformer('internlm/internlm-7b-chat-v1.1')
+llm = HFTransformer('internlm/internlm-chat-7b-v1_1')
 search_tool = GoogleSearch(api_key='Your SERPER_API_KEY')
 python_interpreter = PythonInterpreter()
 
