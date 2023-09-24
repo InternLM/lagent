@@ -132,9 +132,13 @@ class LMTemplateParser:
                     last: bool = False) -> Tuple[str, bool]:
         if isinstance(prompt, str):
             return prompt
-        merged_prompt = self.roles.get(
-            prompt['role'],
-            self.roles.get(self.roles[prompt['role']].get('fallback_role')))
+        
+        if prompt['role'] in self.roles:
+            merged_prompt = self.roles[prompt['role']]
+        else:
+            # TODO
+            merged_prompt = self.roles['fallback_role']
+
         res = merged_prompt.get('begin', '')
         if last and merged_prompt.get('generate', False):
             res += prompt.get('content', '')
