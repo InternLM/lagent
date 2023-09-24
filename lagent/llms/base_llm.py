@@ -11,7 +11,7 @@ class BaseModel:
             to 2048.
         tokenizer_only (bool): If True, only the tokenizer will be initialized.
             Defaults to False.
-        meta_template (Dict, optional): The model's meta prompt
+        meta_template (list of dict, optional): The model's meta prompt
             template if needed, in case the requirement of injecting or
             wrapping of any meta instructions.
     """
@@ -22,7 +22,7 @@ class BaseModel:
                  path: str,
                  max_seq_len: int = 2048,
                  tokenizer_only: bool = False,
-                 meta_template: Optional[Dict] = None):
+                 meta_template: Optional[List[Dict]] = None):
         self.path = path
         self.max_seq_len = max_seq_len
         self.tokenizer_only = tokenizer_only
@@ -76,10 +76,10 @@ class LMTemplateParser:
     """Intermidate prompt template parser, specifically for language models.
 
     Args:
-        meta_template (Dict): The meta template for the model.
+        meta_template (list of dict, optional): The meta template for the model.
     """
 
-    def __init__(self, meta_template: Optional[Dict] = None):
+    def __init__(self, meta_template: Optional[List[Dict]] = None):
         self.meta_template = meta_template
         if meta_template:
             assert isinstance(meta_template, list)
@@ -97,7 +97,6 @@ class LMTemplateParser:
         Args:
             dialog (List[str or PromptList]): A prompt
                 template (potentially before being wrapped by meta template).
-            mode (str): Parsing mode. Choices are 'ppl' and 'gen'.
 
         Returns:
             str: The final string.
@@ -128,7 +127,7 @@ class LMTemplateParser:
         return prompt
 
     def _prompt2str(self,
-                    prompt: Union[List, str, Dict],
+                    prompt: Union[str, Dict],
                     last: bool = False) -> Tuple[str, bool]:
         if isinstance(prompt, str):
             return prompt

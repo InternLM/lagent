@@ -25,14 +25,14 @@ class GoogleSearch(BaseAction):
     Args:
         api_key (str): API KEY to use serper google search API,
             You can create a free API key at https://serper.dev.
-        timeout (int): Upper bound of waiting time for an serper request.
+        timeout (int): Upper bound of waiting time for a serper request.
         search_type (str): Serper API support ['search', 'images', 'news',
             'places'] types of search, currently we only support 'search'.
         k (int): select first k results in the search results as response.
         description (str): The description of the action. Defaults to
             None.
         name (str, optional): The name of the action. If None, the name will
-            be class nameDefaults to None.
+            be class name. Defaults to None.
         enable (bool, optional): Whether the action is enabled. Defaults to
             True.
         disable_description (str, optional): The description of the action when
@@ -59,7 +59,7 @@ class GoogleSearch(BaseAction):
         api_key = os.environ.get('SERPER_API_KEY', api_key)
         if api_key is None:
             raise ValueError(
-                'Please Set Serper API key either in the environment '
+                'Please set Serper API key either in the environment '
                 ' as SERPER_API_KEY or pass it as `api_key` parameter.')
         self.api_key = api_key
         self.timeout = timeout
