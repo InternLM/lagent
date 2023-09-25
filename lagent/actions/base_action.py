@@ -10,7 +10,7 @@ class BaseAction:
         description (str, optional): The description of the action. Defaults to
             None.
         name (str, optional): The name of the action. If None, the name will
-            be class nameDefaults to None.
+            be class name. Defaults to None.
         enable (bool, optional): Whether the action is enabled. Defaults to
             True.
         disable_description (str, optional): The description of the action when

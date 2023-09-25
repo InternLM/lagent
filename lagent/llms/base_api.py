@@ -119,7 +119,6 @@ class APITemplateParser:
         Args:
             dialog (List[str or list]): An intermidate prompt
                 template (potentially before being wrapped by meta template).
-            mode (str): Parsing mode. Choices are 'ppl' and 'gen'.
 
         Returns:
             List[str or list]: The finalized prompt or a conversation.
