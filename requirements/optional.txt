@@ -1,4 +1,4 @@
 lmdeploy
+streamlit
 torch
 transformers
-streamlit

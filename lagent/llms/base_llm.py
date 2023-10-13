@@ -76,7 +76,8 @@ class LMTemplateParser:
     """Intermidate prompt template parser, specifically for language models.
 
     Args:
-        meta_template (list of dict, optional): The meta template for the model.
+        meta_template (list of dict, optional): The meta template for the
+            model.
     """
 
     def __init__(self, meta_template: Optional[List[Dict]] = None):
