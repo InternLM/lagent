@@ -100,7 +100,7 @@ class HFTransformer(BaseModel):
             max_length=self.max_seq_len - max_out_len)['input_ids']
         input_ids = torch.tensor(input_ids, device=self.model.device)
         outputs = self.model.generate(
-            input_ids, max_new_tokens=max_out_len, **kwargs)
+            input_ids=input_ids, max_new_tokens=max_out_len, **kwargs)
 
         if not self.extract_pred_after_decode:
             outputs = outputs[:, input_ids.shape[1]:]
