@@ -15,33 +15,33 @@
     👋 <a href="https://twitter.com/intern_lm" target="_blank">Twitter</a>, <a href="https://discord.gg/xa29JuW87d" target="_blank">Discord</a> और <a href="https://r.vansin.top/?r=internwx" target="_blank">WeChat</a> पर हमसे जुड़ें
 </p>
 
-## Introduction
+## परिचय
 
-Lagent is a lightweight open-source framework that allows users to efficiently build large language model(LLM)-based agents. It also provides some typical tools to augment LLM. The overview of our framework is shown below:
+Lagent एक हल्का ओपन-सोर्स फ्रेमवर्क है जो उपयोगकर्ताओं को बड़े भाषा मॉडल (एलएलएम)-आधारित एजेंटों को कुशलतापूर्वक बनाने की अनुमति देता है। यह एलएलएम को बढ़ाने के लिए कुछ विशिष्ट उपकरण भी प्रदान करता है। हमारे ढांचे का अवलोकन नीचे दिखाया गया है:
 
 ![image](https://github.com/InternLM/lagent/assets/24351120/cefc4145-2ad8-4f80-b88b-97c05d1b9d3e)
 
-### Major Features
+### प्रमुख विशेषताएं
 
-- **Support multiple kinds of agents out of box.** Lagent now supports [ReAct](https://arxiv.org/abs/2210.03629), [AutoGPT](https://github.com/Significant-Gravitas/Auto-GPT) and [ReWOO](https://arxiv.org/abs/2305.18323), which can drive the large language models(LLMs) for multiple trials of reasoning and function calling.
+- **बॉक्स से बाहर कई प्रकार के एजेंटों का समर्थन करें।** लैजेंट अब समर्थन करता है [ReAct](https://arxiv.org/abs/2210.03629), [AutoGPT](https://github.com/Significant-Gravitas/Auto-GPT) और [ReWOO](https://arxiv.org/abs/2305.18323), जो तर्क और फ़ंक्शन कॉलिंग के कई परीक्षणों के लिए बड़े भाषा मॉडल (एलएलएम) को संचालित कर सकता है।
 
-- **Extremely simple and easy to extend.** The framework is quite simple with a clear structure. With only 20 lines of code, you are able to construct your own agent. It also supports three typical tools: Python interpreter, API call, and google search.
+- **बेहद सरल और विस्तार करने में आसान।** स्पष्ट संरचना के साथ ढांचा काफी सरल है। कोड की केवल 20 पंक्तियों के साथ, आप अपना स्वयं का एजेंट बनाने में सक्षम हैं। यह तीन विशिष्ट टूल का भी समर्थन करता है: पायथन इंटरप्रेटर, एपीआई कॉल और गूगल सर्च।
 
-- **Support various large language models.** We support different LLMs, including API-based (GPT-3.5/4) and open-source (LLaMA 2, InternLM) models.
+- **विभिन्न बड़े भाषा मॉडल का समर्थन करें।** हम एपीआई-आधारित (जीपीटी-3.5/4) और ओपन-सोर्स (एलएलएएमए 2, इंटर्नएलएम) मॉडल सहित विभिन्न एलएलएम का समर्थन करते हैं।
 
-## Getting Started
+## शुरू करना
 
-Please see the [overview](docs/en/get_started/overview.md) for the general introduction of Lagent. Meanwhile, we provide extremely simple code for quick start. You may refer to [examples](examples/) for more details.
+लैजेंट के सामान्य परिचय के लिए कृपया [overview](docs/en/get_started/overview.md) देखें। इस बीच, हम त्वरित शुरुआत के लिए अत्यंत सरल कोड प्रदान करते हैं। अधिक जानकारी के लिए आप [examples](examples/) अधिक जानकारी के लिए।
 
-### Installation
+### इंस्टालेशन
 
-Install with pip (Recommended).
+pip के साथ स्थापित करें (अनुशंसित)।
 
 ```bash
 pip install lagent
 ```
 
-Optionally, you could also build Lagent from source in case you want to modify the code:
+वैकल्पिक रूप से, यदि आप कोड को संशोधित करना चाहते हैं तो आप स्रोत से लैजेंट भी बना सकते हैं:
 
 ```bash
 git clone https://github.com/InternLM/lagent.git
@@ -49,7 +49,7 @@ cd lagent
 pip install -e .
 ```
 
-### Run ReAct Web Demo
+### रिएक्ट वेब डेमो चलाएँ
 
 ```bash
 # You need to install streamlit first
@@ -57,12 +57,12 @@ pip install -e .
 streamlit run examples/react_web_demo.py
 ```
 
-Then you can chat through the UI shown as below
+फिर आप नीचे दिखाए गए यूआई के माध्यम से चैट कर सकते हैं
 ![image](https://github.com/InternLM/lagent/assets/24622904/3aebb8b4-07d1-42a2-9da3-46080c556f68)
 
-### Run a ReWOO agent with GPT-3.5
+### GPT-3.5 के साथ ReWOO एजेंट चलाएँ
 
-Below is an example for running ReWOO with GPT-3.5
+GPT-3.5 के साथ ReWOO चलाने का एक उदाहरण नीचे दिया गया है
 
 ```python
 from lagent.agents import ReWOO
@@ -84,9 +84,9 @@ print(response.response)
 >>> Film director.
 ```
 
-### Run a ReAct agent with InternLM
+### InternLM के साथ एक ReAct एजेंट चलाएँ
 
-NOTE: If you want to run a HuggingFace model, please run `pip install -e .[all]` first.
+नोट: यदि आप हगिंगफेस मॉडल चलाना चाहते हैं, तो कृपया पहले `pip install -e .[all]` चलाएं।
 
 ```python
 from lagent.agents import ReAct
@@ -108,6 +108,6 @@ print(response.response)
 >>> $-\\frac{1}{3}+\\frac{{\\sqrt{3}}}{3}i$
 ```
 
-## License
+## लाइसेंस
 
-This project is released under the [Apache 2.0 license](LICENSE).
+यह प्रोजेक्ट [Apache 2.0 license](LICENSE) के तहत जारी किया गया है।
