@@ -7,7 +7,7 @@
 [![issue resolution](https://img.shields.io/github/issues-closed-raw/InternLM/lagent)](https://github.com/InternLM/lagent/issues)
 [![open issues](https://img.shields.io/github/issues-raw/InternLM/lagent)](https://github.com/InternLM/lagent/issues)
 
-[English](README.md) | [简体中文](README_zh-CN.md) | 日本語
+[English](README.md) | [简体中文](README_zh-CN.md) | 日本語 | [हिंदी](README_in_HIN.md)
 
 </div>
 
