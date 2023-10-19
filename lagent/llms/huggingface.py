@@ -133,5 +133,6 @@ class HFTransformerCasualLM(HFTransformer):
     def _load_model(self, path: str, model_kwargs: dict):
         from transformers import AutoModelForCausalLM
         model_kwargs.setdefault('torch_dtype', torch.float16)
-        self.model = AutoModelForCausalLM.from_pretrained(path, **model_kwargs)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            path, trust_remote_code=True, **model_kwargs)
         self.model.eval()
