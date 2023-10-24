@@ -23,6 +23,10 @@ Lagent is a lightweight open-source framework that allows users to efficiently b
 
 ### Major Features
 
+**0.1.2** was released in 24/10/2023:
+
+- **Support efficient inference engine.** Lagent now supports efficient inference engine [lmdeploy turbomind](https://github.com/InternLM/lmdeploy/tree/main).
+
 - **Support multiple kinds of agents out of box.** Lagent now supports [ReAct](https://arxiv.org/abs/2210.03629), [AutoGPT](https://github.com/Significant-Gravitas/Auto-GPT) and [ReWOO](https://arxiv.org/abs/2305.18323), which can drive the large language models(LLMs) for multiple trials of reasoning and function calling.
 
 - **Extremely simple and easy to extend.** The framework is quite simple with a clear structure. With only 20 lines of code, you are able to construct your own agent. It also supports three typical tools: Python interpreter, API call, and google search.
