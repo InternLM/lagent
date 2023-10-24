@@ -25,8 +25,14 @@ Lagent 是一个轻量级、开源的基于大语言模型的智能体（agent�
 
 ### 主要特点
 
+**0.1.2** 版本已经在 2023.10.24 发布
+
+- **支持高性能推理.** 我们现在支持了高性能推理 [lmdeploy turbomind](https://github.com/InternLM/lmdeploy/tree/main).
+
 - **实现了多种类型的智能体，** 我们支持了经典的 [ReAct](https://arxiv.org/abs/2210.03629)，[AutoGPT](https://github.com/Significant-Gravitas/Auto-GPT) 和 [ReWoo](https://arxiv.org/abs/2305.18323) 等智能体，这些智能体能够调用大语言模型进行多轮的推理和工具调用。
+
 - **框架简单易拓展.** 框架的代码结构清晰且简单，只需要不到20行代码你就能够创造出一个你自己的智能体（agent）。同时我们支持了 Python 解释器、API 调用和搜索三类常用典型工具。
+
 - **灵活支持多个大语言模型.** 我们提供了多种大语言模型支持，包括 InternLM、Llama-2 等开源模型和 GPT-4/3.5 等基于 API 的闭源模型。
 
 ## 教程
