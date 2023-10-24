@@ -1,3 +1,8 @@
+import dataclasses
+import os.path as osp
+import random
+
+import lmdeploy.turbomind.chat as tm_chat
 from lmdeploy.serve.turbomind.chatbot import Chatbot, Session, get_logger
 
 from .base_llm import BaseModel
@@ -82,6 +87,51 @@ class TritonClient(Chatbot, BaseModel):
         """
         inputs = self.parse_template(templates)
         response = self.generate(inputs, max_out_len=max_out_len, **kwargs)
-        return response.replace(
+        # The return of tuibomind contains <eoa>, here we hard code removes it.
+        response = response.replace(
             self.template_parser.roles['assistant']['end'].strip(),
             '').strip()
+        return response
+
+
+class TurboMind(BaseModel):
+
+    def __init__(self,
+                 path: str,
+                 max_seq_len: int = 2048,
+                 tokenizer_only: bool = False,
+                 meta_template=None,
+                 tp=1,
+                 **kwargs):
+        super().__init__(path, max_seq_len, tokenizer_only, meta_template)
+        tokenizer_model_path = osp.join(path, 'triton_models', 'tokenizer')
+        self.tokenizer = tm_chat.Tokenizer(tokenizer_model_path)
+        self.tm_model = tm_chat.tm.TurboMind(
+            path, eos_id=self.tokenizer.eos_token_id, tp=tp)
+        self.generator = self.tm_model.create_instance()
+
+        model_name = self.tm_model.model_name
+        self.model = tm_chat.MODELS.get(model_name)(
+            capability='completion', **kwargs)
+
+    def generate(self, prompt, **kwargs):
+        seed = random.getrandbits(64)
+        input_ids = self.tokenizer.encode(prompt)
+        gen_param = tm_chat.get_gen_param(
+            'completion', self.model.sampling_param, step=0, nth_round=1)
+
+        response_size = 0
+        for outputs in self.generator.stream_infer(
+                session_id=1,
+                input_ids=[input_ids],
+                stream_output=False,
+                **dataclasses.asdict(gen_param),
+                ignore_eos=False,
+                random_seed=seed):
+            res, tokens = outputs[0]
+            # decode res
+            response = self.tokenizer.decode(
+                res.tolist(), offset=response_size)
+            response = tm_chat.valid_str(response)
+
+        return response
