@@ -87,9 +87,11 @@ class TritonClient(Chatbot, BaseModel):
         """
         inputs = self.parse_template(templates)
         response = self.generate(inputs, max_out_len=max_out_len, **kwargs)
-        return response.replace(
+        # The return of tuibomind contains <eoa>, here we hard code removes it.
+        response = response.replace(
             self.template_parser.roles['assistant']['end'].strip(),
             '').strip()
+        return response
 
 
 class TurboMind(BaseModel):

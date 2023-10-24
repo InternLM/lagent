@@ -10,5 +10,5 @@ if is_module_exist('transformers'):
     __all__.extend(['HFTransformer', 'HFTransformerCasualLM'])
 
 if is_module_exist('lmdeploy'):
-    from .lmdeploy import TritonClient  # noqa: F401
-    __all__.append('TritonClient')
+    from .lmdeploy import TritonClient, TurboMind  # noqa: F401
+    __all__.extend(['TritonClient', 'TurboMind'])
