@@ -12,7 +12,7 @@
 </div>
 
 <p align="center">
-    👋 <a href="https://twitter.com/intern_lm" target="_blank">Twitter</a>, <a href="https://discord.gg/xa29JuW87d" target="_blank">Discord</a> और <a href="https://r.vansin.top/?r=internwx" target="_blank">WeChat</a> पर हमसे जुड़ें
+    👋 <a href="https://twitter.com/intern_lm" target="_blank">Twitter</a>, <a href="https://discord.gg/xa29JuW87d" target="_blank">Discord</a> এবং <a href="https://r.vansin.top/?r=internwx" target="_blank">WeChat</a> সাথে আমাদের সাথে যোগদান করুন
 </p>
 
 ## পরিচিতি
