@@ -113,6 +113,19 @@ print(response.response)
 >>> $-\\frac{1}{3}+\\frac{{\\sqrt{3}}}{3}i
 ```
 
+## 引用
+
+如果你觉得本项目对你的研究工作有所帮助，请参考如下 bibtex 引用 Lagent：
+
+```latex
+@misc{lagent2023,
+    title={{Lagent: InternLM} a lightweight open-source framework that allows users to efficiently build large language model(LLM)-based agents},
+    author={Lagent Developer Team},
+    howpublished = {\url{https://github.com/InternLM/lagent}},
+    year={2023}
+}
+```
+
 ## 开源许可证
 
 该项目采用[Apache 2.0 开源许可证](LICENSE)。

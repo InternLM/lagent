@@ -112,6 +112,19 @@ print(response.response)
 >>> $-\\frac{1}{3}+\\frac{{\\sqrt{3}}}{3}i$
 ```
 
+## Citation
+
+If you find this project useful in your research, please consider cite:
+
+```latex
+@misc{lagent2023,
+    title={{Lagent: InternLM} a lightweight open-source framework that allows users to efficiently build large language model(LLM)-based agents},
+    author={Lagent Developer Team},
+    howpublished = {\url{https://github.com/InternLM/lagent}},
+    year={2023}
+}
+```
+
 ## License
 
 This project is released under the [Apache 2.0 license](LICENSE).
