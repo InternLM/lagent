@@ -1,3 +1,4 @@
+<h1 align="center">Lagent 🚀</h1>
 <div align="center">
   <img src="docs/imgs/lagent_logo.png" width="450"/>
 
@@ -15,11 +16,18 @@ English | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | [ह�
     👋 join us on <a href="https://twitter.com/intern_lm" target="_blank">Twitter</a>, <a href="https://discord.gg/xa29JuW87d" target="_blank">Discord</a> and <a href="https://r.vansin.top/?r=internwx" target="_blank">WeChat</a>
 </p>
 
-## Introduction
+## What's Lagent?
 
 Lagent is a lightweight open-source framework that allows users to efficiently build large language model(LLM)-based agents. It also provides some typical tools to augment LLM. The overview of our framework is shown below:
 
 ![image](https://github.com/InternLM/lagent/assets/24351120/cefc4145-2ad8-4f80-b88b-97c05d1b9d3e)
+
+## 💻Tech Stack
+
+<p>
+  <a href="">
+    <img src="https://img.shields.io/badge/Python-007ACC?style=for-the-badge&logo=python&logoColor=yellow" alt="python" />
+  </a>
 
 ### Major Features
 
