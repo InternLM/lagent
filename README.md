@@ -17,7 +17,7 @@ English | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | [ह�
 
 ## Introduction
 
-Lagent is a lightweight open-source framework that allows users to efficiently build large language model(LLM)-based agents. It also provides some typical tools to augment LLM. The overview of our framework is shown below:
+Lagent is a lightweight, open-source framework that allows users to efficiently build large language model(LLM)-based agents. It also provides some typical tools to augment LLM. The overview of our framework is shown as below:
 
 ![image](https://github.com/InternLM/lagent/assets/24351120/cefc4145-2ad8-4f80-b88b-97c05d1b9d3e)
 
