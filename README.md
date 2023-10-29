@@ -1,3 +1,4 @@
+<div id="top"></div>
 <h1 align="center">Lagent 🚀</h1>
 <div align="center">
   <img src="docs/imgs/lagent_logo.png" width="450"/>
@@ -136,3 +137,4 @@ If you find this project useful in your research, please consider cite:
 ## License
 
 This project is released under the [Apache 2.0 license](LICENSE).
+<p align="right"><a href="#top">🔼 Back to top</a></p>
