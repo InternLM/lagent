@@ -29,11 +29,6 @@ Lagent is a lightweight open-source framework that allows users to efficiently b
     <img src="https://img.shields.io/badge/Python-007ACC?style=for-the-badge&logo=python&logoColor=yellow" alt="python" />
   </a>
 
-  ### All Thanks To Our Contributors:
-  <a href="https://github.com/ZwwWayne/lagent/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=ZwwWayne/lagent" />
-</a>
-
 ### Major Features
 
 **0.1.2** was released in 24/10/2023:
@@ -124,6 +119,10 @@ response = chatbot.chat('若$z=-1+\sqrt{3}i$,则$\frac{z}{{z\overline{z}-1}}=\le
 print(response.response)
 >>> $-\\frac{1}{3}+\\frac{{\\sqrt{3}}}{3}i$
 ```
+### All Thanks To Our Contributors:
+  <a href="https://github.com/ZwwWayne/lagent/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=ZwwWayne/lagent" />
+</a>
 
 ## Citation
 
