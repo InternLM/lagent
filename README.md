@@ -120,8 +120,8 @@ print(response.response)
 >>> $-\\frac{1}{3}+\\frac{{\\sqrt{3}}}{3}i$
 ```
 ### All Thanks To Our Contributors:
-  <a href="https://github.com/ZwwWayne/lagent/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=ZwwWayne/lagent" />
+  <a href="https://github.com/InternLM/lagent/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=InternLM/lagent" />
 </a>
 
 ## Citation
