@@ -3,7 +3,9 @@ import os.path as osp
 import random
 
 import lmdeploy.turbomind.chat as tm_chat
+from lmdeploy import turbomind as tm
 from lmdeploy.serve.turbomind.chatbot import Chatbot, Session, get_logger
+from lmdeploy.tokenizer import Tokenizer
 
 from .base_llm import BaseModel
 
@@ -98,31 +100,32 @@ class TurboMind(BaseModel):
 
     def __init__(self,
                  path: str,
-                 max_seq_len: int = 2048,
+                 max_seq_len: int = 8192,
                  tokenizer_only: bool = False,
                  meta_template=None,
                  tp=1,
                  **kwargs):
         super().__init__(path, max_seq_len, tokenizer_only, meta_template)
         tokenizer_model_path = osp.join(path, 'triton_models', 'tokenizer')
-        self.tokenizer = tm_chat.Tokenizer(tokenizer_model_path)
-        self.tm_model = tm_chat.tm.TurboMind(
+        self.tokenizer = Tokenizer(tokenizer_model_path)
+        self.tm_model = tm.TurboMind(
             path, eos_id=self.tokenizer.eos_token_id, tp=tp)
         self.generator = self.tm_model.create_instance()
 
         model_name = self.tm_model.model_name
         self.model = tm_chat.MODELS.get(model_name)(
             capability='completion', **kwargs)
+        self._session_id = 0
 
     def generate(self, prompt, **kwargs):
         seed = random.getrandbits(64)
         input_ids = self.tokenizer.encode(prompt)
         gen_param = tm_chat.get_gen_param(
             'completion', self.model.sampling_param, step=0, nth_round=1)
-
         response_size = 0
+        self._session_id = (self._session_id + 1) % 100000
         for outputs in self.generator.stream_infer(
-                session_id=1,
+                session_id=self._session_id,
                 input_ids=[input_ids],
                 stream_output=False,
                 **dataclasses.asdict(gen_param),
@@ -133,5 +136,4 @@ class TurboMind(BaseModel):
             response = self.tokenizer.decode(
                 res.tolist(), offset=response_size)
             response = tm_chat.valid_str(response)
-
         return response
