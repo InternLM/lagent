@@ -8,85 +8,6 @@ from typing import Dict, List, Optional, Tuple, Union
 from .base_llm import BaseModel
 
 
-class BaseAPIModel(BaseModel):
-    """Base class for API model wrapper.
-
-    Args:
-        model_type (str): The type of model.
-        query_per_second (int): The maximum queries allowed per second
-            between two consecutive calls of the API. Defaults to 1.
-        retry (int): Number of retires if the API call fails. Defaults to 2.
-        max_seq_len (int): The maximum sequence length of the model. Defaults
-            to 2048.
-        meta_template (Dict, optional): The model's meta prompt
-            template if needed, in case the requirement of injecting or
-            wrapping of any meta instructions.
-    """
-
-    is_api: bool = True
-
-    def __init__(self,
-                 model_type: str,
-                 query_per_second: int = 1,
-                 retry: int = 2,
-                 max_seq_len: int = 2048,
-                 meta_template: Optional[Dict] = None):
-        self.model_type = model_type
-        self.max_seq_len = max_seq_len
-        self.meta_template = meta_template
-        self.retry = retry
-        self.query_per_second = query_per_second
-        self.token_bucket = TokenBucket(query_per_second)
-        self.template_parser = APITemplateParser(meta_template)
-
-    @abstractclassmethod
-    def generate(self, inputs, max_out_len: int) -> List[str]:
-        """Generate results given a list of inputs.
-
-        Args:
-            inputs (List[str or list]): A list of strings or PromptDicts.
-                The PromptDict should be organized in OpenCompass'
-                API format.
-            max_out_len (int): The maximum length of the output.
-
-        Returns:
-            List[str]: A list of generated strings.
-        """
-
-    def get_token_len(self, prompt: str) -> int:
-        """Get lengths of the tokenized string. Only English and Chinese
-        characters are counted for now. Users are encouraged to override this
-        method if more accurate length is needed.
-
-        Args:
-            prompt (str): Input string.
-
-        Returns:
-            int: Length of the input tokens
-        """
-
-        english_parts = re.findall(r'[A-Za-z0-9]+', prompt)
-        chinese_parts = re.findall(r'[\u4e00-\u9FFF]+', prompt)
-
-        # Count English words
-        english_count = sum(len(part.split()) for part in english_parts)
-
-        # Count Chinese words
-        chinese_count = sum(len(part) for part in chinese_parts)
-
-        return english_count + chinese_count
-
-    def wait(self):
-        """Wait till the next query can be sent.
-
-        Applicable in both single-thread and multi-thread environments.
-        """
-        return self.token_bucket.get_token()
-
-    def to(self, device):
-        pass
-
-
 class APITemplateParser:
     """Intermidate prompt template parser, specifically for API models.
 
@@ -199,17 +120,97 @@ class APITemplateParser:
         return res
 
     def _role2api_role(self, role_prompt: Dict) -> Tuple[str, bool]:
-
-        merged_prompt = self.roles.get(
-            role_prompt['role'],
-            self.roles.get(
-                self.roles[role_prompt['role']].get('fallback_role')))
+        merged_prompt = self.roles[self.roles[role_prompt['role']]]
+        if merged_prompt.get('fallback_role'):
+            merged_prompt = self.roles[self.roles[
+                merged_prompt['fallback_role']]]
         res = {}
         res['role'] = merged_prompt['api_role']
         res['content'] = merged_prompt.get('begin', '')
         res['content'] += role_prompt.get('content', '')
         res['content'] += merged_prompt.get('end', '')
         return res
+
+
+class BaseAPIModel(BaseModel):
+    """Base class for API model wrapper.
+
+    Args:
+        model_type (str): The type of model.
+        query_per_second (int): The maximum queries allowed per second
+            between two consecutive calls of the API. Defaults to 1.
+        retry (int): Number of retires if the API call fails. Defaults to 2.
+        max_seq_len (int): The maximum sequence length of the model. Defaults
+            to 2048.
+        meta_template (Dict, optional): The model's meta prompt
+            template if needed, in case the requirement of injecting or
+            wrapping of any meta instructions.
+    """
+
+    is_api: bool = True
+
+    def __init__(self,
+                 model_type: str,
+                 query_per_second: int = 1,
+                 retry: int = 2,
+                 max_seq_len: int = 2048,
+                 template_parser: 'APITemplateParser' = APITemplateParser,
+                 meta_template: Optional[Dict] = None):
+        self.model_type = model_type
+        self.max_seq_len = max_seq_len
+        self.meta_template = meta_template
+        self.retry = retry
+        self.query_per_second = query_per_second
+        self.token_bucket = TokenBucket(query_per_second)
+        if template_parser:
+            self.template_parser = template_parser(meta_template)
+
+    @abstractclassmethod
+    def generate(self, inputs, max_out_len: int) -> List[str]:
+        """Generate results given a list of inputs.
+
+        Args:
+            inputs (List[str or list]): A list of strings or PromptDicts.
+                The PromptDict should be organized in OpenCompass'
+                API format.
+            max_out_len (int): The maximum length of the output.
+
+        Returns:
+            List[str]: A list of generated strings.
+        """
+
+    def get_token_len(self, prompt: str) -> int:
+        """Get lengths of the tokenized string. Only English and Chinese
+        characters are counted for now. Users are encouraged to override this
+        method if more accurate length is needed.
+
+        Args:
+            prompt (str): Input string.
+
+        Returns:
+            int: Length of the input tokens
+        """
+
+        english_parts = re.findall(r'[A-Za-z0-9]+', prompt)
+        chinese_parts = re.findall(r'[\u4e00-\u9FFF]+', prompt)
+
+        # Count English words
+        english_count = sum(len(part.split()) for part in english_parts)
+
+        # Count Chinese words
+        chinese_count = sum(len(part) for part in chinese_parts)
+
+        return english_count + chinese_count
+
+    def wait(self):
+        """Wait till the next query can be sent.
+
+        Applicable in both single-thread and multi-thread environments.
+        """
+        return self.token_bucket.get_token()
+
+    def to(self, device):
+        pass
 
 
 class TokenBucket:
