@@ -181,6 +181,7 @@ class BaseModel:
         Args:
             messages (Union[List[dict], List[List[dict]]]):
             completion_params (dict): The input params for completion.
+        Returns:
         """
         if isinstance(messages[0], list):
             inputs = list()
@@ -193,8 +194,10 @@ class BaseModel:
     def stream_chat(self, message: List[dict], **completion_params):
         """Generate results as streaming given a list of templates.
 
-        messages (Union[List[dict]): completion_params (dict): The input params
-        for completion.
+        Args:
+            messages (Union[List[dict]):
+            completion_params (dict): The input params for completion.
+        Returns:
         """
         raise NotImplementedError
 
