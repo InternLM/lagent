@@ -1,5 +1,14 @@
 from abc import abstractclassmethod
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
+
+
+@dataclass
+class CompletionParam:
+    top_p: float = 0.8
+    top_k: float = None
+    temperature: float = 0.8
+    repetition_penalty: float = 1.0
 
 
 class LMTemplateParser:
@@ -109,12 +118,15 @@ class BaseModel:
 
     is_api: bool = False
 
-    def __init__(self,
-                 path: str,
-                 max_seq_len: int = 2048,
-                 tokenizer_only: bool = False,
-                 template_parser: 'LMTemplateParser' = LMTemplateParser,
-                 meta_template: Optional[List[Dict]] = None):
+    def __init__(
+        self,
+        path: str,
+        max_seq_len: int = 2048,
+        tokenizer_only: bool = False,
+        template_parser: 'LMTemplateParser' = LMTemplateParser,
+        meta_template: Optional[List[Dict]] = None,
+        completion_param: 'CompletionParam' = CompletionParam,
+    ):
         self.path = path
         self.max_seq_len = max_seq_len
         self.tokenizer_only = tokenizer_only
@@ -123,9 +135,13 @@ class BaseModel:
         self.eos_token_id = None
         if meta_template and 'eos_token_id' in meta_template:
             self.eos_token_id = meta_template['eos_token_id']
+        self.completion_param = completion_param
 
     @abstractclassmethod
-    def generate(self, inputs: List[str], max_out_len: int) -> List[str]:
+    def generate(self,
+                 inputs: List[str],
+                 max_out_len: int,
+                 model_kwargs: CompletionParam = None) -> List[str]:
         """Generate results given a list of inputs.
 
         Args:
@@ -150,7 +166,10 @@ class BaseModel:
         """
         return self.template_parser.parse_template(dialog)
 
-    def generate_from_template(self, templates, max_out_len: int, **kwargs):
+    def generate_from_template(self,
+                               templates,
+                               max_out_len: int,
+                               model_kwargs: CompletionParam = None):
         """Generate completion from a list of templates.
 
         Args:
@@ -158,7 +177,8 @@ class BaseModel:
             max_out_len (int): The maximum length of the output.
         """
         inputs = self.parse_template(templates)
-        return self.generate(inputs, max_out_len=max_out_len, **kwargs)
+        return self.generate(
+            inputs, max_out_len=max_out_len, model_kwargs=model_kwargs)
 
     def to(self, device):
         self.model.to(device)
