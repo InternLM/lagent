@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Union
+from typing import Dict, List, Union
 
 from lagent.schema import ActionReturn, ActionValidCode
 from .base_action import BaseAction
@@ -40,13 +40,21 @@ class ActionExecutor:
         self.finish_action = finish_action
 
     def get_actions_info(self, only_enable: bool = True) -> Dict:
-        if only_enable:
-            return {
-                k: v.description
-                for k, v in self.actions.items() if v.enable
-            }
-        else:
-            return {k: v.description for k, v in self.actions.items()}
+        action_dict = {}
+        for action_name, action in self.actions.items():
+            if only_enable and not action.enable:
+                continue
+            if 'api_list' in action.description:
+                for api in action.description['api_list']:
+                    api_name = f"{action_name}.{api['name']}"
+                    api_desc = api.copy()
+                    api_desc.pop('name')
+                    action_dict[api_name] = api_desc
+            else:
+                action_desc = action.description.copy()
+                action_desc.pop('name')
+                action_dict[action_name] = action_desc
+        return action_dict
 
     def is_valid(self, name: str):
         return name in self.actions and self.actions[name].enable
@@ -66,19 +74,17 @@ class ActionExecutor:
         if name in self.actions:
             del self.actions[name]
 
-    def __call__(self, name: str, command: Any) -> ActionReturn:
-        if isinstance(command, str):
-            args, kwargs = (command, ), {}
-        else:
-            args, kwargs = (), command
-        if not self.is_valid(name):
+    def __call__(self, name: str, command: str) -> ActionReturn:
+        action_name, api_name = (
+            name.split('.') if '.' in name else (name, 'run'))
+        if not self.is_valid(action_name):
             if name == self.no_action.name:
-                action_return = self.no_action.run(*args, **kwargs)
+                action_return = self.no_action(command)
             elif name == self.finish_action.name:
-                action_return = self.finish_action.run(*args, **kwargs)
+                action_return = self.finish_action(command)
             else:
-                action_return = self.invalid_action(*args, **kwargs)
+                action_return = self.invalid_action(command)
         else:
-            action_return = self.actions[name].run(*args, **kwargs)
+            action_return = self.actions[action_name](command, api_name)
             action_return.valid = ActionValidCode.OPEN
         return action_return

@@ -1,5 +1,6 @@
-from typing import Optional
+from typing import Optional, Type
 
+from lagent.actions.parser import BaseParser, ParseError
 from lagent.schema import ActionReturn
 
 
@@ -7,51 +8,101 @@ class BaseAction:
     """Base class for all actions.
 
     Args:
-        description (str, optional): The description of the action. Defaults to
-            None.
-        name (str, optional): The name of the action. If None, the name will
-            be class name. Defaults to None.
-        enable (bool, optional): Whether the action is enabled. Defaults to
-            True.
-        disable_description (str, optional): The description of the action when
-            it is disabled. Defaults to None.
+        description (:class:`Optional[dict]`): The description of the action.
+            Defaults to ``None``.
+        parser (:class:`Type[BaseParser]`): The parser class to process the
+            action's inputs and outputs. Defaults to :class:`BaseParser``.
+        enable (:class:`bool`): Whether the action is enabled. Defaults to
+            ``True``.
+
+    Examples:
+
+        * simple tool
+
+        .. code-block:: python
+
+            desc = dict(
+                name='highlight',
+                description='highlight a piece of text',
+                parameters=[dict(name='text', type='STRING', description='input text')],
+                required=['text'],
+            )
+            action = BaseAction(desc)
+
+        * complex tool with multiple methods
+
+        .. code-block:: python
+
+            desc = dict(
+                name='calculate',
+                description='a calulator to perform arithmetic operations',
+                api_list=[
+                    dict(
+                        name='add',
+                        descrition='addition operation',
+                        parameters=[
+                            dict(name='a', type='NUMBER', description='augend'),
+                            dict(name='b', type='NUMBER', description='addend'),
+                        ],
+                        required=['a', 'b'],
+                    ),
+                    dict(
+                        name='sub',
+                        description='subtraction operation',
+                        parameters=[
+                            dict(name='a', type='NUMBER', description='minuend'),
+                            dict(name='b', type='NUMBER', description='subtrahend'),
+                        ],
+                        required=['a', 'b'],
+                    )
+                ]
+            )
+            action = BaseAction(desc)
     """
 
     def __init__(self,
-                 description: Optional[str] = None,
-                 name: Optional[str] = None,
-                 enable: bool = True,
-                 disable_description: Optional[str] = None) -> None:
-        if name is None:
-            name = self.__class__.__name__
-        self._name = name
-        self._description = description
-        self._disable_description = disable_description
+                 description: Optional[dict] = None,
+                 parser: Type[BaseParser] = BaseParser,
+                 enable: bool = True):
+        self._description = description or {}
+        self._name = self._description.get('name', self.__class__.__name__)
         self._enable = enable
+        self._nested = 'api_list' in self._description
+        self._parser = parser(self)
 
-    def __call__(self, *args, **kwargs) -> ActionReturn:
-        raise NotImplementedError
+    def __call__(self, inputs: str, name='run') -> ActionReturn:
+        try:
+            inputs = self._parser.parse_inputs(inputs, name)
+        except ParseError as exc:
+            action_return = ActionReturn(
+                args={'inputs': inputs}, type=self.name, errmsg=exc.err_msg)
+            return action_return
+        action_return = ActionReturn(args=inputs, type=self.name)
+        outputs = getattr(self, name)(**inputs)
+        result = self._parser.parse_outputs(outputs)
+        action_return.result = result
+        return action_return
 
-    def __repr__(self):
-        return f'{self.name}:{self.description}'
-
-    def __str__(self):
-        return self.__repr__()
-
-    def run(self, *args, **kwargs) -> ActionReturn:
-        return self.__call__(*args, **kwargs)
-
-    @property
-    def enable(self):
-        return self._enable
+    def run(self):
+        return NotImplementedError
 
     @property
     def name(self):
         return self._name
 
     @property
+    def enable(self):
+        return self._enable
+
+    @property
     def description(self):
-        if self.enable:
-            return self._description
-        else:
-            return self._disable_description
+        return self._description
+
+    @property
+    def nested(self):
+        return self._nested
+
+    def __repr__(self):
+        return f'{self.description}'
+
+    __str__ = __repr__
