@@ -105,7 +105,11 @@ class TurboMind(BaseModel):
                  meta_template=None,
                  tp=1,
                  **kwargs):
-        super().__init__(path, max_seq_len, tokenizer_only, meta_template)
+        super().__init__(
+            path=path,
+            max_seq_len=max_seq_len,
+            tokenizer_only=tokenizer_only,
+            meta_template=meta_template)
         tokenizer_model_path = osp.join(path, 'triton_models', 'tokenizer')
         self.tokenizer = Tokenizer(tokenizer_model_path)
         self.tm_model = tm.TurboMind(
