@@ -11,7 +11,7 @@ class BaseAction:
         description (:class:`Optional[dict]`): The description of the action.
             Defaults to ``None``.
         parser (:class:`Type[BaseParser]`): The parser class to process the
-            action's inputs and outputs. Defaults to :class:`BaseParser``.
+            action's inputs and outputs. Defaults to :class:`JsonParser``.
         enable (:class:`bool`): Whether the action is enabled. Defaults to
             ``True``.
 
@@ -78,7 +78,7 @@ class BaseAction:
         self._description = description.copy() if description else {}
         self._name = self._description.get('name', self.__class__.__name__)
         self._enable = enable
-        self._nested = 'api_list' in self._description
+        self._is_toolkit = 'api_list' in self._description
         self._parser = parser(self)
 
     def __call__(self, inputs: str, name='run') -> ActionReturn:
@@ -91,7 +91,10 @@ class BaseAction:
         except ParseError as exc:
             return ActionReturn(
                 fallback_args, type=self.name, errmsg=exc.err_msg)
-        outputs = getattr(self, name)(**inputs)
+        try:
+            outputs = getattr(self, name)(**inputs)
+        except Exception as exc:
+            return ActionReturn(inputs, type=self.name, errmsg=str(exc))
         if isinstance(outputs, ActionReturn):
             action_return = outputs
         else:
@@ -115,8 +118,8 @@ class BaseAction:
         return self._description
 
     @property
-    def nested(self):
-        return self._nested
+    def is_toolkit(self):
+        return self._is_toolkit
 
     def __repr__(self):
         return f'{self.description}'
