@@ -29,7 +29,7 @@ class BaseAction:
             )
             action = BaseAction(desc)
 
-        * complex tool with multiple methods
+        * complex tool with multiple APIs
 
         .. code-block:: python
 
@@ -64,7 +64,7 @@ class BaseAction:
                  description: Optional[dict] = None,
                  parser: Type[BaseParser] = BaseParser,
                  enable: bool = True):
-        self._description = description or {}
+        self._description = description.copy() if description else {}
         self._name = self._description.get('name', self.__class__.__name__)
         self._enable = enable
         self._nested = 'api_list' in self._description
@@ -77,10 +77,13 @@ class BaseAction:
             action_return = ActionReturn(
                 args={'inputs': inputs}, type=self.name, errmsg=exc.err_msg)
             return action_return
-        action_return = ActionReturn(args=inputs, type=self.name)
         outputs = getattr(self, name)(**inputs)
-        result = self._parser.parse_outputs(outputs)
-        action_return.result = result
+        if isinstance(outputs, ActionReturn):
+            action_return = outputs
+        else:
+            result = self._parser.parse_outputs(outputs)
+            action_return = ActionReturn(
+                args=inputs, type=self.name, result=result)
         return action_return
 
     def run(self):
