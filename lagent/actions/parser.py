@@ -26,12 +26,13 @@ class BaseParser:
     def __init__(self, action):
         self.action = action
         self._api2param = {}
+        self._api2required = {}
         # perform basic argument validation
         if action.description:
             for api in action.description.get('api_list',
                                               [action.description]):
                 name = (f'{action.name}.{api["name"]}'
-                        if self.action.nested else api['name'])
+                        if self.action.is_toolkit else api['name'])
                 required_parameters = set(api['required'])
                 all_parameters = {j['name'] for j in api['parameters']}
                 if not required_parameters.issubset(all_parameters):
@@ -40,8 +41,9 @@ class BaseParser:
                         f'{required_parameters - all_parameters}')
                 if self.PARAMETER_DESCRIPTION:
                     api['parameter_description'] = self.PARAMETER_DESCRIPTION
-                api_name = api['name'] if self.action.nested else 'run'
+                api_name = api['name'] if self.action.is_toolkit else 'run'
                 self._api2param[api_name] = api['parameters']
+                self._api2required[api_name] = api['required']
 
     def parse_inputs(self, inputs: str, name: str = 'run') -> dict:
         """parse inputs LLMs generate for the action
@@ -52,8 +54,6 @@ class BaseParser:
         Returns:
             :class:`dict`: processed input
         """
-        if name not in self._api2param:
-            raise ParseError(f'invalid API name: {name}')
         inputs = {self._api2param[name][0]['name']: inputs}
         return inputs
 
@@ -91,6 +91,10 @@ class JsonParser(BaseParser):
         all_keys = {param['name'] for param in self._api2param[name]}
         if not input_keys.issubset(all_keys):
             raise ParseError(f'unknown arguments: {input_keys - all_keys}')
+        required_keys = set(self._api2required[name])
+        if not input_keys.issuperset(required_keys):
+            raise ParseError(
+                f'missing required arguments: {required_keys - input_keys}')
         return inputs
 
 
@@ -108,6 +112,10 @@ class TupleParser(BaseParser):
             inputs = literal_eval(inputs)
         except Exception as exc:
             raise ParseError(f'input is not a tuple: {inputs}') from exc
+        if len(inputs) < len(self._api2required[name]):
+            raise ParseError(
+                f'API takes {len(self._api2required[name])} required positional '
+                f'arguments but {len(inputs)} were given')
         if len(inputs) > len(self._api2param[name]):
             raise ParseError(
                 f'API takes {len(self._api2param[name])} positional arguments '
