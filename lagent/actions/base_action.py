@@ -1,6 +1,6 @@
 from typing import Optional, Type
 
-from lagent.actions.parser import BaseParser, ParseError
+from lagent.actions.parser import BaseParser, JsonParser, ParseError
 from lagent.schema import ActionReturn
 
 
@@ -20,22 +20,33 @@ class BaseAction:
         * simple tool
 
         .. code-block:: python
+        
+            class Bold(BaseAction):
+                def run(self, text):
+                    return '**' + text + '**'
 
             desc = dict(
-                name='highlight',
-                description='highlight a piece of text',
+                name='bold',
+                description='make text bold',
                 parameters=[dict(name='text', type='STRING', description='input text')],
                 required=['text'],
             )
-            action = BaseAction(desc)
+            action = Bold(desc)
 
         * complex tool with multiple APIs
 
         .. code-block:: python
+        
+            class Calculator(BaseAction):
+                def add(self, a, b):
+                    return a + b
+                    
+                def sub(self, a, b):
+                    return a - b
 
             desc = dict(
                 name='calculate',
-                description='a calulator to perform arithmetic operations',
+                description='perform arithmetic operations',
                 api_list=[
                     dict(
                         name='add',
@@ -57,12 +68,12 @@ class BaseAction:
                     )
                 ]
             )
-            action = BaseAction(desc)
+            action = Calculator(desc)
     """
 
     def __init__(self,
                  description: Optional[dict] = None,
-                 parser: Type[BaseParser] = BaseParser,
+                 parser: Type[BaseParser] = JsonParser,
                  enable: bool = True):
         self._description = description.copy() if description else {}
         self._name = self._description.get('name', self.__class__.__name__)
@@ -71,19 +82,21 @@ class BaseAction:
         self._parser = parser(self)
 
     def __call__(self, inputs: str, name='run') -> ActionReturn:
+        fallback_args = {'inputs': inputs, 'name': name}
+        if not hasattr(self, name):
+            return ActionReturn(
+                fallback_args, type=self.name, errmsg=f'invalid API: {name}')
         try:
             inputs = self._parser.parse_inputs(inputs, name)
         except ParseError as exc:
-            action_return = ActionReturn(
-                args={'inputs': inputs}, type=self.name, errmsg=exc.err_msg)
-            return action_return
+            return ActionReturn(
+                fallback_args, type=self.name, errmsg=exc.err_msg)
         outputs = getattr(self, name)(**inputs)
         if isinstance(outputs, ActionReturn):
             action_return = outputs
         else:
             result = self._parser.parse_outputs(outputs)
-            action_return = ActionReturn(
-                args=inputs, type=self.name, result=result)
+            action_return = ActionReturn(inputs, type=self.name, result=result)
         return action_return
 
     def run(self):
