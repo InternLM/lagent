@@ -116,6 +116,7 @@ class BaseModel:
                  tokenizer_only: bool = False,
                  template_parser: 'LMTemplateParser' = LMTemplateParser,
                  meta_template: Optional[List[Dict]] = None,
+                 *,
                  max_out_len: int = 512,
                  top_p: float = 0.8,
                  top_k: float = None,
@@ -140,8 +141,11 @@ class BaseModel:
             stop_words=stop_words)
 
     @abstractclassmethod
-    def completion(self, inputs: Union[str, List[str]],
-                   **completion_params) -> str:
+    def completion(
+        self,
+        inputs: Union[str, List[str]],
+        **completion_params
+    ) -> str:
         """Generate results given a str (or list of) inputs.
 
         Args:
@@ -162,7 +166,11 @@ class BaseModel:
             return response[0]
         """
 
-    def stream_completion(self, inputs: str, **completion_params) -> List[str]:
+    def stream_completion(
+        self,
+        inputs: str,
+        **completion_params
+    ) -> List[str]:
         """Generate results as streaming given a str inputs.
 
         Args:
@@ -174,35 +182,44 @@ class BaseModel:
         """
         raise NotImplementedError
 
-    def chat(self, messages: Union[List[dict], List[List[dict]]],
-             **completion_params):
+    def chat(
+        self,
+        inputs: Union[List[dict], List[List[dict]]],
+        **completion_params
+    ):
         """Generate completion from a list of templates.
 
         Args:
-            messages (Union[List[dict], List[List[dict]]]):
+            inputs (Union[List[dict], List[List[dict]]]):
             completion_params (dict): The input params for completion.
         Returns:
         """
-        if isinstance(messages[0], list):
+        if isinstance(inputs[0], list):
             inputs = list()
-            for msg in messages:
+            for msg in inputs:
                 inputs.append(self.template_parser(msg))
         else:
-            inputs = self.template_parser(messages)
+            inputs = self.template_parser(inputs)
         return self.completion(inputs, **completion_params)
 
-    def stream_chat(self, message: List[dict], **completion_params):
+    def stream_chat(
+        self,
+        inputs: List[dict],
+        **completion_params
+    ):
         """Generate results as streaming given a list of templates.
 
         Args:
-            messages (Union[List[dict]):
+            inputs (Union[List[dict]):
             completion_params (dict): The input params for completion.
         Returns:
         """
         raise NotImplementedError
 
-    def tokenize(self, prompts: Union[str, List[str], List[dict],
-                                      List[List[dict]]]):
+    def tokenize(
+        self,
+        prompts: Union[str, List[str], List[dict], List[List[dict]]]
+    ):
         """Tokenize the input prompts.
 
         Args:
