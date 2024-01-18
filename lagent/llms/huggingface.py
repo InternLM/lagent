@@ -123,9 +123,11 @@ class HFTransformer(BaseModel):
         """
         inputs = self.parse_template(templates)
         response = self.generate(inputs, max_out_len=max_out_len, **kwargs)
-        return response.replace(
-            self.template_parser.roles['assistant']['end'].strip(),
-            '').strip()
+        end_token = self.template_parser.meta_template[0]['end'].strip()
+        # return response.replace(
+        #     self.template_parser.roles['assistant']['end'].strip(),
+        #     '').strip()
+        return response.split(end_token.strip())[0]
 
 
 class HFTransformerCasualLM(HFTransformer):

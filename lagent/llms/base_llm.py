@@ -66,10 +66,7 @@ class LMTemplateParser:
             else:
                 begin = begin.format(name=name)
         else:
-            if isinstance(role_cfg.get('begin', ''), str):
-                begin = role_cfg.get('begin', '')
-            elif isinstance(role_cfg['begin'], dict):
-                begin = role_cfg['begin'].get('without_name', '')
+            begin = role_cfg['begin'].get('without_name', '')
         return begin
 
     def _prompt2str(self,
@@ -78,9 +75,6 @@ class LMTemplateParser:
         if isinstance(prompt, str):
             return prompt
         merged_prompt = self.roles.get(prompt['role'])
-
-        if merged_prompt.get('fallback_role'):
-            merged_prompt = self.roles.get(merged_prompt['fallback_role'])
         begin = self._format_begin(merged_prompt, prompt)
         res = begin
         if last and merged_prompt.get('generate', False):
