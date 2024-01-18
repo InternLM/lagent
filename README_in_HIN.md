@@ -1,3 +1,4 @@
+<div id="top"></div>
 <div align="center">
   <img src="docs/imgs/lagent_logo.png" width="450"/>
 
@@ -7,7 +8,7 @@
 [![issue resolution](https://img.shields.io/github/issues-closed-raw/InternLM/lagent)](https://github.com/InternLM/lagent/issues)
 [![open issues](https://img.shields.io/github/issues-raw/InternLM/lagent)](https://github.com/InternLM/lagent/issues)
 
-[English](README.md) | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | हिंदी
+English | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | [हिंदी](README_in_HIN.md) | [বাংলা](README_in_beng.md) | [한국어](README_KR_Kr.md)
 
 </div>
 
@@ -111,3 +112,4 @@ print(response.response)
 ## लाइसेंस
 
 यह प्रोजेक्ट [Apache 2.0 license](LICENSE) के तहत जारी किया गया है।
+<p align="right"><a href="#top">🔼 Back to top</a></p>
