@@ -2,7 +2,7 @@
 from lagent.actions import ActionExecutor, GoogleSearch, PythonInterpreter
 from lagent.agents import ReAct
 from lagent.llms import HFTransformer
-from lagent.llms.meta_template import META
+from lagent.llms.internlm2_meta_template import META
 
 # Initialize the HFTransformer-based Language Model (llm) and
 # provide the model name.
