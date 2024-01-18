@@ -111,7 +111,7 @@ class TupleParser(BaseParser):
         try:
             inputs = literal_eval(inputs)
         except Exception as exc:
-            raise ParseError(f'input is not a tuple: {inputs}') from exc
+            raise ParseError(f'invalid tuple format: {inputs}') from exc
         if len(inputs) < len(self._api2required[name]):
             raise ParseError(
                 f'API takes {len(self._api2required[name])} required positional '

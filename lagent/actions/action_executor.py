@@ -39,22 +39,20 @@ class ActionExecutor:
         self.no_action = no_action
         self.finish_action = finish_action
 
-    def get_actions_info(self, only_enable: bool = True) -> Dict:
-        action_dict = {}
+    def get_actions_info(self) -> List[Dict]:
+        actions = []
         for action_name, action in self.actions.items():
-            if only_enable and not action.enable:
+            if not action.enable:
                 continue
-            if 'api_list' in action.description:
+            if action.is_toolkit:
                 for api in action.description['api_list']:
-                    api_name = f"{action_name}.{api['name']}"
                     api_desc = api.copy()
-                    api_desc.pop('name')
-                    action_dict[api_name] = api_desc
+                    api_desc['name'] = f"{action_name}.{api_desc['name']}"
+                    actions.append(api_desc)
             else:
                 action_desc = action.description.copy()
-                action_desc.pop('name')
-                action_dict[action_name] = action_desc
-        return action_dict
+                actions.append(action_desc)
+        return actions
 
     def is_valid(self, name: str):
         return name in self.actions and self.actions[name].enable

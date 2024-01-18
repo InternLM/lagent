@@ -33,7 +33,7 @@ class BaseAction:
             )
             action = Bold(desc)
 
-        * complex tool with multiple APIs
+        * toolkit with multiple APIs
 
         .. code-block:: python
         
