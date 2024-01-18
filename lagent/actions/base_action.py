@@ -1,7 +1,7 @@
 from typing import Optional, Type
 
 from lagent.actions.parser import BaseParser, JsonParser, ParseError
-from lagent.schema import ActionReturn
+from lagent.schema import ActionReturn, ActionStatusCode
 
 
 class BaseAction:
@@ -11,7 +11,7 @@ class BaseAction:
         description (:class:`Optional[dict]`): The description of the action.
             Defaults to ``None``.
         parser (:class:`Type[BaseParser]`): The parser class to process the
-            action's inputs and outputs. Defaults to :class:`JsonParser``.
+            action's inputs and outputs. Defaults to :class:`JsonParser`.
         enable (:class:`bool`): Whether the action is enabled. Defaults to
             ``True``.
 
@@ -85,16 +85,26 @@ class BaseAction:
         fallback_args = {'inputs': inputs, 'name': name}
         if not hasattr(self, name):
             return ActionReturn(
-                fallback_args, type=self.name, errmsg=f'invalid API: {name}')
+                fallback_args,
+                type=self.name,
+                errmsg=f'invalid API: {name}',
+                state=ActionStatusCode.API_ERROR)
         try:
             inputs = self._parser.parse_inputs(inputs, name)
         except ParseError as exc:
             return ActionReturn(
-                fallback_args, type=self.name, errmsg=exc.err_msg)
+                fallback_args,
+                type=self.name,
+                errmsg=exc.err_msg,
+                state=ActionStatusCode.ARGS_ERROR)
         try:
             outputs = getattr(self, name)(**inputs)
         except Exception as exc:
-            return ActionReturn(inputs, type=self.name, errmsg=str(exc))
+            return ActionReturn(
+                inputs,
+                type=self.name,
+                errmsg=str(exc),
+                state=ActionStatusCode.API_ERROR)
         if isinstance(outputs, ActionReturn):
             action_return = outputs
         else:
