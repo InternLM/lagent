@@ -43,19 +43,27 @@ class ActionReturn:
     valid: Optional[ActionValidCode] = ActionValidCode.OPEN
 
 
-class AgentStatusCode(Enum):
-    END = 0  # end of streaming
+# 需要集成int，如此asdict可以把AgentStatusCode 转换成 int
+class AgentStatusCode(int, Enum):
+    END = 0  # end of streaming 返回本次history
     STREAM_ING = 1  # response is in streaming
     SERVER_ERR = -1  # triton server's error
     SESSION_CLOSED = -2  # session has been closed
     SESSION_OUT_OF_LIMIT = -3  # request length out of limit
-    CMD = 2  # return command
+    PLUGIN_START = 3  # start tool
+    PLUGIN_END = 4  # finish tool
+    PLUGIN_RETURN = 5  # finish tool
+
+    CODING = 6  # start python
+    CODE_END = 7  # end python
+    CODE_RETURN = 8  # python return
     SESSION_INVALID_ARG = -4  # invalid argument
-    SESSION_READY = 3  # session is ready for inference
+    SESSION_READY = 2  # session is ready for inference
 
 
 @dataclass
 class AgentReturn:
+    state: Union[AgentStatusCode, int] = AgentStatusCode.END
     actions: List[ActionReturn] = field(default_factory=list)
     response: str = ''
     inner_steps: List = field(default_factory=list)
@@ -74,6 +82,20 @@ if is_module_exist('lmdeploy'):
         StatusCode.TRITON_SESSION_INVALID_ARG:
         AgentStatusCode.SESSION_INVALID_ARG,
         StatusCode.TRITON_SESSION_READY: AgentStatusCode.SESSION_READY
+    }
+elif is_module_exist('llama_service'):
+    from llama_service.base_chatbot import StatusCode
+    STATE_MAP = {
+        StatusCode.TRITON_STREAM_END:
+        AgentStatusCode.END,
+        StatusCode.TRITON_SERVER_ERR:
+        AgentStatusCode.SERVER_ERR,
+        StatusCode.TRITON_SESSION_CLOSED:
+        AgentStatusCode.SESSION_CLOSED,
+        StatusCode.TRITON_STREAM_ING:
+        AgentStatusCode.STREAM_ING,
+        StatusCode.TRITON_SESSION_OUT_OF_LIMIT:
+        AgentStatusCode.SESSION_OUT_OF_LIMIT
     }
 else:
     STATE_MAP = {}
