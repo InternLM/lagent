@@ -1,4 +1,4 @@
-META = [
+INTERNLM2_META = [
     dict(
         role='system',
         begin=dict(
