@@ -1,57 +1,139 @@
-from typing import Optional
+from typing import Optional, Type
 
-from lagent.schema import ActionReturn
+from lagent.actions.parser import BaseParser, JsonParser, ParseError
+from lagent.schema import ActionReturn, ActionStatusCode
 
 
 class BaseAction:
     """Base class for all actions.
 
     Args:
-        description (str, optional): The description of the action. Defaults to
-            None.
-        name (str, optional): The name of the action. If None, the name will
-            be class name. Defaults to None.
-        enable (bool, optional): Whether the action is enabled. Defaults to
-            True.
-        disable_description (str, optional): The description of the action when
-            it is disabled. Defaults to None.
+        description (:class:`Optional[dict]`): The description of the action.
+            Defaults to ``None``.
+        parser (:class:`Type[BaseParser]`): The parser class to process the
+            action's inputs and outputs. Defaults to :class:`JsonParser`.
+        enable (:class:`bool`): Whether the action is enabled. Defaults to
+            ``True``.
+
+    Examples:
+
+        * simple tool
+
+        .. code-block:: python
+        
+            class Bold(BaseAction):
+                def run(self, text):
+                    return '**' + text + '**'
+
+            desc = dict(
+                name='bold',
+                description='make text bold',
+                parameters=[dict(name='text', type='STRING', description='input text')],
+                required=['text'],
+            )
+            action = Bold(desc)
+
+        * toolkit with multiple APIs
+
+        .. code-block:: python
+        
+            class Calculator(BaseAction):
+                def add(self, a, b):
+                    return a + b
+                    
+                def sub(self, a, b):
+                    return a - b
+
+            desc = dict(
+                name='calculate',
+                description='perform arithmetic operations',
+                api_list=[
+                    dict(
+                        name='add',
+                        descrition='addition operation',
+                        parameters=[
+                            dict(name='a', type='NUMBER', description='augend'),
+                            dict(name='b', type='NUMBER', description='addend'),
+                        ],
+                        required=['a', 'b'],
+                    ),
+                    dict(
+                        name='sub',
+                        description='subtraction operation',
+                        parameters=[
+                            dict(name='a', type='NUMBER', description='minuend'),
+                            dict(name='b', type='NUMBER', description='subtrahend'),
+                        ],
+                        required=['a', 'b'],
+                    )
+                ]
+            )
+            action = Calculator(desc)
     """
 
     def __init__(self,
-                 description: Optional[str] = None,
-                 name: Optional[str] = None,
-                 enable: bool = True,
-                 disable_description: Optional[str] = None) -> None:
-        if name is None:
-            name = self.__class__.__name__
-        self._name = name
-        self._description = description
-        self._disable_description = disable_description
+                 description: Optional[dict] = None,
+                 parser: Type[BaseParser] = JsonParser,
+                 enable: bool = True):
+        self._description = description.copy() if description else {}
+        self._name = self._description.get('name', self.__class__.__name__)
         self._enable = enable
+        self._is_toolkit = 'api_list' in self._description
+        self._parser = parser(self)
 
-    def __call__(self, *args, **kwargs) -> ActionReturn:
-        raise NotImplementedError
+    def __call__(self, inputs: str, name='run') -> ActionReturn:
+        fallback_args = {'inputs': inputs, 'name': name}
+        if not hasattr(self, name):
+            return ActionReturn(
+                fallback_args,
+                type=self.name,
+                errmsg=f'invalid API: {name}',
+                state=ActionStatusCode.API_ERROR)
+        try:
+            inputs = self._parser.parse_inputs(inputs, name)
+        except ParseError as exc:
+            return ActionReturn(
+                fallback_args,
+                type=self.name,
+                errmsg=exc.err_msg,
+                state=ActionStatusCode.ARGS_ERROR)
+        try:
+            outputs = getattr(self, name)(**inputs)
+        except Exception as exc:
+            return ActionReturn(
+                inputs,
+                type=self.name,
+                errmsg=str(exc),
+                state=ActionStatusCode.API_ERROR)
+        if isinstance(outputs, ActionReturn):
+            action_return = outputs
+            if not action_return.args:
+                action_return.args = inputs
+        else:
+            result = self._parser.parse_outputs(outputs)
+            action_return = ActionReturn(inputs, type=self.name, result=result)
+        return action_return
 
-    def __repr__(self):
-        return f'{self.name}:{self.description}'
-
-    def __str__(self):
-        return self.__repr__()
-
-    def run(self, *args, **kwargs) -> ActionReturn:
-        return self.__call__(*args, **kwargs)
-
-    @property
-    def enable(self):
-        return self._enable
+    def run(self):
+        return NotImplementedError
 
     @property
     def name(self):
         return self._name
 
     @property
+    def enable(self):
+        return self._enable
+
+    @property
     def description(self):
-        if self.enable:
-            return self._description
-        else:
-            return self._disable_description
+        return self._description
+
+    @property
+    def is_toolkit(self):
+        return self._is_toolkit
+
+    def __repr__(self):
+        return f'{self.description}'
+
+    __str__ = __repr__
