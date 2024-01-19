@@ -36,6 +36,7 @@ class ActionReturn:
     args: Dict
     url: Optional[str] = None
     type: Optional[str] = None
+    name: Optional[str] = None
     result: Optional[str] = None
     errmsg: Optional[str] = None
     state: Union[ActionStatusCode, int] = ActionStatusCode.SUCCESS
