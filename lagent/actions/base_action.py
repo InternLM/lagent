@@ -107,6 +107,8 @@ class BaseAction:
                 state=ActionStatusCode.API_ERROR)
         if isinstance(outputs, ActionReturn):
             action_return = outputs
+            if not action_return.args:
+                action_return.args = inputs
         else:
             result = self._parser.parse_outputs(outputs)
             action_return = ActionReturn(inputs, type=self.name, result=result)

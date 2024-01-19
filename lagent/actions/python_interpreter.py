@@ -66,7 +66,7 @@ class PythonInterpreter(BaseAction):
             stdout.
         timeout (int): Upper bound of waiting time for Python script execution.
         description (dict): The description of the action. Defaults to 
-            :py:data:`DEFAULT_DESCRIPTION`.
+            :py:data:`~DEFAULT_DESCRIPTION`.
         parser (Type[BaseParser]): The parser class to process the
             action's inputs and outputs. Defaults to :class:`JsonParser`.
         enable (bool, optional): Whether the action is enabled. Defaults to

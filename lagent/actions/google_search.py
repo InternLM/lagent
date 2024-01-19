@@ -39,7 +39,7 @@ class GoogleSearch(BaseAction):
         search_type (str): Serper API support ['search', 'images', 'news',
             'places'] types of search, currently we only support 'search'.
         description (dict): The description of the action. Defaults to 
-            :py:data:`DEFAULT_DESCRIPTION`.
+            :py:data:`~DEFAULT_DESCRIPTION`.
         parser (Type[BaseParser]): The parser class to process the
             action's inputs and outputs. Defaults to :class:`JsonParser`.
         enable (bool, optional): Whether the action is enabled. Defaults to
