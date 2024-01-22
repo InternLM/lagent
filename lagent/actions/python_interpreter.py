@@ -92,13 +92,13 @@ class PythonInterpreter(BaseAction):
         try:
             tool_return = func_set_timeout(self.timeout)(self._call)(command)
         except FunctionTimedOut as e:
-            tool_return = ActionReturn(url=None, args=None, type=self.name)
+            tool_return = ActionReturn(type=self.name)
             tool_return.errmsg = repr(e)
             tool_return.state = ActionStatusCode.API_ERROR
         return tool_return
 
     def _call(self, command: str) -> ActionReturn:
-        tool_return = ActionReturn(url=None, args=None, type=self.name)
+        tool_return = ActionReturn(type=self.name)
         try:
             if '```python' in command:
                 command = command.split('```python')[1].split('```')[0]

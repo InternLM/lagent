@@ -109,6 +109,8 @@ class BaseAction:
             action_return = outputs
             if not action_return.args:
                 action_return.args = inputs
+            if not action_return.type:
+                action_return.type = self.name
         else:
             result = self._parser.parse_outputs(outputs)
             action_return = ActionReturn(inputs, type=self.name, result=result)
