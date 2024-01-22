@@ -81,7 +81,7 @@ class TritonClient(BaseModel):
         self._session.request_id = request_id
         self._session.response = ''
 
-        self.chatbot.cfg = self._update_completion_params(
+        self.chatbot.cfg = self._update_gen_params(
             max_out_len=max_out_len, **kwargs)
 
         status, res, _ = None, '', 0
@@ -143,7 +143,7 @@ class TritonClient(BaseModel):
         self._session.request_id = request_id
         self._session.response = ''
 
-        self.chatbot.cfg = self._update_completion_params(
+        self.chatbot.cfg = self._update_gen_params(
             max_out_len=max_out_len, **kwargs)
         prompt = self.template_parser(inputs)
 
@@ -165,13 +165,13 @@ class TritonClient(BaseModel):
         else:
             return ''
 
-    def _update_completion_params(self, **kwargs):
-        new_completion_params = self.update_completion_params(**kwargs)
+    def _update_gen_params(self, **kwargs):
+        new_gen_params = self.update_gen_params(**kwargs)
         cfg = mmengine.Config(
             dict(
                 session_len=self.chatbot.session_len,
                 bad_words=self.chatbot.bad_words,
-                **new_completion_params))
+                **new_gen_params))
         return cfg
 
 
@@ -216,7 +216,7 @@ class LMDeployServerAPI(BaseModel):
         prompt = inputs
 
         max_num_retries = 0
-        completion_params = self.update_completion_params(**kwargs)
+        gen_params = self.update_gen_params(**kwargs)
         while max_num_retries < self.retry:
 
             header = {
@@ -231,7 +231,7 @@ class LMDeployServerAPI(BaseModel):
                     prompt=prompt,
                     sequence_start=sequence_start,
                     sequence_end=sequence_end,
-                    **completion_params)
+                    **gen_params)
                 raw_response = requests.post(
                     self.url,
                     headers=header,
@@ -284,7 +284,7 @@ class LMDeployServerAPI(BaseModel):
         session_id = (session_id + 1) % 1000000
 
         prompt = self.template_parser(inputs)
-        completion_params = self.update_completion_params(**kwargs)
+        gen_params = self.update_gen_params(**kwargs)
         data = dict(
             model=self.path,
             session_id=session_id,  #
@@ -293,7 +293,7 @@ class LMDeployServerAPI(BaseModel):
             sequence_end=sequence_end,
             stream=stream,
             ignore_eos=ignore_eos,
-            **completion_params)
+            **gen_params)
         response = requests.post(
             f'{self.url}/v1/completions',
             headers=header,
@@ -396,9 +396,9 @@ class LMDeployPipeline(BaseModel):
             inputs = [inputs]
             batched = False
         prompt = inputs
-        completion_params = self.update_completion_params(**kwargs)
+        gen_params = self.update_gen_params(**kwargs)
         response = self.model.batch_infer(
-            prompt, do_preprocess=do_preprocess, **completion_params)
+            prompt, do_preprocess=do_preprocess, **gen_params)
         if batched:
             return response
         return response[0]
@@ -442,9 +442,9 @@ class LMDeployServer(BaseModel):
             inputs = [inputs]
             batched = False
         prompt = inputs
-        completion_params = self.update_completion_params(**kwargs)
+        gen_params = self.update_gen_params(**kwargs)
         response = None
-        for chunk in self.model.completions_v1(prompt, **completion_params):
+        for chunk in self.model.completions_v1(prompt, **gen_params):
             response = chunk
         if batched:
             return response
