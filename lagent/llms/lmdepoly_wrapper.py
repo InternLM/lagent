@@ -1,12 +1,8 @@
 import json
+import requests
 from typing import List, Optional, Union
 
-import lmdeploy
 import mmengine
-import requests
-from lmdeploy import pipeline
-from lmdeploy.serve.turbomind.chatbot import (Chatbot, Session, StatusCode,
-                                              get_logger)
 
 from lagent.llms.base_llm import BaseModel
 from lagent.schema import STATE_MAP
@@ -30,20 +26,21 @@ class TritonClient(BaseModel):
                  session_len: int = 32768,
                  **kwargs):
         super().__init__(path=None, **kwargs)
+        from lmdeploy.serve.turbomind.chatbot import Chatbot
         self.chatbot = Chatbot(
             tritonserver_addr=tritonserver_addr,
             model_name=model_name,
             session_len=session_len,
             **kwargs)
 
-    def completion(self,
-                   inputs: Union[str, List[str]],
-                   session_id: int = 2967,
-                   request_id: str = '',
-                   max_out_len: int = None,
-                   sequence_start: bool = True,
-                   sequence_end: bool = True,
-                   **kwargs):
+    def generate(self,
+                 inputs: Union[str, List[str]],
+                 session_id: int = 2967,
+                 request_id: str = '',
+                 max_out_len: int = None,
+                 sequence_start: bool = True,
+                 sequence_end: bool = True,
+                 **kwargs):
         """Start a new round conversation of a session. Return the chat
         completions in non-stream mode.
 
@@ -58,7 +55,7 @@ class TritonClient(BaseModel):
         Returns:
             (a list of/batched) text/chat completion
         """
-
+        from lmdeploy.serve.turbomind.chatbot import Session, get_logger
         batched = True
         if isinstance(inputs, str):
             inputs = [inputs]
@@ -126,6 +123,7 @@ class TritonClient(BaseModel):
             tuple(Status, str, int): status, text/chat completion,
             generated token number
         """
+        from lmdeploy.serve.turbomind.chatbot import Session, StatusCode, get_logger
         assert isinstance(session_id, int), \
             f'INT session id is required, but got {type(session_id)}'
 
@@ -194,13 +192,13 @@ class LMDeployServerAPI(BaseModel):
         self.retry = retry
         self.url = url
 
-    def completion(self,
-                   inputs: Union[str, List[str]],
-                   session_id: int = 2967,
-                   sequence_start: bool = True,
-                   sequence_end: bool = True,
-                   timeout: int = 30,
-                   **kwargs) -> List[str]:
+    def generate(self,
+                 inputs: Union[str, List[str]],
+                 session_id: int = 2967,
+                 sequence_start: bool = True,
+                 sequence_end: bool = True,
+                 timeout: int = 30,
+                 **kwargs) -> List[str]:
         """Generate results given a list of inputs.
 
         Args:
@@ -279,7 +277,7 @@ class LMDeployServerAPI(BaseModel):
                     ignore_eos: bool = False,
                     timeout: int = 30,
                     **kwargs):
-
+        from lmdeploy.serve.turbomind.chatbot import StatusCode
         header = {
             'content-type': 'application/json',
         }
@@ -381,6 +379,7 @@ class LMDeployPipeline(BaseModel):
                  **kwargs):
 
         super().__init__(path=path, **kwargs)
+        from lmdeploy import pipeline
         self.model = pipeline(
             model_path=self.path,
             model_name=model_name,
@@ -388,10 +387,10 @@ class LMDeployPipeline(BaseModel):
             tp=tp,
             **pipeline_cfg)
 
-    def completion(self,
-                   inputs: Union[str, List[str]],
-                   do_preprocess=None,
-                   **kwargs):
+    def generate(self,
+                 inputs: Union[str, List[str]],
+                 do_preprocess=None,
+                 **kwargs):
         batched = True
         if isinstance(inputs, str):
             inputs = [inputs]
@@ -426,6 +425,7 @@ class LMDeployServer(BaseModel):
                  log_level: str = 'ERROR',
                  **serve_cfg):
         super().__init__(path=path, **serve_cfg)
+        import lmdeploy
         self.model = lmdeploy.serve(
             model_path=self.path,
             model_name=model_name,
@@ -436,7 +436,7 @@ class LMDeployServer(BaseModel):
             log_level=log_level,
             **serve_cfg)
 
-    def completion(self, inputs: Union[str, List[str]], **kwargs):
+    def generate(self, inputs: Union[str, List[str]], **kwargs):
         batched = True
         if isinstance(inputs, str):
             inputs = [inputs]

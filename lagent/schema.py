@@ -83,19 +83,5 @@ if is_module_exist('lmdeploy'):
         AgentStatusCode.SESSION_INVALID_ARG,
         StatusCode.TRITON_SESSION_READY: AgentStatusCode.SESSION_READY
     }
-elif is_module_exist('llama_service'):
-    from llama_service.base_chatbot import StatusCode
-    STATE_MAP = {
-        StatusCode.TRITON_STREAM_END:
-        AgentStatusCode.END,
-        StatusCode.TRITON_SERVER_ERR:
-        AgentStatusCode.SERVER_ERR,
-        StatusCode.TRITON_SESSION_CLOSED:
-        AgentStatusCode.SESSION_CLOSED,
-        StatusCode.TRITON_STREAM_ING:
-        AgentStatusCode.STREAM_ING,
-        StatusCode.TRITON_SESSION_OUT_OF_LIMIT:
-        AgentStatusCode.SESSION_OUT_OF_LIMIT
-    }
 else:
     STATE_MAP = {}

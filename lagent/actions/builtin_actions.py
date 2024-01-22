@@ -35,7 +35,7 @@ class InvalidAction(BaseAction):
         action_return = ActionReturn(
             url=None,
             args=dict(text=err_msg),
-            errmsg=err_msg if err_msg else self._err_msg,
+            errmsg=err_msg or self._err_msg,
             type=self.name,
             valid=ActionValidCode.INVALID,
             state=ActionStatusCode.API_ERROR)
@@ -52,7 +52,6 @@ class NoAction(BaseAction):
     """
 
     def __init__(self, err_msg: str = 'Please follow the format', **kwargs):
-
         super().__init__(enable=False, **kwargs)
         self._err_msg = err_msg
 
@@ -71,7 +70,7 @@ class NoAction(BaseAction):
             url=None,
             args=dict(text=err_msg),
             type=self.name,
-            errmsg=err_msg if err_msg else self._err_msg,
+            errmsg=err_msg or self._err_msg,
             valid=ActionValidCode.INVALID,
             state=ActionStatusCode.API_ERROR)
         return action_return
