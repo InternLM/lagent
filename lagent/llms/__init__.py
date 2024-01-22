@@ -10,5 +10,5 @@ if is_module_exist('transformers'):
     __all__.extend(['HFTransformer', 'HFTransformerCasualLM'])
 
 if is_module_exist('lmdeploy'):
-    from .lmdepoly_wrapper import TritonClient  # noqa: F401
-    __all__.extend(['TritonClient'])
+    from .lmdepoly_wrapper import TritonClient, LMDeployServerAPI, LMDeployPipeline, LMDeployServer  # noqa: F401
+    __all__.extend(['TritonClient', 'LMDeployServerAPI', 'LMDeployPipeline', 'LMDeployServer'])
