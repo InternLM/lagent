@@ -132,7 +132,7 @@ class BaseModel:
         if meta_template and 'eos_token_id' in meta_template:
             self.eos_token_id = meta_template['eos_token_id']
 
-        self.completion_params = dict(
+        self.gen_params = dict(
             max_out_len=max_out_len,
             top_p=top_p,
             top_k=top_k,
@@ -141,16 +141,16 @@ class BaseModel:
             stop_words=stop_words)
 
     @abstractclassmethod
-    def completion(
+    def generate(
         self,
         inputs: Union[str, List[str]],
-        **completion_params
+        **gen_params
     ) -> str:
         """Generate results given a str (or list of) inputs.
 
         Args:
             inputs (Union[str, List[str]]):
-            completion_params (dict): The input params for completion.
+            gen_params (dict): The input params for generation.
 
         Returns:
             Union[str, List[str]]: A (list of) generated strings.
@@ -166,16 +166,16 @@ class BaseModel:
             return response[0]
         """
 
-    def stream_completion(
+    def stream_generate(
         self,
         inputs: str,
-        **completion_params
+        **gen_params
     ) -> List[str]:
         """Generate results as streaming given a str inputs.
 
         Args:
             inputs (str):
-            completion_params (dict): The input params for completion.
+            gen_params (dict): The input params for generation.
 
         Returns:
             str: A generated string.
@@ -185,13 +185,13 @@ class BaseModel:
     def chat(
         self,
         inputs: Union[List[dict], List[List[dict]]],
-        **completion_params
+        **gen_params
     ):
         """Generate completion from a list of templates.
 
         Args:
             inputs (Union[List[dict], List[List[dict]]]):
-            completion_params (dict): The input params for completion.
+            gen_params (dict): The input params for generation.
         Returns:
         """
         if isinstance(inputs[0], list):
@@ -200,18 +200,18 @@ class BaseModel:
                 inputs.append(self.template_parser(msg))
         else:
             inputs = self.template_parser(inputs)
-        return self.completion(inputs, **completion_params)
+        return self.generate(inputs, **gen_params)
 
     def stream_chat(
         self,
         inputs: List[dict],
-        **completion_params
+        **gen_params
     ):
         """Generate results as streaming given a list of templates.
 
         Args:
             inputs (Union[List[dict]):
-            completion_params (dict): The input params for completion.
+            gen_params (dict): The input params for generation.
         Returns:
         """
         raise NotImplementedError
@@ -231,7 +231,7 @@ class BaseModel:
         """
         raise NotImplementedError
 
-    def update_completion_params(self, **kwargs):
-        completion_params = copy(self.completion_params)
-        completion_params.update(kwargs)
-        return completion_params
+    def update_gen_params(self, **kwargs):
+        gen_params = copy(self.gen_params)
+        gen_params.update(kwargs)
+        return gen_params
