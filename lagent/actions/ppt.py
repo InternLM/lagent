@@ -1,6 +1,6 @@
 import os
 import time
-from typing import Optional, Type
+from typing import Dict, Optional, Type
 
 import requests
 from pptx import Presentation
@@ -120,17 +120,28 @@ LIB_DIR = os.path.dirname(__file__)  # path of library
 TEMPLATE_DIR = os.path.join(LIB_DIR, 'templates')  # path of templates
 CACHE_DIR = os.path.join(CWD, 'cache')  # path of cache_dir
 IMAGE_BED_PATTERN = 'https://source.unsplash.com/featured/?{}'  # url pattern for image bed
+THEME_MAPPING = {
+    'Default': {
+        'template': None,
+        'title': 'Title Slide',
+        'single': 'Title and Content',
+        'two': 'Tow content',
+    }
+}
 
 
 class PPT(BaseAction):
     """Plugin to create ppt slides with text, paragraph, images in good looking styles"""
 
     def __init__(self,
+                 theme_mapping: Optional[Dict[str, dict]] = None,
                  description: Optional[dict] = None,
                  parser: Type[BaseParser] = JsonParser,
                  enable: bool = True):
         super().__init__(description or DEFAULT_DESCRIPTION, parser, enable)
+        self.theme_mapping = theme_mapping or THEME_MAPPING
         self.pointer = None
+        self.location = None
 
     def _return_timestamp(self):
         return str(time.time())
@@ -147,10 +158,10 @@ class PPT(BaseAction):
 
     def create_file(self, **param) -> dict:
         theme = param['theme']
-        location = param['abs_location']
-        self.location = location
+        self.location = param['abs_location']
         try:
-            self.pointer = Presentation()
+            self.pointer = Presentation(self.theme_mapping[theme]['template'])
+            self.pointer.slide_master.name = theme
             # print('created')
         except Exception as e:
             print(e)
@@ -170,52 +181,67 @@ class PPT(BaseAction):
             return dict(status='cannot find the image')
 
     def add_first_page(self, **param) -> dict:
-        title = param['title']
-        subtitle = param['subtitle']
-        slide = self.pointer.slides.add_slide(
-            self.pointer.slide_layouts[0]
-        )  # layout for first page (title and subtitle only)
-        title_shape = slide.shapes.title
-        subtitle_shape = slide.placeholders[1]
-
-        title_shape.text = title
-        subtitle_shape.text = subtitle
+        title, subtitle = param['title'], param.get('subtitle')
+        layout_name = self.theme_mapping[
+            self.pointer.slide_master.name]['title']
+        layout = next(i for i in self.pointer.slide_master.slide_layouts
+                      if i.name == layout_name)
+        slide = self.pointer.slides.add_slide(layout)
+        ph_title, ph_subtitle = slide.placeholders
+        ph_title.text = title
+        if subtitle:
+            ph_subtitle.text = subtitle
         return dict(status='added page')
 
     def add_text_page(self, **param) -> dict:
-        title = param['title']
-        bullet_items = param['bullet_items']
-        slide = self.pointer.slides.add_slide(self.pointer.slide_layouts[1])
-        title_shape = slide.shapes.title
-        body_shape = slide.placeholders[1]
-        title_shape.text = title
-        tf = body_shape.text_frame
-        bullet_items = bullet_items.split('[SPAN]')
-        for bullet_item in bullet_items:
-            bullet_item_strip = bullet_item.strip()
-            p = tf.add_paragraph()
-            p.text = bullet_item_strip
-            p.level = 1
+        title, bullet_items = param['title'], param['bullet_items']
+        layout_name = self.theme_mapping[
+            self.pointer.slide_master.name]['single']
+        layout = next(i for i in self.pointer.slide_master.slide_layouts
+                      if i.name == layout_name)
+        slide = self.pointer.slides.add_slide(layout)
+        ph_title, ph_body = slide.placeholders
+        ph_title.text = title
+        ph = ph_body
+        tf = ph.text_frame
+        for i, item in enumerate(bullet_items.split('[SPAN]')):
+            if i == 0:
+                p = tf.paragraphs[0]
+            else:
+                p = tf.add_paragraph()
+            p.text = item.strip()
+            p.level = 0
         return dict(status='added page')
 
     def add_text_image_page(self, **param) -> dict:
         title = param['title']
         bullet_items = param['bullet_items']
         image = param['image']
-        slide = self.pointer.slides.add_slide(self.pointer.slide_layouts[3])
-        title_shape = slide.shapes.title
-        title_shape.text = title
-        body_shape = slide.placeholders[1]
-        tf = body_shape.text_frame
-        bullet_items = bullet_items.split('[SPAN]')
-        for bullet_item in bullet_items:
-            bullet_item_strip = bullet_item.strip()
-            p = tf.add_paragraph()
-            p.text = bullet_item_strip
-            p.level = 1
-        image_shape = slide.placeholders[2]
-        slide.shapes.add_picture(image, image_shape.left, image_shape.top,
-                                 image_shape.width, image_shape.height)
+
+        layout_name = self.theme_mapping[self.pointer.slide_master.name]['two']
+        layout = next(i for i in self.pointer.slide_master.slide_layouts
+                      if i.name == layout_name)
+        slide = self.pointer.slides.add_slide(layout)
+        ph_title, ph_body1, ph_body2 = slide.placeholders
+        ph_title.text = title
+        ph = ph_body2
+        image_pil = image.to_pil()
+        left = ph.left
+        width = ph.width
+        height = int(width / image_pil.width * image_pil.height)
+        top = (ph.top + (ph.top + ph.height)) // 2 - height // 2
+        slide.shapes.add_picture(image.to_path(), left, top, width, height)
+
+        ph = ph_body1
+        tf = ph.text_frame
+        for i, item in enumerate(bullet_items.split('[SPAN]')):
+            if i == 0:
+                p = tf.paragraphs[0]
+            else:
+                p = tf.add_paragraph()
+            p.text = item.strip()
+            p.level = 0
+
         return dict(status='added page')
 
     def submit_file(self) -> dict:
