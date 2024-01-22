@@ -114,8 +114,7 @@ class BINGMap(BaseAction):
         self.key = key
         self.base_url = 'http://dev.virtualearth.net/REST/V1/'
 
-    def get_distance(self, **args):
-        start, end = args['start'], args['end']
+    def get_distance(self, start: str, end: str) -> dict:
         # Request URL
         url = self.base_url + 'Routes/Driving?o=json&wp.0=' + start + '&wp.1=' + end + '&key=' + self.key
         # GET request
@@ -128,8 +127,7 @@ class BINGMap(BaseAction):
         distance = route['travelDistance']
         return dict(distance=distance)
 
-    def get_route(self, **args):
-        start, end = args['start'], args['end']
+    def get_route(self, start: str, end: str) -> dict:
         # Request URL
         url = self.base_url + 'Routes/Driving?o=json&wp.0=' + start + '&wp.1=' + end + '&key=' + self.key
         # GET request
@@ -145,8 +143,7 @@ class BINGMap(BaseAction):
                 route_text.append(item['instruction']['text'])
         return dict(route=route_text)
 
-    def get_coordinates(self, **args):
-        location = args['location']
+    def get_coordinates(self, location: str) -> dict:
         url = self.base_url + 'Locations'
         params = {'query': location, 'key': self.key}
         response = requests.get(url, params=params)
@@ -155,16 +152,12 @@ class BINGMap(BaseAction):
             'coordinates']
         return dict(latitude=coordinates[0], longitude=coordinates[1])
 
-    def search_nearby(self, **args):  #  radius in meters
-        if 'latitude' not in args: args['latitude'] = 0.0
-        if 'longitude' not in args: args['longitude'] = 0.0
-        if 'places' not in args: args['places'] = 'unknown'
-        if 'radius' not in args: args['radius'] = 5000
-        search_term = args['search_term']
-        latitude = args['latitude']
-        longitude = args['longitude']
-        places = args['places']
-        radius = args['radius']
+    def search_nearby(self,
+                      search_term: str,
+                      places: str = 'unknown',
+                      latitude: float = 0.0,
+                      longitude: float = 0.0,
+                      radius: int = 5000) -> dict:  #  radius in meters
         url = self.base_url + 'LocalSearch'
         if places != 'unknown':
             pos = self.get_coordinates(**{'location': places})

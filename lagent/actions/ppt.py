@@ -1,8 +1,5 @@
-import os
-import time
 from typing import Dict, Optional, Type
 
-import requests
 from pptx import Presentation
 
 from lagent.actions.base_action import BaseAction
@@ -114,12 +111,6 @@ DEFAULT_DESCRIPTION = dict(
             ])
     ])
 
-ppt_file = None
-CWD = os.getcwd()  # path of current working directory
-LIB_DIR = os.path.dirname(__file__)  # path of library
-TEMPLATE_DIR = os.path.join(LIB_DIR, 'templates')  # path of templates
-CACHE_DIR = os.path.join(CWD, 'cache')  # path of cache_dir
-IMAGE_BED_PATTERN = 'https://source.unsplash.com/featured/?{}'  # url pattern for image bed
 THEME_MAPPING = {
     'Default': {
         'template': None,
@@ -143,22 +134,8 @@ class PPT(BaseAction):
         self.pointer = None
         self.location = None
 
-    def _return_timestamp(self):
-        return str(time.time())
-
-    def runtime_update_docstring(self, **param) -> callable:
-        """This is a decorator that can help update the docstring at runtime"""
-        new_docstring = param['new_docstring']
-
-        def decorator(func: callable) -> callable:
-            func.__doc__ = new_docstring
-            return func
-
-        return decorator
-
-    def create_file(self, **param) -> dict:
-        theme = param['theme']
-        self.location = param['abs_location']
+    def create_file(self, theme: str, abs_location: str) -> dict:
+        self.location = abs_location
         try:
             self.pointer = Presentation(self.theme_mapping[theme]['template'])
             self.pointer.slide_master.name = theme
@@ -167,21 +144,7 @@ class PPT(BaseAction):
             print(e)
         return dict(status='created a ppt file.')
 
-    def get_image(self, **param) -> dict:
-        keywords = param['keywords']
-        try:
-            picture_url = IMAGE_BED_PATTERN.format(keywords)
-            response = requests.get(picture_url)
-            img_local_path = os.path.join(CACHE_DIR,
-                                          f'{self._return_timestamp()}.jpg')
-            with open(img_local_path, 'wb') as f:
-                f.write(response.content)
-            return dict(status='find the image')
-        except Exception:
-            return dict(status='cannot find the image')
-
-    def add_first_page(self, **param) -> dict:
-        title, subtitle = param['title'], param.get('subtitle')
+    def add_first_page(self, title: str, subtitle: str) -> dict:
         layout_name = self.theme_mapping[
             self.pointer.slide_master.name]['title']
         layout = next(i for i in self.pointer.slide_master.slide_layouts
@@ -193,8 +156,7 @@ class PPT(BaseAction):
             ph_subtitle.text = subtitle
         return dict(status='added page')
 
-    def add_text_page(self, **param) -> dict:
-        title, bullet_items = param['title'], param['bullet_items']
+    def add_text_page(self, title: str, bullet_items: str) -> dict:
         layout_name = self.theme_mapping[
             self.pointer.slide_master.name]['single']
         layout = next(i for i in self.pointer.slide_master.slide_layouts
@@ -213,11 +175,8 @@ class PPT(BaseAction):
             p.level = 0
         return dict(status='added page')
 
-    def add_text_image_page(self, **param) -> dict:
-        title = param['title']
-        bullet_items = param['bullet_items']
-        image = param['image']
-
+    def add_text_image_page(self, title: str, bullet_items: str,
+                            image: str) -> dict:
         layout_name = self.theme_mapping[self.pointer.slide_master.name]['two']
         layout = next(i for i in self.pointer.slide_master.slide_layouts
                       if i.name == layout_name)

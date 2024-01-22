@@ -1,6 +1,6 @@
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import List, Optional, Union
 
 from lagent.utils import is_module_exist
 
@@ -33,7 +33,7 @@ class ActionValidCode(int, Enum):
 
 @dataclass
 class ActionReturn:
-    args: Dict
+    args: Optional[dict] = None
     url: Optional[str] = None
     type: Optional[str] = None
     result: Optional[str] = None

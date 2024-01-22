@@ -1,4 +1,3 @@
-import json
 import os
 from typing import Optional, Type
 
@@ -200,11 +199,6 @@ DEFAULT_DESCRIPTION = dict(
             'ID of an individual Google Scholar organic search result.',
             'type': 'STRING'
         }, {
-            'name': 'engine',
-            'description':
-            "Set to 'google_scholar_cite' to use the Google Scholar API engine. Defaults to 'google_scholar_cite'.",
-            'type': 'STRING'
-        }, {
             'name': 'no_cache',
             'description':
             'If set to True, will force SerpApi to fetch the Google Scholar Cite results even if a cached version is already present. Defaults to None.',
@@ -310,11 +304,40 @@ class GoogleScholar(BaseAction):
                 'as SERPER_API_KEY or pass it as `api_key` parameter.')
         self.api_key = api_key
 
-    def search_google_scholar(self, **param) -> ActionReturn:
+    def search_google_scholar(
+        self,
+        query: str,
+        cites: Optional[str] = None,
+        as_ylo: Optional[int] = None,
+        as_yhi: Optional[int] = None,
+        scisbd: Optional[int] = None,
+        cluster: Optional[str] = None,
+        hl: Optional[str] = None,
+        lr: Optional[str] = None,
+        start: Optional[int] = None,
+        num: Optional[int] = None,
+        as_sdt: Optional[str] = None,
+        safe: Optional[str] = None,
+        filter: Optional[str] = None,
+        as_vis: Optional[str] = None,
+    ):
         params = {
-            'q': param['query'],
+            'q': query,
             'engine': 'google_scholar',
-            'api_key': self.api_key
+            'api_key': self.api_key,
+            'cites': cites,
+            'as_ylo': as_ylo,
+            'as_yhi': as_yhi,
+            'scisbd': scisbd,
+            'cluster': cluster,
+            'hl': hl,
+            'lr': lr,
+            'start': start,
+            'num': num,
+            'as_sdt': as_sdt,
+            'safe': safe,
+            'filter': filter,
+            'as_vis': as_vis
         }
         search = GoogleSearch(params)
         try:
@@ -332,29 +355,46 @@ class GoogleScholar(BaseAction):
                 cited_by.append(citation['total'])
                 snippets.append(item['snippet'])
                 organic_id.append(item['result_id'])
-            res = dict(
+            return dict(
                 title=title,
                 cited_by=cited_by,
                 organic_id=organic_id,
                 snippets=snippets)
-            return ActionReturn(
-                param, result={'text': json.dumps(res, ensure_ascii=False)})
         except Exception as e:
             return ActionReturn(
-                param, errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
+                errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
 
-    def get_author_information(self, **param) -> ActionReturn:
+    def get_author_information(self,
+                               author_id: str,
+                               hl: Optional[str] = None,
+                               view_op: Optional[str] = None,
+                               sort: Optional[str] = None,
+                               citation_id: Optional[str] = None,
+                               start: Optional[int] = None,
+                               num: Optional[int] = None,
+                               no_cache: Optional[bool] = None,
+                               async_req: Optional[bool] = None,
+                               output: Optional[str] = None):
         params = {
             'engine': 'google_scholar_author',
-            'author_id': param['author_id'],
-            'api_key': self.api_key
+            'author_id': author_id,
+            'api_key': self.api_key,
+            'hl': hl,
+            'view_op': view_op,
+            'sort': sort,
+            'citation_id': citation_id,
+            'start': start,
+            'num': num,
+            'no_cache': no_cache,
+            'async': async_req,
+            'output': output
         }
         try:
             search = GoogleSearch(params)
             results = search.get_dict()
             author = results['author']
             articles = results.get('articles', [])
-            author_info = dict(
+            return dict(
                 name=author['name'],
                 affiliations=author.get('affiliations', ''),
                 website=author.get('website', ''),
@@ -362,45 +402,58 @@ class GoogleScholar(BaseAction):
                     dict(title=article['title'], authors=article['authors'])
                     for article in articles[:3]
                 ])
-            return ActionReturn(
-                param,
-                result={'text': json.dumps(author_info, ensure_ascii=False)})
         except Exception as e:
             return ActionReturn(
-                param, errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
+                errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
 
-    def get_citation_format(self, **param) -> ActionReturn:
+    def get_citation_format(self,
+                            q: str,
+                            no_cache: Optional[bool] = None,
+                            async_: Optional[bool] = None,
+                            output: Optional[str] = 'json'):
         params = {
-            'q': param['q'],
+            'q': q,
             'engine': 'google_scholar_cite',
-            'api_key': self.api_key
+            'api_key': self.api_key,
+            'no_cache': no_cache,
+            'async': async_,
+            'output': output
         }
         try:
             search = GoogleSearch(params)
             results = search.get_dict()
             citation = results['citations']
             citation_info = citation[0]['snippet']
-            return ActionReturn(
-                param,
-                result={'text': json.dumps(citation_info, ensure_ascii=False)})
+            return citation_info
         except Exception as e:
             return ActionReturn(
-                param, errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
+                errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
 
-    def get_author_id(self, **param) -> ActionReturn:
+    def get_author_id(self,
+                      mauthors: str,
+                      hl: Optional[str] = 'en',
+                      after_author: Optional[str] = None,
+                      before_author: Optional[str] = None,
+                      no_cache: Optional[bool] = False,
+                      _async: Optional[bool] = False,
+                      output: Optional[str] = 'json'):
         params = {
-            'mauthors': param['mauthors'],
+            'mauthors': mauthors,
             'engine': 'google_scholar_profiles',
-            'api_key': self.api_key
+            'api_key': self.api_key,
+            'hl': hl,
+            'after_author': after_author,
+            'before_author': before_author,
+            'no_cache': no_cache,
+            'async': _async,
+            'output': output
         }
         try:
             search = GoogleSearch(params)
             results = search.get_dict()
             profile = results['profiles']
             author_info = dict(author_id=profile[0]['author_id'])
-            return ActionReturn(
-                param,
-                result={'text': json.dumps(author_info, ensure_ascii=False)})
+            return author_info
         except Exception as e:
             return ActionReturn(
-                param, errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
+                errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)

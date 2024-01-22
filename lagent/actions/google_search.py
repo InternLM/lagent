@@ -71,7 +71,7 @@ class GoogleSearch(BaseAction):
 
     def run(self, query: str, k: int = 10) -> ActionReturn:
         """Return the search response."""
-        tool_return = ActionReturn(url=None, args=None, type=self.name)
+        tool_return = ActionReturn(type=self.name)
         status_code, response = self._search(query, k=k)
         # convert search results to ToolReturn format
         if status_code == -1:

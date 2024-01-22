@@ -1,4 +1,3 @@
-import json
 from typing import Optional, Type
 
 import arxiv
@@ -51,15 +50,13 @@ class ArxivSearch(BaseAction):
         self.max_query_len = max_query_len
         self.doc_content_chars_max = doc_content_chars_max
 
-    def get_arxiv_article_information(self, **param) -> ActionReturn:
-        query = param['query']
+    def get_arxiv_article_information(self, query: str):
         try:
             results = arxiv.Search(  # type: ignore
                 query[:self.max_query_len],
                 max_results=self.top_k_results).results()
         except Exception as exc:
             return ActionReturn(
-                param,
                 errmsg=f'Arxiv exception: {exc}',
                 state=ActionStatusCode.HTTP_ERROR)
         docs = [
@@ -69,9 +66,5 @@ class ArxivSearch(BaseAction):
             for result in results
         ]
         if docs:
-            res = {'content': '\n\n'.join(docs)}
-            return ActionReturn(
-                param, result={'text': json.dumps(res, ensure_ascii=False)})
-        res = {'content': 'No good Arxiv Result was found'}
-        return ActionReturn(
-            param, result={'text': json.dumps(res, ensure_ascii=False)})
+            return {'content': '\n\n'.join(docs)}
+        return {'content': 'No good Arxiv Result was found'}
