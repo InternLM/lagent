@@ -155,7 +155,14 @@ class BaseAPIModel(BaseModel):
                  retry: int = 2,
                  max_seq_len: int = 2048,
                  template_parser: 'APITemplateParser' = APITemplateParser,
-                 meta_template: Optional[Dict] = None):
+                 meta_template: Optional[Dict] = None,
+                 *,
+                 max_out_len: int = 512,
+                 top_p: float = 0.8,
+                 top_k: float = None,
+                 temperature: float = 0.8,
+                 repetition_penalty: float = 1.0,
+                 stop_words: Union[List[str], str] = None):
         self.model_type = model_type
         self.max_seq_len = max_seq_len
         self.meta_template = meta_template
@@ -165,15 +172,22 @@ class BaseAPIModel(BaseModel):
         if template_parser:
             self.template_parser = template_parser(meta_template)
 
+        self.gen_params = dict(
+            max_out_len=max_out_len,
+            top_p=top_p,
+            top_k=top_k,
+            temperature=temperature,
+            repetition_penalty=repetition_penalty,
+            stop_words=stop_words)
+
     @abstractclassmethod
-    def generate(self, inputs, max_out_len: int) -> List[str]:
-        """Generate results given a list of inputs.
+    def generate(self, inputs: Union[str, List[str]],
+                 **gen_params) -> List[str]:
+        """Generate results given a prompt or list of prompts.
 
         Args:
-            inputs (List[str or list]): A list of strings or PromptDicts.
-                The PromptDict should be organized in OpenCompass'
-                API format.
-            max_out_len (int): The maximum length of the output.
+            inputs (Union[str, List[str]]): input string or list of strings.
+            gen_params (dict): The input params for generation.
 
         Returns:
             List[str]: A list of generated strings.
