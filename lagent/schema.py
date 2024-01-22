@@ -68,20 +68,3 @@ class AgentReturn:
     response: str = ''
     inner_steps: List = field(default_factory=list)
     errmsg: Optional[str] = None
-
-
-if is_module_exist('lmdeploy'):
-    from lmdeploy.serve.turbomind.chatbot import StatusCode
-    STATE_MAP = {
-        StatusCode.TRITON_STREAM_END: AgentStatusCode.END,
-        StatusCode.TRITON_SERVER_ERR: AgentStatusCode.SERVER_ERR,
-        StatusCode.TRITON_SESSION_CLOSED: AgentStatusCode.SESSION_CLOSED,
-        StatusCode.TRITON_STREAM_ING: AgentStatusCode.STREAM_ING,
-        StatusCode.TRITON_SESSION_OUT_OF_LIMIT:
-        AgentStatusCode.SESSION_OUT_OF_LIMIT,
-        StatusCode.TRITON_SESSION_INVALID_ARG:
-        AgentStatusCode.SESSION_INVALID_ARG,
-        StatusCode.TRITON_SESSION_READY: AgentStatusCode.SESSION_READY
-    }
-else:
-    STATE_MAP = {}

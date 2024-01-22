@@ -5,7 +5,7 @@ from typing import List, Optional, Union
 import mmengine
 
 from lagent.llms.base_llm import BaseModel
-from lagent.schema import STATE_MAP
+from lagent.schema import AgentStatusCode
 from lagent.utils.util import filter_suffix
 
 
@@ -26,7 +26,18 @@ class TritonClient(BaseModel):
                  session_len: int = 32768,
                  **kwargs):
         super().__init__(path=None, **kwargs)
-        from lmdeploy.serve.turbomind.chatbot import Chatbot
+        from lmdeploy.serve.turbomind.chatbot import Chatbot, StatusCode
+        self.state_map = {
+            StatusCode.TRITON_STREAM_END: AgentStatusCode.END,
+            StatusCode.TRITON_SERVER_ERR: AgentStatusCode.SERVER_ERR,
+            StatusCode.TRITON_SESSION_CLOSED: AgentStatusCode.SESSION_CLOSED,
+            StatusCode.TRITON_STREAM_ING: AgentStatusCode.STREAM_ING,
+            StatusCode.TRITON_SESSION_OUT_OF_LIMIT:
+            AgentStatusCode.SESSION_OUT_OF_LIMIT,
+            StatusCode.TRITON_SESSION_INVALID_ARG:
+            AgentStatusCode.SESSION_INVALID_ARG,
+            StatusCode.TRITON_SESSION_READY: AgentStatusCode.SESSION_READY
+        }
         self.chatbot = Chatbot(
             tritonserver_addr=tritonserver_addr,
             model_name=model_name,
@@ -156,12 +167,12 @@ class TritonClient(BaseModel):
             if status.value < 0:
                 break
             else:
-                yield STATE_MAP.get(status), res, _
+                yield self.state_map.get(status), res, _
         if status.value == 0:
             self._session.histories = \
                 self._session.histories + self._session.prompt + \
                 self._session.response
-            yield STATE_MAP.get(status), res, _
+            yield self.state_map.get(status), res, _
         else:
             return ''
 
@@ -277,86 +288,38 @@ class LMDeployServerAPI(BaseModel):
                     ignore_eos: bool = False,
                     timeout: int = 30,
                     **kwargs):
-        from lmdeploy.serve.turbomind.chatbot import StatusCode
-        header = {
-            'content-type': 'application/json',
-        }
-        session_id = (session_id + 1) % 1000000
+        from lmdeploy.serve.openai.api_client import APIClient
+        if getattr(self, 'client', None) is None:
+            self.client = APIClient(self.url)
 
-        prompt = self.template_parser(inputs)
         gen_params = self.update_gen_params(**kwargs)
-        data = dict(
-            model=self.path,
-            session_id=session_id,  #
-            prompt=prompt,
+
+        resp = ""
+        finished = False
+        for text in self.client.completions_v1(
+            self.path,
+            inputs,
+            session_id=session_id,
             sequence_start=sequence_start,
             sequence_end=sequence_end,
             stream=stream,
             ignore_eos=ignore_eos,
-            **gen_params)
-        response = requests.post(
-            f'{self.url}/v1/completions',
-            headers=header,
-            data=json.dumps(data),
-            stream=stream,
-            timeout=timeout)
-        resp = ''
-        finished = False
-        for chunk in response.iter_lines(
-                chunk_size=8192, decode_unicode=False, delimiter=b'\n'):
-            if chunk:
-                decoded = chunk.decode('utf-8')
-                if decoded == 'data: [DONE]':
-                    continue
-                if decoded == '[DONE]':
-                    continue
-                if decoded[:6] == 'data: ':
-                    decoded = decoded[6:]
-                try:
-                    output = json.loads(decoded)
-                except Exception as e:
-                    yield STATE_MAP.get(
-                        StatusCode.TRITON_SERVER_ERR), str(e), None
-                    return
-                resp += output['choices'][0]['text']
-                if not resp:
-                    continue
-                # remove stop_words
-                for sw in self.stop_words:
-                    if sw in resp:
-                        resp = filter_suffix(resp, self.stop_words)
-                        finished = True
-                        break
-                yield STATE_MAP.get(StatusCode.TRITON_STREAM_ING), resp, None
-                if finished:
+            timeout=timeout,
+            **gen_params
+        ):
+            resp += text['choices'][0]['text']
+            if not resp:
+                continue
+            # remove stop_words
+            for sw in self.stop_words:
+                if sw in resp:
+                    resp = filter_suffix(resp, self.stop_words)
+                    finished = True
                     break
-        yield STATE_MAP.get(StatusCode.TRITON_STREAM_END), resp, None
-
-        # from lmdeploy.serve.openai.api_client import APIClient
-        # if getattr(self, 'client', None) is None:
-        #     self.client = APIClient(self.url)
-        # resp = ""
-        # finished = False
-        # for text in self.client.completions_v1(
-        #         self.path,
-        #         inputs,
-        #         session_id=self._session_id,
-        #         max_tokens=512,
-        #         stream=True,
-        #         ignore_eos=False):
-        #     resp += text['choices'][0]['text']
-        #     if not resp:
-        #         continue
-        #     # remove stop_words
-        #     for sw in self.stop_words:
-        #         if sw in resp:
-        #             resp = filter_suffix(resp, self.stop_words)
-        #             finished = True
-        #             break
-        #     yield StatusCode.TRITON_STREAM_ING, resp, None
-        #     if finished:
-        #         break
-        # yield StatusCode.TRITON_STREAM_END, resp, None
+            yield AgentStatusCode.STREAM_ING, resp, None
+            if finished:
+                break
+        yield AgentStatusCode.END, resp, None
 
 
 class LMDeployPipeline(BaseModel):
@@ -373,7 +336,6 @@ class LMDeployPipeline(BaseModel):
     def __init__(self,
                  path,
                  model_name=None,
-                 instance_num: int = 4,
                  tp: int = 1,
                  pipeline_cfg=dict(),
                  **kwargs):
@@ -383,7 +345,6 @@ class LMDeployPipeline(BaseModel):
         self.model = pipeline(
             model_path=self.path,
             model_name=model_name,
-            instance_num=instance_num,
             tp=tp,
             **pipeline_cfg)
 
