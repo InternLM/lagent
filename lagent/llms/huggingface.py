@@ -56,12 +56,14 @@ class HFTransformer(BaseModel):
                     generate=True)
             ],  # default meta template for InternLM-7b
             extract_pred_after_decode: bool = False,
-            batch_padding: bool = False):
+            batch_padding: bool = False,
+            **kwargs):
         super().__init__(
             path=path,
             max_seq_len=max_seq_len,
             tokenizer_only=tokenizer_only,
-            meta_template=meta_template)
+            meta_template=meta_template,
+            **kwargs)
         self._load_tokenizer(
             path=path,
             tokenizer_path=tokenizer_path,
@@ -95,12 +97,13 @@ class HFTransformer(BaseModel):
         if self.extract_pred_after_decode:
             prompt_lens = [len(input_) for input_ in inputs]
 
+        new_gen_params = self.update_gen_params(**kwargs)
         input_ids = self.tokenizer(
             inputs, truncation=True,
             max_length=self.max_seq_len - max_out_len)['input_ids']
         input_ids = torch.tensor(input_ids, device=self.model.device)
         outputs = self.model.generate(
-            input_ids=input_ids, max_new_tokens=max_out_len, **kwargs)
+            input_ids=input_ids, max_new_tokens=max_out_len, **new_gen_params)
 
         if not self.extract_pred_after_decode:
             outputs = outputs[:, input_ids.shape[1]:]
@@ -113,19 +116,6 @@ class HFTransformer(BaseModel):
             ]
 
         return decodeds[0]
-
-    def generate_from_template(self, templates, max_out_len: int, **kwargs):
-        """Generate completion from a list of templates.
-
-        Args:
-            templates (List[PromptType]): A list of templates.
-            max_out_len (int): The maximum length of the output.
-        """
-        inputs = self.parse_template(templates)
-        response = self.generate(inputs, max_out_len=max_out_len, **kwargs)
-        return response.replace(
-            self.template_parser.roles['assistant']['end'].strip(),
-            '').strip()
 
 
 class HFTransformerCasualLM(HFTransformer):
