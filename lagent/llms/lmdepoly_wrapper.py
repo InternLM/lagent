@@ -186,21 +186,16 @@ class TritonClient(BaseModel):
         return cfg
 
 
-class LMDeployServerAPI(BaseModel):
-    """TritonClient is a wrapper of TritonClient for LLM.
-
-    Args:
-        tritonserver_addr (str): the address in format "ip:port" of triton
-            inference server
-        model_name (str): the name of the model
-        session_len (int): the context size
-        max_out_len (int): the expected generated token numbers
+class LMDeployClient(BaseModel):
     """
 
-    def __init__(self, path: str, url: str, retry=2, **kwargs):
-        super().__init__(path=path, **kwargs)
+    Args:
+        path (str): The path to the model.
+        url (str):
+    """
 
-        self.retry = retry
+    def __init__(self, path: str, url: str, **kwargs):
+        super().__init__(path=path, **kwargs)
         self.url = url
 
     def generate(self,
@@ -208,6 +203,7 @@ class LMDeployServerAPI(BaseModel):
                  session_id: int = 2967,
                  sequence_start: bool = True,
                  sequence_end: bool = True,
+                 ignore_eos: bool = False,
                  timeout: int = 30,
                  **kwargs) -> List[str]:
         """Generate results given a list of inputs.
@@ -220,64 +216,35 @@ class LMDeployServerAPI(BaseModel):
         Returns:
             Union[str, List[str]]: (A list of) generated strings.
         """
+        from lmdeploy.serve.openai.api_client import APIClient
+        if getattr(self, 'client', None) is None:
+            self.client = APIClient(self.url)
+
         batched = True
         if isinstance(inputs, str):
             inputs = [inputs]
             batched = False
-        prompt = inputs
 
-        max_num_retries = 0
         gen_params = self.update_gen_params(**kwargs)
-        while max_num_retries < self.retry:
 
-            header = {
-                'content-type': 'application/json',
-            }
-            session_id = (session_id + 1) % 1000000
-
-            try:
-                data = dict(
-                    model=self.path,
-                    session_id=session_id,
-                    prompt=prompt,
-                    sequence_start=sequence_start,
-                    sequence_end=sequence_end,
-                    **gen_params)
-                raw_response = requests.post(
-                    self.url,
-                    headers=header,
-                    data=json.dumps(data),
-                    timeout=timeout)
-            except requests.ConnectionError:
-                print('Got connection error, retrying...')
-                max_num_retries += 1
-                continue
-            try:
-                # import pdb
-                # pdb.set_trace()
-                response = raw_response.json()
-            except requests.JSONDecodeError:
-                print('JsonDecode error, got', str(raw_response.content))
-                max_num_retries += 1
-                continue
-            try:
-                if 'completion' in self.url:
-                    if batched:
-                        return [
-                            item['text'].strip()
-                            for item in response['choices']
-                        ]
-                    return response['choices'][0]['text'].strip()
-                else:
-                    assert not batched
-                    return response['text'].strip()
-            except KeyError:
-                max_num_retries += 1
-                pass
-
-        raise RuntimeError('Calling OpenAI failed after retrying for '
-                           f'{max_num_retries} times. Check the logs for '
-                           'details.')
+        resp = [""] * len(inputs)
+        for text in self.client.completions_v1(
+            self.path,
+            inputs,
+            session_id=session_id,
+            sequence_start=sequence_start,
+            sequence_end=sequence_end,
+            stream=False,
+            ignore_eos=ignore_eos,
+            timeout=timeout,
+            **gen_params
+        ):
+            resp = [resp[i] + item['text'] for i, item in enumerate(text['choices'])]
+        # remove stop_words
+        resp = filter_suffix(resp, self.stop_words)
+        if not batched:
+            return resp[0]
+        return resp
 
     def stream_chat(self,
                     inputs: List[dict],
@@ -323,19 +290,18 @@ class LMDeployServerAPI(BaseModel):
 
 
 class LMDeployPipeline(BaseModel):
-    """TritonClient is a wrapper of TritonClient for LLM.
+    """
 
     Args:
-        tritonserver_addr (str): the address in format "ip:port" of
-            triton inference server
+        path (str): The path to the model.
         model_name (str): the name of the model
-        session_len (int): the context size
-        max_out_len (int): the expected generated token numbers
+        tp (int):
+        pipeline_cfg (dict):
     """
 
     def __init__(self,
-                 path,
-                 model_name=None,
+                 path: str,
+                 model_name: Optional[str] = None,
                  tp: int = 1,
                  pipeline_cfg=dict(),
                  **kwargs):
@@ -366,14 +332,15 @@ class LMDeployPipeline(BaseModel):
 
 
 class LMDeployServer(BaseModel):
-    """TritonClient is a wrapper of TritonClient for LLM.
+    """
 
     Args:
-        tritonserver_addr (str): the address in format "ip:port" of
-            triton inference server
+        path (str): The path to the model.
         model_name (str): the name of the model
-        session_len (int): the context size
-        max_out_len (int): the expected generated token numbers
+        server_name (str):
+        server_port (int):
+        tp (int):
+        log_level (str):
     """
 
     def __init__(self,
@@ -381,7 +348,6 @@ class LMDeployServer(BaseModel):
                  model_name: Optional[str] = None,
                  server_name: str = '0.0.0.0',
                  server_port: int = 23333,
-                 instance_num: int = 64,
                  tp: int = 1,
                  log_level: str = 'ERROR',
                  **serve_cfg):
@@ -392,7 +358,6 @@ class LMDeployServer(BaseModel):
             model_name=model_name,
             server_name=server_name,
             server_port=server_port,
-            instance_num=instance_num,
             tp=tp,
             log_level=log_level,
             **serve_cfg)
