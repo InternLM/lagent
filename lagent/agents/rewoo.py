@@ -1,4 +1,3 @@
-import copy
 import re
 import warnings
 from typing import Dict, List, Optional, Tuple, Union
@@ -227,9 +226,17 @@ class ReWOO(BaseAgent):
 
         self.max_turn = max_turn
 
-    def chat(self, message: str) -> AgentReturn:
-        self._inner_history = []
-        self._inner_history.append(dict(role='user', content=message))
+    def chat(self, message: Union[str, dict, List[dict]],
+             **kwargs) -> AgentReturn:
+        if isinstance(message, str):
+            inner_history = [dict(role='user', content=message)]
+        elif isinstance(message, dict):
+            inner_history = [message]
+        elif isinstance(message, list):
+            inner_history = message[:]
+        else:
+            raise TypeError(f'unsupported type: {type(message)}')
+        offset = len(inner_history)
         agent_return = AgentReturn()
 
         # planner
@@ -237,13 +244,12 @@ class ReWOO(BaseAgent):
         reformat_request = ''
         while turn_id < self.max_turn:
             planner_prompt = self._protocol.format_planner(
-                chat_history=self.session_history,
-                inner_step=self._inner_history,
+                chat_history=[],
+                inner_step=inner_history,
                 action_executor=self._action_executor,
                 reformat_request=reformat_request)
-            response = self._llm.generate_from_template(planner_prompt, 512)
-            self._inner_history.append(
-                dict(role='assistant', content=response))
+            response = self._llm.chat(planner_prompt, **kwargs)
+            inner_history.append(dict(role='assistant', content=response))
             try:
                 thoughts, actions, actions_input = self._protocol.parse_worker(
                     response)
@@ -274,11 +280,10 @@ class ReWOO(BaseAgent):
 
         solver_prompt, worker_log = self._protocol.format_solver(
             message, thoughts, action_responses)
-        self._inner_history.append(dict(role='system', content=worker_log))
+        inner_history.append(dict(role='system', content=worker_log))
 
-        final_response = self._llm.generate_from_template(solver_prompt, 512)
-        self._inner_history.append(
-            dict(role='assistant', content=final_response))
-        agent_return.inner_steps = copy.deepcopy(self._inner_history)
+        final_response = self._llm.chat(solver_prompt, **kwargs)
+        inner_history.append(dict(role='assistant', content=final_response))
+        agent_return.inner_steps = inner_history[offset:]
         agent_return.response = final_response
         return agent_return
