@@ -1,6 +1,5 @@
 # flake8: noqa
 import ast
-import copy
 import platform
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -261,18 +260,17 @@ class AutoGPT(BaseAgent):
         super().__init__(
             llm=llm, action_executor=action_executor, protocol=protocol)
 
-    def chat(self, goal: str) -> AgentReturn:
-        self._inner_history = []
+    def chat(self, goal: str, **kwargs) -> AgentReturn:
+        inner_history = []
         agent_return = AgentReturn()
         default_response = 'Sorry that I cannot answer your question.'
         for _ in range(self.max_turn):
             prompt = self._protocol.format(
                 goal=goal,
-                inner_history=self._inner_history,
+                inner_history=inner_history,
                 action_executor=self._action_executor)
-            response = self._llm.generate_from_template(prompt, 512)
-            self._inner_history.append(
-                dict(role='assistant', content=response))
+            response = self._llm.chat(prompt, **kwargs)
+            inner_history.append(dict(role='assistant', content=response))
             action, action_input = self._protocol.parse(
                 response, self._action_executor)
             action_return: ActionReturn = self._action_executor(
@@ -281,10 +279,10 @@ class AutoGPT(BaseAgent):
             if action_return.type == self._action_executor.finish_action.name:
                 agent_return.response = action_return.result['text']
                 return agent_return
-            self._inner_history.append(
+            inner_history.append(
                 dict(
                     role='system',
                     content=self._protocol.format_response(action_return)))
-        agent_return.inner_steps = copy.deepcopy(self._inner_history)
+        agent_return.inner_steps = inner_history
         agent_return.response = default_response
         return agent_return
