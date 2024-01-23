@@ -140,12 +140,7 @@ class BaseModel:
             repetition_penalty=repetition_penalty,
             stop_words=stop_words)
 
-    @abstractclassmethod
-    def generate(
-        self,
-        inputs: Union[str, List[str]],
-        **gen_params
-    ) -> str:
+    def generate(self, inputs: Union[str, List[str]], **gen_params) -> str:
         """Generate results given a str (or list of) inputs.
 
         Args:
@@ -167,11 +162,7 @@ class BaseModel:
         """
         raise NotImplementedError
 
-    def stream_generate(
-        self,
-        inputs: str,
-        **gen_params
-    ) -> List[str]:
+    def stream_generate(self, inputs: str, **gen_params) -> List[str]:
         """Generate results as streaming given a str inputs.
 
         Args:
@@ -183,11 +174,7 @@ class BaseModel:
         """
         raise NotImplementedError
 
-    def chat(
-        self,
-        inputs: Union[List[dict], List[List[dict]]],
-        **gen_params
-    ):
+    def chat(self, inputs: Union[List[dict], List[List[dict]]], **gen_params):
         """Generate completion from a list of templates.
 
         Args:
@@ -203,11 +190,7 @@ class BaseModel:
             inputs = self.template_parser(inputs)
         return self.generate(inputs, **gen_params)
 
-    def stream_chat(
-        self,
-        inputs: List[dict],
-        **gen_params
-    ):
+    def stream_chat(self, inputs: List[dict], **gen_params):
         """Generate results as streaming given a list of templates.
 
         Args:
