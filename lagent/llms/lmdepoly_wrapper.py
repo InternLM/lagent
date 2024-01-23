@@ -1,7 +1,7 @@
 import json
 from typing import List, Optional, Union
 
-import mmengine
+
 import requests
 
 from lagent.llms.base_llm import BaseModel
@@ -178,6 +178,7 @@ class TritonClient(BaseModel):
             return ''
 
     def _update_gen_params(self, **kwargs):
+        import mmengine
         new_gen_params = self.update_gen_params(**kwargs)
         self.gen_params['stop_words'] = new_gen_params.pop('stop_words')
         stop_words = self.chatbot._stop_words(self.gen_params.get('stop_words'))
