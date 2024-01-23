@@ -63,7 +63,41 @@ You are InternLM, a large language model trained by PJLab. Answer as concisely a
                 ):
                     print(res, end='\n', flush=True)
     elif mode == 'LMDeployClient':
-        pass
+        chatbot = LMDeployClient(
+            path='internlm2-chat-7b',
+            url='http://10.140.1.82:23333',
+            top_p=0.8,
+            top_k=100,
+            temperature=0,
+            repetition_penalty=1.0,
+            stop_words=["[UNUSED_TOKEN_145]", "[UNUSED_TOKEN_143]"]
+        )
+        if generation:
+            response = chatbot.generate(
+                inputs=prompt,
+                session_id=2967,
+                sequence_start=True,
+                sequence_end=True,
+                ignore_eos=False,
+                timeout=30,
+                max_tokens=1024,
+                top_k=100
+            )
+            print(response, end='\n', flush=True)
+        else:
+            if stream:
+                for status, res, _ in chatbot.stream_chat(
+                    inputs=prompt,
+                    session_id=2967,
+                    sequence_start=True,
+                    sequence_end=True,
+                    stream=True,
+                    ignore_eos=False,
+                    timeout=30,
+                    max_tokens=1024,
+                    top_k=100
+                ):
+                    print(res, end='\n', flush=True)
     elif mode == 'LMDeployPipeline':
         chatbot = LMDeployPipeline(
             path='internlm/internlm2-chat-7b',
@@ -81,7 +115,8 @@ You are InternLM, a large language model trained by PJLab. Answer as concisely a
     elif mode == 'LMDeployServer':
         chatbot = LMDeployServer(
             path='internlm/internlm2-chat-7b',
-            model_name='internlm2-chat-7b'
+            model_name='internlm2-chat-7b',
+            top_k=100,
         )
         prompt = prompt.replace('[UNUSED_TOKEN_146]', '<|im_start|>')
         prompt = prompt.replace('[UNUSED_TOKEN_142]', '<|interpreter|>')
@@ -90,10 +125,10 @@ You are InternLM, a large language model trained by PJLab. Answer as concisely a
         response = chatbot.generate(
             inputs=prompt
         )
-        print(response, end='\n', flush=True)
+        # print(response, end='\n', flush=True)
     else:
         raise NotImplementedError
 
 
 if __name__ == '__main__':
-    run(mode='LMDeployPipeline', generation=True, stream=False)
+    run(mode='LMDeployServer', generation=True, stream=False)

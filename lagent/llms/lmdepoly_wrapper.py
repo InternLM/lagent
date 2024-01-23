@@ -45,7 +45,6 @@ class TritonClient(BaseModel):
             session_len=session_len,
             log_level=log_level,
             **kwargs)
-        self.stop_words = kwargs.get('stop_words')
 
     def generate(self,
                  inputs: Union[str, List[str]],
@@ -107,7 +106,7 @@ class TritonClient(BaseModel):
                 self.chatbot._session.histories + self.chatbot._session.prompt + \
                 self.chatbot._session.response
             # remove stop_words
-            res = filter_suffix(res, self.stop_words)
+            res = filter_suffix(res, self.gen_params.get('stop_words'))
             return res
         else:
             return ''
@@ -165,7 +164,7 @@ class TritonClient(BaseModel):
                 self.chatbot._session, prompt, max_out_len, sequence_start,
                 sequence_end):
             if status == StatusCode.TRITON_STREAM_END:  # remove stop_words
-                res = filter_suffix(res, self.stop_words)
+                res = filter_suffix(res, self.gen_params.get('stop_words'))
             if status.value < 0:
                 break
             else:
@@ -180,8 +179,8 @@ class TritonClient(BaseModel):
 
     def _update_gen_params(self, **kwargs):
         new_gen_params = self.update_gen_params(**kwargs)
-        self.stop_words = new_gen_params.pop('stop_words')
-        stop_words = self.chatbot._stop_words(self.stop_words)
+        self.gen_params['stop_words'] = new_gen_params.pop('stop_words')
+        stop_words = self.chatbot._stop_words(self.gen_params.get('stop_words'))
         cfg = mmengine.Config(
             dict(
                 session_len=self.chatbot.model.session_len,
@@ -189,110 +188,6 @@ class TritonClient(BaseModel):
                 bad_words=self.chatbot.cfg.bad_words,
                 **new_gen_params))
         return cfg
-
-
-class LMDeployClient(BaseModel):
-    """
-
-    Args:
-        path (str): The path to the model.
-        url (str):
-    """
-
-    def __init__(self, path: str, url: str, **kwargs):
-        super().__init__(path=path, **kwargs)
-        self.url = url
-
-    def generate(self,
-                 inputs: Union[str, List[str]],
-                 session_id: int = 2967,
-                 sequence_start: bool = True,
-                 sequence_end: bool = True,
-                 ignore_eos: bool = False,
-                 timeout: int = 30,
-                 **kwargs) -> List[str]:
-        """Generate results given a list of inputs.
-
-        Args:
-            inputs (List[str or List]): A list of strings or PromptDicts.
-                The PromptDict should be organized in OpenCompass'
-                API format.
-
-        Returns:
-            Union[str, List[str]]: (A list of) generated strings.
-        """
-        from lmdeploy.serve.openai.api_client import APIClient
-        if getattr(self, 'client', None) is None:
-            self.client = APIClient(self.url)
-
-        batched = True
-        if isinstance(inputs, str):
-            inputs = [inputs]
-            batched = False
-
-        gen_params = self.update_gen_params(**kwargs)
-
-        resp = [''] * len(inputs)
-        for text in self.client.completions_v1(
-                self.path,
-                inputs,
-                session_id=session_id,
-                sequence_start=sequence_start,
-                sequence_end=sequence_end,
-                stream=False,
-                ignore_eos=ignore_eos,
-                timeout=timeout,
-                **gen_params):
-            resp = [
-                resp[i] + item['text']
-                for i, item in enumerate(text['choices'])
-            ]
-        # remove stop_words
-        resp = filter_suffix(resp, self.stop_words)
-        if not batched:
-            return resp[0]
-        return resp
-
-    def stream_chat(self,
-                    inputs: List[dict],
-                    session_id=0,
-                    sequence_start: bool = True,
-                    sequence_end: bool = True,
-                    stream: bool = True,
-                    ignore_eos: bool = False,
-                    timeout: int = 30,
-                    **kwargs):
-        from lmdeploy.serve.openai.api_client import APIClient
-        if getattr(self, 'client', None) is None:
-            self.client = APIClient(self.url)
-
-        gen_params = self.update_gen_params(**kwargs)
-
-        resp = ''
-        finished = False
-        for text in self.client.completions_v1(
-                self.path,
-                inputs,
-                session_id=session_id,
-                sequence_start=sequence_start,
-                sequence_end=sequence_end,
-                stream=stream,
-                ignore_eos=ignore_eos,
-                timeout=timeout,
-                **gen_params):
-            resp += text['choices'][0]['text']
-            if not resp:
-                continue
-            # remove stop_words
-            for sw in self.stop_words:
-                if sw in resp:
-                    resp = filter_suffix(resp, self.stop_words)
-                    finished = True
-                    break
-            yield AgentStatusCode.STREAM_ING, resp, None
-            if finished:
-                break
-        yield AgentStatusCode.END, resp, None
 
 
 class LMDeployPipeline(BaseModel):
@@ -343,6 +238,9 @@ class LMDeployPipeline(BaseModel):
         gen_params = self.update_gen_params(**kwargs)
         response = self.model.batch_infer(
             prompt, do_preprocess=do_preprocess, **gen_params)
+        response = [resp.text for resp in response]
+        # remove stop_words
+        response = filter_suffix(response, self.gen_params.get('stop_words'))
         if batched:
             return response
         return response[0]
@@ -376,33 +274,113 @@ class LMDeployServer(BaseModel):
 
     def __init__(self,
                  path: str,
+                 url: str = None,
                  model_name: Optional[str] = None,
                  server_name: str = '0.0.0.0',
                  server_port: int = 23333,
                  tp: int = 1,
-                 log_level: str = 'ERROR',
+                 log_level: str = 'WARNING',
                  **serve_cfg):
         super().__init__(path=path, **serve_cfg)
-        import lmdeploy
-        self.model = lmdeploy.serve(
-            model_path=self.path,
-            model_name=model_name,
-            server_name=server_name,
-            server_port=server_port,
-            tp=tp,
-            log_level=log_level,
-            **serve_cfg)
+        self.client = None
+        if not url:
+            import lmdeploy
+            self.client = lmdeploy.serve(
+                model_path=self.path,
+                model_name=model_name,
+                server_name=server_name,
+                server_port=server_port,
+                tp=tp,
+                log_level=log_level,
+                **serve_cfg)
 
-    def generate(self, inputs: Union[str, List[str]], **kwargs):
+    def generate(
+            self,
+            inputs: Union[str, List[str]],
+            session_id: int = 2967,
+            sequence_start: bool = True,
+            sequence_end: bool = True,
+            ignore_eos: bool = False,
+            timeout: int = 30,
+            **kwargs) -> List[str]:
         batched = True
         if isinstance(inputs, str):
             inputs = [inputs]
             batched = False
-        prompt = inputs
+
         gen_params = self.update_gen_params(**kwargs)
-        response = None
-        for chunk in self.model.completions_v1(prompt, **gen_params):
-            response = chunk
-        if batched:
-            return response
-        return response[0]
+
+        resp = [''] * len(inputs)
+        for text in self.client.completions_v1(
+            self.path,
+            inputs,
+            session_id=session_id,
+            sequence_start=sequence_start,
+            sequence_end=sequence_end,
+            stream=False,
+            ignore_eos=ignore_eos,
+            timeout=timeout,
+            **gen_params
+        ):
+            resp = [
+                resp[i] + item['text']
+                for i, item in enumerate(text['choices'])
+            ]
+        # remove stop_words
+        resp = filter_suffix(resp, self.gen_params.get('stop_words'))
+        if not batched:
+            return resp[0]
+        return resp
+
+    def stream_chat(self,
+                    inputs: List[dict],
+                    session_id=0,
+                    sequence_start: bool = True,
+                    sequence_end: bool = True,
+                    stream: bool = True,
+                    ignore_eos: bool = False,
+                    timeout: int = 30,
+                    **kwargs):
+
+        gen_params = self.update_gen_params(**kwargs)
+
+        resp = ''
+        finished = False
+        stop_words = self.gen_params.get('stop_words')
+        for text in self.client.completions_v1(
+                self.path,
+                inputs,
+                session_id=session_id,
+                sequence_start=sequence_start,
+                sequence_end=sequence_end,
+                stream=stream,
+                ignore_eos=ignore_eos,
+                timeout=timeout,
+                **gen_params):
+            resp += text['choices'][0]['text']
+            if not resp:
+                continue
+            # remove stop_words
+            for sw in stop_words:
+                if sw in resp:
+                    resp = filter_suffix(resp, stop_words)
+                    finished = True
+                    break
+            yield AgentStatusCode.STREAM_ING, resp, None
+            if finished:
+                break
+        yield AgentStatusCode.END, resp, None
+
+
+class LMDeployClient(LMDeployServer):
+    """
+
+    Args:
+        path (str): The path to the model.
+        url (str):
+    """
+
+    def __init__(self, path: str, url: str, **kwargs):
+        super().__init__(path=path, url=url, **kwargs)
+        from lmdeploy.serve.openai.api_client import APIClient
+        self.client = APIClient(url)
