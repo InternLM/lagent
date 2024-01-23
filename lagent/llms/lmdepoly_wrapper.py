@@ -1,8 +1,8 @@
 import json
-import requests
 from typing import List, Optional, Union
 
 import mmengine
+import requests
 
 from lagent.llms.base_llm import BaseModel
 from lagent.schema import AgentStatusCode
@@ -24,6 +24,7 @@ class TritonClient(BaseModel):
                  tritonserver_addr: str,
                  model_name: str,
                  session_len: int = 32768,
+                 log_level: str = 'WARNING',
                  **kwargs):
         super().__init__(path=None, **kwargs)
         from lmdeploy.serve.turbomind.chatbot import Chatbot, StatusCode
@@ -42,7 +43,9 @@ class TritonClient(BaseModel):
             tritonserver_addr=tritonserver_addr,
             model_name=model_name,
             session_len=session_len,
+            log_level=log_level,
             **kwargs)
+        self.stop_words = kwargs.get('stop_words')
 
     def generate(self,
                  inputs: Union[str, List[str]],
@@ -67,46 +70,44 @@ class TritonClient(BaseModel):
             (a list of/batched) text/chat completion
         """
         from lmdeploy.serve.turbomind.chatbot import Session, get_logger
-        batched = True
         if isinstance(inputs, str):
             inputs = [inputs]
-            batched = False
         prompt = inputs
 
         assert isinstance(session_id, int), \
             f'INT session id is required, but got {type(session_id)}'
 
-        logger = get_logger(log_level=self.log_level)
+        logger = get_logger(log_level=self.chatbot.log_level)
         logger.info(f'session {session_id}, request_id {request_id}, '
                     f'max_out_len {max_out_len}')
 
-        if self._session is None:
+        if self.chatbot._session is None:
             sequence_start = True
-            self._session = Session(session_id=session_id)
-        elif self._session.status == 0:
+            self.chatbot._session = Session(session_id=session_id)
+        elif self.chatbot._session.status == 0:
             logger.error(f'session {session_id} has been ended. Please set '
                          f'`sequence_start` be True if you want to restart it')
             return ''
 
-        self._session.status = 1
-        self._session.request_id = request_id
-        self._session.response = ''
+        self.chatbot._session.status = 1
+        self.chatbot._session.request_id = request_id
+        self.chatbot._session.response = ''
 
         self.chatbot.cfg = self._update_gen_params(
             max_out_len=max_out_len, **kwargs)
 
         status, res, _ = None, '', 0
         for status, res, _ in self.chatbot._stream_infer(
-                self._session, prompt, max_out_len, sequence_start,
+                self.chatbot._session, prompt, max_out_len, sequence_start,
                 sequence_end):
             if status.value < 0:
                 break
         if status.value == 0:
-            self._session.histories = \
-                self._session.histories + self._session.prompt + \
-                self._session.response
-            if not batched:
-                return res[0]
+            self.chatbot._session.histories = \
+                self.chatbot._session.histories + self.chatbot._session.prompt + \
+                self.chatbot._session.response
+            # remove stop_words
+            res = filter_suffix(res, self.stop_words)
             return res
         else:
             return ''
@@ -134,25 +135,26 @@ class TritonClient(BaseModel):
             tuple(Status, str, int): status, text/chat completion,
             generated token number
         """
-        from lmdeploy.serve.turbomind.chatbot import Session, StatusCode, get_logger
+        from lmdeploy.serve.turbomind.chatbot import (Session, StatusCode,
+                                                      get_logger)
         assert isinstance(session_id, int), \
             f'INT session id is required, but got {type(session_id)}'
 
-        logger = get_logger(log_level=self.log_level)
+        logger = get_logger(log_level=self.chatbot.log_level)
         logger.info(f'session {session_id}, request_id {request_id}, '
                     f'max_out_len {max_out_len}')
 
-        if self._session is None:
+        if self.chatbot._session is None:
             sequence_start = True
-            self._session = Session(session_id=session_id)
-        elif self._session.status == 0:
+            self.chatbot._session = Session(session_id=session_id)
+        elif self.chatbot._session.status == 0:
             logger.error(f'session {session_id} has been ended. Please set '
                          f'`sequence_start` be True if you want to restart it')
             return ''
 
-        self._session.status = 1
-        self._session.request_id = request_id
-        self._session.response = ''
+        self.chatbot._session.status = 1
+        self.chatbot._session.request_id = request_id
+        self.chatbot._session.response = ''
 
         self.chatbot.cfg = self._update_gen_params(
             max_out_len=max_out_len, **kwargs)
@@ -160,28 +162,31 @@ class TritonClient(BaseModel):
 
         status, res, _ = None, '', 0
         for status, res, _ in self.chatbot._stream_infer(
-                self._session, prompt, max_out_len, sequence_start,
+                self.chatbot._session, prompt, max_out_len, sequence_start,
                 sequence_end):
             if status == StatusCode.TRITON_STREAM_END:  # remove stop_words
-                res = filter_suffix(res, self.model.stop_words)
+                res = filter_suffix(res, self.stop_words)
             if status.value < 0:
                 break
             else:
                 yield self.state_map.get(status), res, _
         if status.value == 0:
-            self._session.histories = \
-                self._session.histories + self._session.prompt + \
-                self._session.response
+            self.chatbot._session.histories = \
+                self.chatbot._session.histories + self.chatbot._session.prompt + \
+                self.chatbot._session.response
             yield self.state_map.get(status), res, _
         else:
             return ''
 
     def _update_gen_params(self, **kwargs):
         new_gen_params = self.update_gen_params(**kwargs)
+        self.stop_words = new_gen_params.pop('stop_words')
+        stop_words = self.chatbot._stop_words(self.stop_words)
         cfg = mmengine.Config(
             dict(
-                session_len=self.chatbot.session_len,
-                bad_words=self.chatbot.bad_words,
+                session_len=self.chatbot.model.session_len,
+                stop_words=stop_words,
+                bad_words=self.chatbot.cfg.bad_words,
                 **new_gen_params))
         return cfg
 
@@ -227,19 +232,21 @@ class LMDeployClient(BaseModel):
 
         gen_params = self.update_gen_params(**kwargs)
 
-        resp = [""] * len(inputs)
+        resp = [''] * len(inputs)
         for text in self.client.completions_v1(
-            self.path,
-            inputs,
-            session_id=session_id,
-            sequence_start=sequence_start,
-            sequence_end=sequence_end,
-            stream=False,
-            ignore_eos=ignore_eos,
-            timeout=timeout,
-            **gen_params
-        ):
-            resp = [resp[i] + item['text'] for i, item in enumerate(text['choices'])]
+                self.path,
+                inputs,
+                session_id=session_id,
+                sequence_start=sequence_start,
+                sequence_end=sequence_end,
+                stream=False,
+                ignore_eos=ignore_eos,
+                timeout=timeout,
+                **gen_params):
+            resp = [
+                resp[i] + item['text']
+                for i, item in enumerate(text['choices'])
+            ]
         # remove stop_words
         resp = filter_suffix(resp, self.stop_words)
         if not batched:
@@ -261,19 +268,18 @@ class LMDeployClient(BaseModel):
 
         gen_params = self.update_gen_params(**kwargs)
 
-        resp = ""
+        resp = ''
         finished = False
         for text in self.client.completions_v1(
-            self.path,
-            inputs,
-            session_id=session_id,
-            sequence_start=sequence_start,
-            sequence_end=sequence_end,
-            stream=stream,
-            ignore_eos=ignore_eos,
-            timeout=timeout,
-            **gen_params
-        ):
+                self.path,
+                inputs,
+                session_id=session_id,
+                sequence_start=sequence_start,
+                sequence_end=sequence_end,
+                stream=stream,
+                ignore_eos=ignore_eos,
+                timeout=timeout,
+                **gen_params):
             resp += text['choices'][0]['text']
             if not resp:
                 continue
@@ -309,10 +315,7 @@ class LMDeployPipeline(BaseModel):
         super().__init__(path=path, **kwargs)
         from lmdeploy import pipeline
         self.model = pipeline(
-            model_path=self.path,
-            model_name=model_name,
-            tp=tp,
-            **pipeline_cfg)
+            model_path=self.path, model_name=model_name, tp=tp, **pipeline_cfg)
 
     def generate(self,
                  inputs: Union[str, List[str]],
