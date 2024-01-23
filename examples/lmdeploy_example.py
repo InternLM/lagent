@@ -54,23 +54,46 @@ You are InternLM, a large language model trained by PJLab. Answer as concisely a
         else:
             if stream:
                 for status, res, _ in chatbot.stream_chat(
-                        inputs=prompt,
-                        session_id=2967,
-                        request_id='1',
-                        max_out_len=1024,
-                        sequence_start=True,
-                        sequence_end=True,
+                    inputs=prompt,
+                    session_id=2967,
+                    request_id='1',
+                    max_out_len=1024,
+                    sequence_start=True,
+                    sequence_end=True,
                 ):
                     print(res, end='\n', flush=True)
     elif mode == 'LMDeployClient':
         pass
     elif mode == 'LMDeployPipeline':
-        pass
+        chatbot = LMDeployPipeline(
+            path='internlm/internlm2-chat-7b',
+            model_name='internlm2-chat-7b',
+            top_k=100
+        )
+        prompt = prompt.replace('[UNUSED_TOKEN_146]', '<|im_start|>')
+        prompt = prompt.replace('[UNUSED_TOKEN_142]', '<|interpreter|>')
+        prompt = prompt.replace('[UNUSED_TOKEN_141]', '<|plugin|>')
+        prompt = prompt.replace('[UNUSED_TOKEN_145]', '<|im_end|>')
+        response = chatbot.generate(
+            inputs=prompt
+        )
+        print(response, end='\n', flush=True)
     elif mode == 'LMDeployServer':
-        pass
+        chatbot = LMDeployServer(
+            path='internlm/internlm2-chat-7b',
+            model_name='internlm2-chat-7b'
+        )
+        prompt = prompt.replace('[UNUSED_TOKEN_146]', '<|im_start|>')
+        prompt = prompt.replace('[UNUSED_TOKEN_142]', '<|interpreter|>')
+        prompt = prompt.replace('[UNUSED_TOKEN_141]', '<|plugin|>')
+        prompt = prompt.replace('[UNUSED_TOKEN_145]', '<|im_end|>')
+        response = chatbot.generate(
+            inputs=prompt
+        )
+        print(response, end='\n', flush=True)
     else:
         raise NotImplementedError
 
 
 if __name__ == '__main__':
-    run(mode='TritonClient', generation=False, stream=True)
+    run(mode='LMDeployPipeline', generation=True, stream=False)
