@@ -2,39 +2,39 @@ INTERNLM2_META = [
     dict(
         role='system',
         begin=dict(
-            with_name='[UNUSED_TOKEN_146]system name={name}\n',
-            without_name='[UNUSED_TOKEN_146]system\n',
+            with_name='<|im_start|>system name={name}\n',
+            without_name='<|im_start|>system\n',
             name={
-                'interpreter': '[UNUSED_TOKEN_142]',
-                'plugin': '[UNUSED_TOKEN_141]',
+                'interpreter': '<|interpreter|>',
+                'plugin': '<|plugin|>',
             }),
-        end='[UNUSED_TOKEN_145]\n',
+        end='<|im_end|>\n',
     ),
     dict(
         role='user',
         begin=dict(
-            with_name='[UNUSED_TOKEN_146]user name={name}\n',
-            without_name='[UNUSED_TOKEN_146]user\n',
+            with_name='<|im_start|>user name={name}\n',
+            without_name='<|im_start|>user\n',
         ),
-        end='[UNUSED_TOKEN_145]\n'),
+        end='<|im_end|>\n'),
     dict(
         role='assistant',
         begin=dict(
-            with_name='[UNUSED_TOKEN_146]assistant name={name}\n',
-            without_name='[UNUSED_TOKEN_146]assistant\n',
+            with_name='<|im_start|>assistant name={name}\n',
+            without_name='<|im_start|>assistant\n',
             name={
-                'interpreter': '[UNUSED_TOKEN_142]',
-                'plugin': '[UNUSED_TOKEN_141]',
+                'interpreter': '<|interpreter|>',
+                'plugin': '<|plugin|>',
             }),
-        end='[UNUSED_TOKEN_145]\n'),
+        end='<|im_end|>\n'),
     dict(
         role='environment',
         begin=dict(
-            with_name='[UNUSED_TOKEN_146]environment name={name}\n',
-            without_name='[UNUSED_TOKEN_146]environment\n',
+            with_name='<|im_start|>environment name={name}\n',
+            without_name='<|im_start|>environment\n',
             name={
-                'interpreter': '[UNUSED_TOKEN_142]',
-                'plugin': '[UNUSED_TOKEN_141]',
+                'interpreter': '<|interpreter|>',
+                'plugin': '<|plugin|>',
             }),
-        end='[UNUSED_TOKEN_145]\n'),
+        end='<|im_end|>\n'),
 ]
