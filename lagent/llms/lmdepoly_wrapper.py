@@ -17,7 +17,7 @@ class TritonClient(BaseModel):
             triton inference server
         model_name (str): the name of the model
         session_len (int): the context size
-        max_out_len (int): the expected generated token numbers
+        max_tokens (int): the expected generated token numbers
     """
 
     def __init__(self,
@@ -50,7 +50,7 @@ class TritonClient(BaseModel):
                  inputs: Union[str, List[str]],
                  session_id: int = 2967,
                  request_id: str = '',
-                 max_out_len: int = None,
+                 max_tokens: int = 512,
                  sequence_start: bool = True,
                  sequence_end: bool = True,
                  **kwargs):
@@ -61,7 +61,7 @@ class TritonClient(BaseModel):
             inputs (str, List[str]): user's prompt(s) in this round
             session_id (int): the identical id of a session
             request_id (str): the identical id of this round conversation
-            max_out_len (int): the expected generated token numbers
+            max_tokens (int): the expected generated token numbers
             sequence_start (bool): start flag of a session
             sequence_end (bool): end flag of a session
 
@@ -78,7 +78,7 @@ class TritonClient(BaseModel):
 
         logger = get_logger(log_level=self.chatbot.log_level)
         logger.info(f'session {session_id}, request_id {request_id}, '
-                    f'max_out_len {max_out_len}')
+                    f'max_out_len {max_tokens}')
 
         if self.chatbot._session is None:
             sequence_start = True
@@ -93,11 +93,11 @@ class TritonClient(BaseModel):
         self.chatbot._session.response = ''
 
         self.chatbot.cfg = self._update_gen_params(
-            max_out_len=max_out_len, **kwargs)
+            max_tokens=max_tokens, **kwargs)
 
         status, res, _ = None, '', 0
         for status, res, _ in self.chatbot._stream_infer(
-                self.chatbot._session, prompt, max_out_len, sequence_start,
+                self.chatbot._session, prompt, max_tokens, sequence_start,
                 sequence_end):
             if status.value < 0:
                 break
@@ -115,7 +115,7 @@ class TritonClient(BaseModel):
                     inputs: List[dict],
                     session_id: int = 2967,
                     request_id: str = '',
-                    max_out_len: int = None,
+                    max_tokens: int = 512,
                     sequence_start: bool = True,
                     sequence_end: bool = True,
                     **kwargs):
@@ -126,7 +126,7 @@ class TritonClient(BaseModel):
             session_id (int): the identical id of a session
             inputs (List[dict]): user's inputs in this round conversation
             request_id (str): the identical id of this round conversation
-            max_out_len (int): the expected generated token numbers
+            max_tokens (int): the expected generated token numbers
             sequence_start (bool): start flag of a session
             sequence_end (bool): end flag of a session
 
@@ -141,7 +141,7 @@ class TritonClient(BaseModel):
 
         logger = get_logger(log_level=self.chatbot.log_level)
         logger.info(f'session {session_id}, request_id {request_id}, '
-                    f'max_out_len {max_out_len}')
+                    f'max_out_len {max_tokens}')
 
         if self.chatbot._session is None:
             sequence_start = True
@@ -156,12 +156,12 @@ class TritonClient(BaseModel):
         self.chatbot._session.response = ''
 
         self.chatbot.cfg = self._update_gen_params(
-            max_out_len=max_out_len, **kwargs)
+            max_tokens=max_tokens, **kwargs)
         prompt = self.template_parser(inputs)
 
         status, res, _ = None, '', 0
         for status, res, _ in self.chatbot._stream_infer(
-                self.chatbot._session, prompt, max_out_len, sequence_start,
+                self.chatbot._session, prompt, max_tokens, sequence_start,
                 sequence_end):
             if status == StatusCode.TRITON_STREAM_END:  # remove stop_words
                 res = filter_suffix(res, self.gen_params.get('stop_words'))
@@ -272,27 +272,27 @@ class LMDeployServer(BaseModel):
         log_level (str): set log level whose value among [CRITICAL, ERROR, WARNING, INFO, DEBUG]
     """
 
-    def __init__(self,
-                 path: str,
-                 url: str = None,
-                 model_name: Optional[str] = None,
-                 server_name: str = '0.0.0.0',
-                 server_port: int = 23333,
-                 tp: int = 1,
-                 log_level: str = 'WARNING',
-                 **serve_cfg):
-        super().__init__(path=path, **serve_cfg)
-        self.client = None
-        if not url:
-            import lmdeploy
-            self.client = lmdeploy.serve(
-                model_path=self.path,
-                model_name=model_name,
-                server_name=server_name,
-                server_port=server_port,
-                tp=tp,
-                log_level=log_level,
-                **serve_cfg)
+    def __init__(
+        self,
+        path: str,
+        model_name: Optional[str] = None,
+        server_name: str = '0.0.0.0',
+        server_port: int = 23333,
+        tp: int = 1,
+        log_level: str = 'WARNING',
+        serve_cfg=dict(),
+        **kwargs
+    ):
+        super().__init__(path=path, **kwargs)
+        import lmdeploy
+        self.client = lmdeploy.serve(
+            model_path=self.path,
+            model_name=model_name,
+            server_name=server_name,
+            server_port=server_port,
+            tp=tp,
+            log_level=log_level,
+            **serve_cfg)
 
     def generate(
             self,
@@ -381,6 +381,6 @@ class LMDeployClient(LMDeployServer):
     """
 
     def __init__(self, path: str, url: str, **kwargs):
-        super().__init__(path=path, url=url, **kwargs)
+        BaseModel.__init__(self, path=path, **kwargs)
         from lmdeploy.serve.openai.api_client import APIClient
         self.client = APIClient(url)
