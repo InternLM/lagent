@@ -165,6 +165,7 @@ class BaseModel:
                 return response
             return response[0]
         """
+        raise NotImplementedError
 
     def stream_generate(
         self,
@@ -216,10 +217,8 @@ class BaseModel:
         """
         raise NotImplementedError
 
-    def tokenize(
-        self,
-        prompts: Union[str, List[str], List[dict], List[List[dict]]]
-    ):
+    def tokenize(self, prompts: Union[str, List[str], List[dict],
+                                      List[List[dict]]]):
         """Tokenize the input prompts.
 
         Args:

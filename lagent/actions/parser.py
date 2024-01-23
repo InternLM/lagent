@@ -80,7 +80,7 @@ class JsonParser(BaseParser):
         action (:class:`BaseAction`): action to validate
     """
 
-    PARAMETER_DESCRIPTION = '如果调用该工具，你必须使用 dict(key=value) 格式传参，其中key为参数名称'
+    PARAMETER_DESCRIPTION = '如果调用该工具，你必须使用Json格式 {key: value} 传参，其中key为参数名称'
 
     def parse_inputs(self, inputs: str, name: str = 'run') -> dict:
         try:
@@ -105,7 +105,7 @@ class TupleParser(BaseParser):
         action (:class:`BaseAction`): action to validate
     """
 
-    PARAMETER_DESCRIPTION = '如果调用该工具，你必须使用 (arg1, arg2, arg3) 格式传参，且参数是有序的'
+    PARAMETER_DESCRIPTION = '如果调用该工具，你必须使用Tuple格式 (arg1, arg2, arg3) 传参，且参数是有序的'
 
     def parse_inputs(self, inputs: str, name: str = 'run') -> dict:
         try:
