@@ -117,7 +117,7 @@ class BaseModel:
                  template_parser: 'LMTemplateParser' = LMTemplateParser,
                  meta_template: Optional[List[Dict]] = None,
                  *,
-                 max_out_len: int = 512,
+                 max_tokens: int = 512,
                  top_p: float = 0.8,
                  top_k: float = None,
                  temperature: float = 0.8,
@@ -133,14 +133,19 @@ class BaseModel:
             self.eos_token_id = meta_template['eos_token_id']
 
         self.gen_params = dict(
-            max_out_len=max_out_len,
+            max_tokens=max_tokens,
             top_p=top_p,
             top_k=top_k,
             temperature=temperature,
             repetition_penalty=repetition_penalty,
             stop_words=stop_words)
 
-    def generate(self, inputs: Union[str, List[str]], **gen_params) -> str:
+    @abstractclassmethod
+    def generate(
+        self,
+        inputs: Union[str, List[str]],
+        **gen_params
+    ) -> str:
         """Generate results given a str (or list of) inputs.
 
         Args:
@@ -162,7 +167,11 @@ class BaseModel:
         """
         raise NotImplementedError
 
-    def stream_generate(self, inputs: str, **gen_params) -> List[str]:
+    def stream_generate(
+        self,
+        inputs: str,
+        **gen_params
+    ) -> List[str]:
         """Generate results as streaming given a str inputs.
 
         Args:
@@ -174,7 +183,11 @@ class BaseModel:
         """
         raise NotImplementedError
 
-    def chat(self, inputs: Union[List[dict], List[List[dict]]], **gen_params):
+    def chat(
+        self,
+        inputs: Union[List[dict], List[List[dict]]],
+        **gen_params
+    ):
         """Generate completion from a list of templates.
 
         Args:
@@ -190,7 +203,11 @@ class BaseModel:
             inputs = self.template_parser(inputs)
         return self.generate(inputs, **gen_params)
 
-    def stream_chat(self, inputs: List[dict], **gen_params):
+    def stream_chat(
+        self,
+        inputs: List[dict],
+        **gen_params
+    ):
         """Generate results as streaming given a list of templates.
 
         Args:
