@@ -117,7 +117,7 @@ class BaseModel:
                  template_parser: 'LMTemplateParser' = LMTemplateParser,
                  meta_template: Optional[List[Dict]] = None,
                  *,
-                 max_out_len: int = 512,
+                 max_tokens: int = 512,
                  top_p: float = 0.8,
                  top_k: float = None,
                  temperature: float = 0.8,
@@ -133,7 +133,7 @@ class BaseModel:
             self.eos_token_id = meta_template['eos_token_id']
 
         self.gen_params = dict(
-            max_out_len=max_out_len,
+            max_tokens=max_tokens,
             top_p=top_p,
             top_k=top_k,
             temperature=temperature,
@@ -165,6 +165,7 @@ class BaseModel:
                 return response
             return response[0]
         """
+        raise NotImplementedError
 
     def stream_generate(
         self,
@@ -216,10 +217,8 @@ class BaseModel:
         """
         raise NotImplementedError
 
-    def tokenize(
-        self,
-        prompts: Union[str, List[str], List[dict], List[List[dict]]]
-    ):
+    def tokenize(self, prompts: Union[str, List[str], List[dict],
+                                      List[List[dict]]]):
         """Tokenize the input prompts.
 
         Args:

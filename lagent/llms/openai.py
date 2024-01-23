@@ -1,7 +1,7 @@
 import json
 import os
 import time
-# from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from logging import getLogger
 from threading import Lock
 from typing import Dict, List, Optional, Union
@@ -38,9 +38,8 @@ class GPTAPI(BaseAPIModel):
             wrapping of any meta instructions.
         openai_api_base (str): The base url of OpenAI's API. Defaults to
             'https://api.openai.com/v1/chat/completions'.
-        temperature (float, optional): What sampling temperature to use.
-            If not None, will override the temperature in the `generate()`
-            call. Defaults to None.
+        gen_params: Default generation configuration which could be overrided
+            on the fly of generation.
     """
 
     is_api: bool = True
@@ -58,16 +57,15 @@ class GPTAPI(BaseAPIModel):
                      dict(role='assistant', api_role='assistant')
                  ],
                  openai_api_base: str = OPENAI_API_BASE,
-                 temperature: Optional[float] = None):
-
+                 **gen_params):
         super().__init__(
             model_type=model_type,
             max_seq_len=max_seq_len,
             meta_template=meta_template,
             query_per_second=query_per_second,
-            retry=retry)
+            retry=retry,
+            **gen_params)
         self.logger = getLogger(__name__)
-        self.temperature = temperature
 
         if isinstance(key, str):
             self.keys = [os.getenv('OPENAI_API_KEY') if key == 'ENV' else key]
@@ -97,67 +95,56 @@ class GPTAPI(BaseAPIModel):
             context_window = 8192
         self.context_window = context_window
 
-    def generate(
+    def chat(
         self,
-        inputs: Union[List, str],
-        max_out_len: int = 512,
-        temperature: float = 0.7,
+        inputs: Union[List[dict], List[List[dict]]],
+        **gen_params,
     ) -> List[str]:
-        """Generate results given a list of inputs.
+        """Generate responses given the contexts.
 
         Args:
-            inputs (List[str or List]): A list of strings or PromptDicts.
-                The PromptDict should be organized in OpenCompass'
-                API format.
-            max_out_len (int): The maximum length of the output.
-            temperature (float): What sampling temperature to use,
-                between 0 and 2. Higher values like 0.8 will make the output
-                more random, while lower values like 0.2 will make it more
-                focused and deterministic. Defaults to 0.7.
+            inputs (Union[List[dict], List[List[dict]]]): a list of messages 
+                or list of lists of messages
+            gen_params: additional generation configuration
 
         Returns:
             List[str]: A list of generated strings.
         """
-        if self.temperature is not None:
-            temperature = self.temperature
-        return self._generate(inputs, max_out_len, temperature)
+        assert isinstance(inputs, list)
+        if isinstance(inputs[0], dict):
+            inputs = [inputs]
+        gen_params = {**self.gen_params, **gen_params}
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            tasks = [
+                executor.submit(self._chat, messages, **gen_params)
+                for messages in inputs
+            ]
+        wait(tasks)
+        return [task.result() for task in tasks]
 
-    def _generate(self, input: str or List, max_out_len: int,
-                  temperature: float) -> str:
-        """Generate results given a list of inputs.
+    def _chat(self, messages: List[dict], **gen_params) -> str:
+        """Generate completion from a list of templates.
 
         Args:
-            inputs (str or List): A string or PromptDict.
-                The PromptDict should be organized in OpenCompass'
-                API format.
-            max_out_len (int): The maximum length of the output.
-            temperature (float): What sampling temperature to use,
-                between 0 and 2. Higher values like 0.8 will make the output
-                more random, while lower values like 0.2 will make it more
-                focused and deterministic.
+            messages (List[dict]): a list of prompt dictionaries
+            gen_params: additional generation configuration
 
         Returns:
             str: The generated string.
         """
-        assert isinstance(input, (str, list, dict))
-
-        if isinstance(input, str):
-            messages = [{'role': 'user', 'content': input}]
-        elif isinstance(input, dict):
-            messages = [input]
-        else:
-            messages = input
+        assert isinstance(messages, list)
+        gen_params = gen_params.copy()
 
         # Hold out 100 tokens due to potential errors in tiktoken calculation
         max_out_len = min(
-            max_out_len,
-            self.context_window - self.get_token_len(str(input)) - 100)
+            gen_params.pop('max_out_len'),
+            self.context_window - len(self.tokenize(str(input))) - 100)
         if max_out_len <= 0:
             return ''
 
         max_num_retries = 0
         while max_num_retries < self.retry:
-            self.wait()
+            self._wait()
 
             with Lock():
                 if len(self.invalid_keys) == len(self.keys):
@@ -192,8 +179,9 @@ class GPTAPI(BaseAPIModel):
                     messages=messages,
                     max_tokens=max_out_len,
                     n=1,
-                    stop=None,
-                    temperature=temperature,
+                    stop=gen_params.pop('stop_words'),
+                    frequency_penalty=gen_params.pop('repetition_penalty'),
+                    **gen_params,
                 )
                 raw_response = requests.post(
                     self.url, headers=header, data=json.dumps(data))
@@ -225,18 +213,16 @@ class GPTAPI(BaseAPIModel):
                            f'{max_num_retries} times. Check the logs for '
                            'details.')
 
-    def get_token_len(self, prompt: str) -> int:
-        """Get lengths of the tokenized string. Only English and Chinese
-        characters are counted for now. Users are encouraged to override this
-        method if more accurate length is needed.
+    def tokenize(self, prompt: str) -> list:
+        """Tokenize the input prompt.
 
         Args:
             prompt (str): Input string.
 
         Returns:
-            int: Length of the input tokens
+            list: token ids
         """
         import tiktoken
         self.tiktoken = tiktoken
         enc = self.tiktoken.encoding_for_model(self.model_type)
-        return len(enc.encode(prompt))
+        return enc.encode(prompt)
