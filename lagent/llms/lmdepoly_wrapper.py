@@ -284,6 +284,7 @@ class LMDeployServer(BaseModel):
         **kwargs
     ):
         super().__init__(path=path, **kwargs)
+        # TODO get_logger issue in multi processing
         import lmdeploy
         self.client = lmdeploy.serve(
             model_path=self.path,
