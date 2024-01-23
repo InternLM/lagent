@@ -180,51 +180,12 @@ class BaseAPIModel(BaseModel):
             repetition_penalty=repetition_penalty,
             stop_words=stop_words)
 
-    @abstractclassmethod
-    def generate(self, inputs: Union[str, List[str]],
-                 **gen_params) -> List[str]:
-        """Generate results given a prompt or list of prompts.
-
-        Args:
-            inputs (Union[str, List[str]]): input string or list of strings.
-            gen_params (dict): The input params for generation.
-
-        Returns:
-            List[str]: A list of generated strings.
-        """
-
-    def get_token_len(self, prompt: str) -> int:
-        """Get lengths of the tokenized string. Only English and Chinese
-        characters are counted for now. Users are encouraged to override this
-        method if more accurate length is needed.
-
-        Args:
-            prompt (str): Input string.
-
-        Returns:
-            int: Length of the input tokens
-        """
-
-        english_parts = re.findall(r'[A-Za-z0-9]+', prompt)
-        chinese_parts = re.findall(r'[\u4e00-\u9FFF]+', prompt)
-
-        # Count English words
-        english_count = sum(len(part.split()) for part in english_parts)
-
-        # Count Chinese words
-        chinese_count = sum(len(part) for part in chinese_parts)
-
-        return english_count + chinese_count
-
-    def wait(self):
+    def _wait(self):
         """Wait till the next query can be sent.
 
         Applicable in both single-thread and multi-thread environments.
         """
         return self.token_bucket.get_token()
-
-    def to(self, device):
-        pass
 
 
 class TokenBucket:

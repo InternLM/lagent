@@ -138,13 +138,13 @@ class GPTAPI(BaseAPIModel):
         # Hold out 100 tokens due to potential errors in tiktoken calculation
         max_out_len = min(
             gen_params.pop('max_out_len'),
-            self.context_window - self.get_token_len(str(input)) - 100)
+            self.context_window - len(self.tokenize(str(input))) - 100)
         if max_out_len <= 0:
             return ''
 
         max_num_retries = 0
         while max_num_retries < self.retry:
-            self.wait()
+            self._wait()
 
             with Lock():
                 if len(self.invalid_keys) == len(self.keys):
@@ -213,18 +213,16 @@ class GPTAPI(BaseAPIModel):
                            f'{max_num_retries} times. Check the logs for '
                            'details.')
 
-    def get_token_len(self, prompt: str) -> int:
-        """Get lengths of the tokenized string. Only English and Chinese
-        characters are counted for now. Users are encouraged to override this
-        method if more accurate length is needed.
+    def tokenize(self, prompt: str) -> list:
+        """Tokenize the input prompt.
 
         Args:
             prompt (str): Input string.
 
         Returns:
-            int: Length of the input tokens
+            list: token ids
         """
         import tiktoken
         self.tiktoken = tiktoken
         enc = self.tiktoken.encoding_for_model(self.model_type)
-        return len(enc.encode(prompt))
+        return enc.encode(prompt)
