@@ -1,17 +1,12 @@
 import copy
 import warnings
-from typing import Callable, Dict, List, Optional, Union
+import logging
+from typing import Dict, List, Optional
 from dataclasses import asdict
-
-import torch
-from torch import nn
-from transformers.generation.utils import (LogitsProcessorList,
-                                           StoppingCriteriaList)
-from transformers.utils import logging
 
 from .base_llm import BaseModel
 
-logger = logging.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class HFTransformer(BaseModel):
@@ -56,13 +51,6 @@ class HFTransformer(BaseModel):
             tokenizer_only: bool = False,
             model_kwargs: dict = dict(device_map='auto'),
             meta_template: Optional[Dict] = None,
-            extract_pred_after_decode: bool = False,
-            batch_padding: bool = False,
-            logits_processor: Optional[LogitsProcessorList] = None,
-            stopping_criteria: Optional[StoppingCriteriaList] = None,
-            prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor],
-                                                        List[int]]] = None,
-            additional_eos_token_id: Optional[Union[int, List[int]]] = None,
             **kwargs):
         super().__init__(
             path=path,
@@ -75,20 +63,21 @@ class HFTransformer(BaseModel):
             path=path,
             tokenizer_path=tokenizer_path,
             tokenizer_kwargs=tokenizer_kwargs)
-        self.batch_padding = batch_padding
-        self.extract_pred_after_decode = extract_pred_after_decode
         if not tokenizer_only:
             self._load_model(path=path, model_kwargs=model_kwargs)
 
-        self.logits_processor = logits_processor
-        self.stopping_criteria = stopping_criteria
-        self.prefix_allowed_tokens_fn = prefix_allowed_tokens_fn
-        self.additional_eos_token_id = additional_eos_token_id
-        if not self.additional_eos_token_id:
-            stop_words_id = []
-            for sw in self.gen_params.get('stop_words', []):
-                stop_words_id.append(self.tokenizer(sw)['input_ids'][1])
-            self.additional_eos_token_id = stop_words_id
+        from transformers.generation.utils import (
+            LogitsProcessorList,
+            StoppingCriteriaList
+        )
+        self.logits_processor = LogitsProcessorList()
+        self.stopping_criteria = StoppingCriteriaList()
+        self.prefix_allowed_tokens_fn = None
+
+        stop_words_id = []
+        for sw in self.gen_params.get('stop_words', []):
+            stop_words_id.append(self.tokenizer(sw)['input_ids'][1])
+        self.additional_eos_token_id = stop_words_id
 
     def _load_tokenizer(self, path: str, tokenizer_path: Optional[str],
                         tokenizer_kwargs: dict):
@@ -101,6 +90,7 @@ class HFTransformer(BaseModel):
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
     def _load_model(self, path: str, model_kwargs: dict):
+        import torch
         from transformers import AutoModel
         model_kwargs.setdefault('torch_dtype', torch.float16)
         self.model = AutoModel.from_pretrained(
@@ -117,147 +107,151 @@ class HFTransformer(BaseModel):
             response = chunk
         return response
 
-    # @torch.inference_mode()
     def stream_generate(
         self,
         inputs: List[str],
         do_sample=True,
         **kwargs,
     ):
-        batched = True
-        if isinstance(inputs, str):
-            inputs = [inputs]
-            batched = False
-        # import pdb; pdb.set_trace()
-        inputs = self.tokenizer(
-            inputs, padding=True, return_tensors='pt', return_length=True)
-        input_length = inputs['length']
-        for k, v in inputs.items():
-            inputs[k] = v.cuda()
-        input_ids = inputs['input_ids']
-        batch_size, input_ids_seq_length = input_ids.shape[0], input_ids.shape[
-            -1]  # noqa: F841  # pylint: disable=W0612
-        generation_config = self.model.generation_config
-        generation_config = copy.deepcopy(generation_config)
-        new_gen_params = self.update_gen_params(**kwargs)
-        generation_config.update(**new_gen_params)
-        generation_config.update(**kwargs)
-        model_kwargs = generation_config.to_dict()
-        bos_token_id, eos_token_id = (  # noqa: F841  # pylint: disable=W0612
-            generation_config.bos_token_id,
-            generation_config.eos_token_id,
-        )
-        if isinstance(eos_token_id, int):
-            eos_token_id = [eos_token_id]
-        if self.additional_eos_token_id is not None:
-            eos_token_id.extend(self.additional_eos_token_id)
-        eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
-        has_default_max_length = (
-            kwargs.get('max_length') is None
-            and generation_config.max_length is not None)
-        if has_default_max_length and generation_config.max_new_tokens is None:
-            warnings.warn(
-                f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
-                'This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we'
-                ' recommend using `max_new_tokens` to control the maximum length of the generation.',
-                UserWarning,
+        import torch
+        from torch import nn
+        with torch.no_grad():
+            batched = True
+            if isinstance(inputs, str):
+                inputs = [inputs]
+                batched = False
+            # import pdb; pdb.set_trace()
+            inputs = self.tokenizer(
+                inputs, padding=True, return_tensors='pt', return_length=True)
+            input_length = inputs['length']
+            for k, v in inputs.items():
+                inputs[k] = v.cuda()
+            input_ids = inputs['input_ids']
+            attention_mask = inputs['attention_mask']
+            batch_size, input_ids_seq_length = input_ids.shape[0], input_ids.shape[
+                -1]  # noqa: F841  # pylint: disable=W0612
+            generation_config = self.model.generation_config
+            generation_config = copy.deepcopy(generation_config)
+            new_gen_params = self.update_gen_params(**kwargs)
+            generation_config.update(**new_gen_params)
+            generation_config.update(**kwargs)
+            model_kwargs = generation_config.to_dict()
+            model_kwargs['attention_mask'] = attention_mask
+            bos_token_id, eos_token_id = (  # noqa: F841  # pylint: disable=W0612
+                generation_config.bos_token_id,
+                generation_config.eos_token_id,
             )
-        elif generation_config.max_new_tokens is not None:
-            generation_config.max_length = (
-                generation_config.max_new_tokens + input_ids_seq_length)
-            if not has_default_max_length:
-                logger.warn(  # pylint: disable=W4902
-                    f'Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(='
-                    f'{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. '
-                    'Please refer to the documentation for more information. '
-                    '(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)',
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            if self.additional_eos_token_id is not None:
+                eos_token_id.extend(self.additional_eos_token_id)
+            eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
+            has_default_max_length = (
+                kwargs.get('max_length') is None
+                and generation_config.max_length is not None)
+            if has_default_max_length and generation_config.max_new_tokens is None:
+                warnings.warn(
+                    f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
+                    'This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we'
+                    ' recommend using `max_new_tokens` to control the maximum length of the generation.',
                     UserWarning,
                 )
+            elif generation_config.max_new_tokens is not None:
+                generation_config.max_length = (
+                    generation_config.max_new_tokens + input_ids_seq_length)
+                if not has_default_max_length:
+                    logger.warn(  # pylint: disable=W4902
+                        f'Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(='
+                        f'{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. '
+                        'Please refer to the documentation for more information. '
+                        '(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)',
+                        UserWarning,
+                    )
 
-        if input_ids_seq_length >= generation_config.max_length:
-            input_ids_string = 'input_ids'
-            logger.warning(
-                f'Input length of {input_ids_string} is {input_ids_seq_length}, but `max_length` is set to'
-                f' {generation_config.max_length}. This can lead to unexpected behavior. You should consider'
-                ' increasing `max_new_tokens`.')
+            if input_ids_seq_length >= generation_config.max_length:
+                input_ids_string = 'input_ids'
+                logger.warning(
+                    f'Input length of {input_ids_string} is {input_ids_seq_length}, but `max_length` is set to'
+                    f' {generation_config.max_length}. This can lead to unexpected behavior. You should consider'
+                    ' increasing `max_new_tokens`.')
 
-        # 2. Set generation parameters if not already defined
-        logits_processor = (
-            self.logits_processor
-            if self.logits_processor is not None else LogitsProcessorList())
-        stopping_criteria = (
-            self.stopping_criteria
-            if self.stopping_criteria is not None else StoppingCriteriaList())
+            # 2. Set generation parameters if not already defined
+            logits_processor = self.logits_processor
+            stopping_criteria = self.stopping_criteria
 
-        logits_processor = self.model._get_logits_processor(
-            generation_config=generation_config,
-            input_ids_seq_length=input_ids_seq_length,
-            encoder_input_ids=input_ids,
-            prefix_allowed_tokens_fn=self.prefix_allowed_tokens_fn,
-            logits_processor=logits_processor,
-        )
-
-        stopping_criteria = self.model._get_stopping_criteria(
-            generation_config=generation_config,
-            stopping_criteria=stopping_criteria)
-        logits_warper = self.model._get_logits_warper(generation_config)
-
-        unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
-        scores = None
-        while True:
-            model_inputs = self.model.prepare_inputs_for_generation(
-                input_ids, **model_kwargs)
-            # forward pass to get next token
-            outputs = self.model(
-                **model_inputs,
-                return_dict=True,
-                output_attentions=False,
-                output_hidden_states=False,
+            logits_processor = self.model._get_logits_processor(
+                generation_config=generation_config,
+                input_ids_seq_length=input_ids_seq_length,
+                encoder_input_ids=input_ids,
+                prefix_allowed_tokens_fn=self.prefix_allowed_tokens_fn,
+                logits_processor=logits_processor,
             )
 
-            next_token_logits = outputs.logits[:, -1, :]
+            stopping_criteria = self.model._get_stopping_criteria(
+                generation_config=generation_config,
+                stopping_criteria=stopping_criteria)
+            logits_warper = self.model._get_logits_warper(generation_config)
 
-            # pre-process distribution
-            next_token_scores = logits_processor(input_ids, next_token_logits)
-            next_token_scores = logits_warper(input_ids, next_token_scores)
+            unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
+            scores = None
+            while True:
+                model_inputs = self.model.prepare_inputs_for_generation(
+                    input_ids, **model_kwargs)
+                # forward pass to get next token
+                outputs = self.model(
+                    **model_inputs,
+                    return_dict=True,
+                    output_attentions=False,
+                    output_hidden_states=False,
+                )
 
-            # sample
-            probs = nn.functional.softmax(next_token_scores, dim=-1)
-            if do_sample:
-                next_tokens = torch.multinomial(
-                    probs, num_samples=1).squeeze(1)
-            else:
-                next_tokens = torch.argmax(probs, dim=-1)
+                next_token_logits = outputs.logits[:, -1, :]
 
-            # update generated ids, model inputs, and length for next step
-            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-            model_kwargs = self.model._update_model_kwargs_for_generation(
-                outputs, model_kwargs, is_encoder_decoder=False)
-            unfinished_sequences = unfinished_sequences.mul(
-                next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
-            )
-            # output_token_ids = input_ids.cpu()[:, input_length:].tolist()
-            output_token_ids = input_ids.cpu().tolist()
-            for i in range(len(output_token_ids)):
-                output_token_ids[i] = output_token_ids[i][:][input_length[i]:]
-                for each_eos_token_id in eos_token_id:
-                    if output_token_ids[i][-1] == each_eos_token_id:
-                        output_token_ids[i] = output_token_ids[i][:-1]
-            response = self.tokenizer.batch_decode(output_token_ids)
-            print(self.tokenizer.batch_decode(input_ids.cpu().tolist()))
-            if not batched:
-                yield response[0]
-            else:
-                yield response
-            # stop when each sentence is finished, or if we exceed the maximum length
-            if (unfinished_sequences.max() == 0
-                    or stopping_criteria(input_ids, scores)):
-                break
+                # pre-process distribution
+                next_token_scores = logits_processor(input_ids, next_token_logits)
+                next_token_scores = logits_warper(input_ids, next_token_scores)
+
+                # sample
+                probs = nn.functional.softmax(next_token_scores, dim=-1)
+                if do_sample:
+                    next_tokens = torch.multinomial(
+                        probs, num_samples=1).squeeze(1)
+                else:
+                    next_tokens = torch.argmax(probs, dim=-1)
+
+                # update generated ids, model inputs, and length for next step
+                input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+                model_kwargs = self.model._update_model_kwargs_for_generation(
+                    outputs, model_kwargs, is_encoder_decoder=False)
+                unfinished_sequences = unfinished_sequences.mul(
+                    next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
+                )
+                # output_token_ids = input_ids.cpu()[:, input_length:].tolist()
+                output_token_ids = input_ids.cpu().tolist()
+                for i in range(len(output_token_ids)):
+                    output_token_ids[i] = output_token_ids[i][:][input_length[i]:]
+                    # 查找序列中第一个出现的 EOS 令牌
+                    first_eos_idx = next((idx for idx, token_id in enumerate(output_token_ids[i]) if token_id in eos_token_id), None)
+                    # 如果找到 EOS 令牌，只保留它之前的部分
+                    if first_eos_idx is not None:
+                        output_token_ids[i] = output_token_ids[i][:first_eos_idx]
+
+                response = self.tokenizer.batch_decode(output_token_ids)
+                # print(response)
+                if not batched:
+                    yield response[0]
+                else:
+                    yield response
+                # stop when each sentence is finished, or if we exceed the maximum length
+                if (unfinished_sequences.max() == 0
+                        or stopping_criteria(input_ids, scores)):
+                    break
 
 
 class HFTransformerCasualLM(HFTransformer):
 
     def _load_model(self, path: str, model_kwargs: dict):
+        import torch
         from transformers import AutoModelForCausalLM
         model_kwargs.setdefault('torch_dtype', torch.float16)
         self.model = AutoModelForCausalLM.from_pretrained(
