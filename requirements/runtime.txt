@@ -3,3 +3,5 @@ func_timeout
 jsonschema
 requests
 tiktoken
+griffe
+phx-class-registry

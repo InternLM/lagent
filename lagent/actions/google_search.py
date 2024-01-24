@@ -4,22 +4,8 @@ from typing import List, Optional, Tuple, Type, Union
 import requests
 
 from lagent.schema import ActionReturn, ActionStatusCode
-from .base_action import BaseAction
+from .base_action import BaseAction, tool_api
 from .parser import BaseParser, JsonParser
-
-DEFAULT_DESCRIPTION = dict(
-    name='GoogleSearch',
-    description='一个可以从谷歌搜索结果的API。当你需要对于一个特定问题找到简短明了的回答时，可以使用它。输入应该是一个搜索查询。',
-    parameters=[
-        dict(name='query', type='STRING', description='the search content'),
-        dict(
-            name='k',
-            type='NUMBER',
-            description=
-            'select first k results in the search results as response'),
-    ],
-    required=['query'],
-)
 
 
 class GoogleSearch(BaseAction):
@@ -59,7 +45,7 @@ class GoogleSearch(BaseAction):
                  description: Optional[dict] = None,
                  parser: Type[BaseParser] = JsonParser,
                  enable: bool = True):
-        super().__init__(description or DEFAULT_DESCRIPTION, parser, enable)
+        super().__init__(description, parser, enable)
         api_key = os.environ.get('SERPER_API_KEY', api_key)
         if api_key is None:
             raise ValueError(
@@ -69,8 +55,14 @@ class GoogleSearch(BaseAction):
         self.timeout = timeout
         self.search_type = search_type
 
+    @tool_api
     def run(self, query: str, k: int = 10) -> ActionReturn:
-        """Return the search response."""
+        """一个可以从谷歌搜索结果的API。当你需要对于一个特定问题找到简短明了的回答时，可以使用它。输入应该是一个搜索查询。
+        
+        Args:
+            query (str): the search content
+            k (int): select first k results in the search results as response
+        """
         tool_return = ActionReturn(type=self.name)
         status_code, response = self._search(query, k=k)
         # convert search results to ToolReturn format

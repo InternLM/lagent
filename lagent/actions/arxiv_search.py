@@ -2,41 +2,17 @@ from typing import Optional, Type
 
 import arxiv
 
-from lagent.actions.base_action import BaseAction
+from lagent.actions.base_action import BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
 from lagent.schema import ActionReturn, ActionStatusCode
 
-DEFAULT_DESCRIPTION = dict(
-    name='ArxivSearch',
-    description='Search information from Arxiv.org '
-    'Useful for when you need to answer questions about Physics, Mathematics, '
-    'Computer Science, Quantitative Biology, Quantitative Finance, Statistics, '
-    'Electrical Engineering, and Economics '
-    'from scientific articles on arxiv.org',
-    api_list=[
-        dict(
-            name='get_arxiv_article_information',
-            description=
-            'Run Arxiv search and get the article meta information.',
-            parameters=[
-                dict(
-                    name='query',
-                    type='STRING',
-                    description='the content of search query')
-            ],
-            required=['query'],
-            return_data=[
-                dict(
-                    name='content',
-                    description='a list of 3 arxiv search papers'),
-            ],
-        )
-    ],
-)
-
 
 class ArxivSearch(BaseAction):
-    """ArxivSearch action"""
+    """Search information from Arxiv.org. \
+Useful for when you need to answer questions about Physics, Mathematics, \
+Computer Science, Quantitative Biology, Quantitative Finance, Statistics, \
+Electrical Engineering, and Economics from scientific articles on arxiv.org.
+    """
 
     def __init__(self,
                  top_k_results: int = 3,
@@ -44,13 +20,22 @@ class ArxivSearch(BaseAction):
                  doc_content_chars_max: int = 1500,
                  description: Optional[dict] = None,
                  parser: Type[BaseParser] = JsonParser,
-                 enable: bool = True) -> None:
-        super().__init__(description or DEFAULT_DESCRIPTION, parser, enable)
+                 enable: bool = True):
+        super().__init__(description, parser, enable)
         self.top_k_results = top_k_results
         self.max_query_len = max_query_len
         self.doc_content_chars_max = doc_content_chars_max
 
-    def get_arxiv_article_information(self, query: str):
+    @tool_api(return_dict=True)
+    def get_arxiv_article_information(self, query: str) -> dict:
+        """Run Arxiv search and get the article meta information.
+
+        Args:
+            query (:class:`str`): the content of search query
+
+        Returns:
+            content (:class:`str`): a list of 3 arxiv search papers
+        """
         try:
             results = arxiv.Search(  # type: ignore
                 query[:self.max_query_len],
