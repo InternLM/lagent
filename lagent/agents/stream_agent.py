@@ -1,4 +1,3 @@
-import copy
 import json
 import logging
 from copy import deepcopy
@@ -236,6 +235,7 @@ class StreamAgent(BaseAgent):
         if isinstance(message, dict):
             message = [message]
         inner_history = message[:]
+        offset = len(inner_history)
         agent_return = AgentReturn()
         for _ in range(self.max_turn):
             # list of dict
@@ -283,5 +283,5 @@ class StreamAgent(BaseAgent):
                 inner_history.append(
                     self._protocol.format_response(action_return, name=name))
 
-        agent_return.inner_steps = copy.deepcopy(inner_history)
+        agent_return.inner_steps = inner_history[offset:]
         return agent_return
