@@ -112,7 +112,6 @@ class BaseModel:
 
     def __init__(self,
                  path: str,
-                 max_seq_len: int = 2048,
                  tokenizer_only: bool = False,
                  template_parser: 'LMTemplateParser' = LMTemplateParser,
                  meta_template: Optional[List[Dict]] = None,
@@ -124,7 +123,6 @@ class BaseModel:
                  repetition_penalty: float = 1.0,
                  stop_words: Union[List[str], str] = None):
         self.path = path
-        self.max_seq_len = max_seq_len
         self.tokenizer_only = tokenizer_only
         # meta template
         self.template_parser = template_parser(meta_template)

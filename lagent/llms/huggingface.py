@@ -1,7 +1,7 @@
 import copy
 import warnings
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 from dataclasses import asdict
 
 from .base_llm import BaseModel
@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 class HFTransformer(BaseModel):
     """Model wrapper around HuggingFace general models.
 
-    Adapted from OpenCompass (https://github.com/InternLM/opencompass
-    /blob/main/opencompass/models/huggingface.py)
+    Adapted from Internlm (https://github.com/InternLM/InternLM/blob/main/
+        chat/web_demo.py)
 
     Args:
         path (str): The name or path to HuggingFace's model.
@@ -29,23 +29,11 @@ class HFTransformer(BaseModel):
         meta_template (Dict, optional): The model's meta prompt
             template if needed, in case the requirement of injecting or
             wrapping of any meta instructions.
-        extract_pred_after_decode (bool): Whether to extract the prediction
-            string from the decoded output string, instead of extract the
-            prediction tokens before decoding. Defaults to False.
-        batch_padding (bool): If False, inference with be performed in for-loop
-            without batch padding.
-
-    Note:
-        About ``extract_pred_after_decode``: Commonly, we should extract the
-        the prediction tokens before decoding. But for some tokenizers using
-        ``sentencepiece``, like LLaMA,  this behavior may change the number of
-        whitespaces, which is harmful for Python programming tasks.
     """
 
     def __init__(
             self,
             path: str,
-            max_seq_len: int = 2048,
             tokenizer_path: Optional[str] = None,
             tokenizer_kwargs: dict = dict(),
             tokenizer_only: bool = False,
@@ -54,7 +42,6 @@ class HFTransformer(BaseModel):
             **kwargs):
         super().__init__(
             path=path,
-            max_seq_len=max_seq_len,
             tokenizer_only=tokenizer_only,
             meta_template=meta_template,
             **kwargs)
@@ -97,6 +84,12 @@ class HFTransformer(BaseModel):
             path, trust_remote_code=True, **model_kwargs)
         self.model.eval()
 
+    def tokenize(self, inputs: str):
+        assert isinstance(inputs, str)
+        inputs = self.tokenizer(
+                inputs, return_tensors='pt', return_length=True)
+        return inputs['input_ids'].tolist()
+
     def generate(
         self,
         inputs: List[str],
@@ -137,7 +130,7 @@ class HFTransformer(BaseModel):
             generation_config.update(**kwargs)
             model_kwargs = generation_config.to_dict()
             model_kwargs['attention_mask'] = attention_mask
-            bos_token_id, eos_token_id = (  # noqa: F841  # pylint: disable=W0612
+            _, eos_token_id = (  # noqa: F841  # pylint: disable=W0612
                 generation_config.bos_token_id,
                 generation_config.eos_token_id,
             )
@@ -192,7 +185,7 @@ class HFTransformer(BaseModel):
                 stopping_criteria=stopping_criteria)
             logits_warper = self.model._get_logits_warper(generation_config)
 
-            unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
+            unfinished_sequences = input_ids.new(batch_size).fill_(1)
             scores = None
             while True:
                 model_inputs = self.model.prepare_inputs_for_generation(
@@ -230,9 +223,9 @@ class HFTransformer(BaseModel):
                 output_token_ids = input_ids.cpu().tolist()
                 for i in range(len(output_token_ids)):
                     output_token_ids[i] = output_token_ids[i][:][input_length[i]:]
-                    # 查找序列中第一个出现的 EOS 令牌
+                    # Find the first occurrence of an EOS token in the sequence
                     first_eos_idx = next((idx for idx, token_id in enumerate(output_token_ids[i]) if token_id in eos_token_id), None)
-                    # 如果找到 EOS 令牌，只保留它之前的部分
+                    # If an EOS token is found, only the previous part of it is retained
                     if first_eos_idx is not None:
                         output_token_ids[i] = output_token_ids[i][:first_eos_idx]
 
