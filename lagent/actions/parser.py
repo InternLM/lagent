@@ -1,4 +1,5 @@
 import json
+import re
 from ast import literal_eval
 from typing import Any
 
@@ -84,6 +85,9 @@ class JsonParser(BaseParser):
 
     def parse_inputs(self, inputs: str, name: str = 'run') -> dict:
         try:
+            match = re.search(r'^\s*(```json\n)?(.*)\n```\s*$', inputs, re.S)
+            if match:
+                inputs = match.group(2).strip()
             inputs = json.loads(inputs)
         except json.JSONDecodeError as exc:
             raise ParseError(f'invalid json format: {inputs}') from exc
