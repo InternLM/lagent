@@ -230,22 +230,21 @@ class StreamAgent(BaseAgent):
         super().__init__(
             llm=llm, action_executor=plugin_executor, protocol=protocol)
 
-    def chat_completion(self, message: Union[str, Dict],
-                        **kwargs) -> AgentReturn:
+    def chat(self, message: Union[str, Dict], **kwargs) -> AgentReturn:
         if isinstance(message, str):
             message = dict(role='user', content=message)
         if isinstance(message, dict):
             message = [message]
-        self._inner_history = message[:]
+        inner_history = message[:]
         agent_return = AgentReturn()
         for _ in range(self.max_turn):
             # list of dict
             prompt = self._protocol.format(
-                inner_step=self._inner_history,
+                inner_step=inner_history,
                 plugin_executor=self._action_executor,
                 interpreter_executor=self._interpreter_executor,
             )
-            response = self._llm.chat_completion(prompt, **kwargs)
+            response = self._llm.chat(prompt, **kwargs)
             name, language, action = self._protocol.parse(
                 message=response,
                 plugin_executor=self._action_executor,
@@ -273,17 +272,16 @@ class StreamAgent(BaseAgent):
                                                        action['parameters'])
                 action_return.thought = language
                 agent_return.actions.append(action_return)
-            self._inner_history.append(dict(role='language', content=language))
+            inner_history.append(dict(role='language', content=language))
             if not name or action_return.type == executor.finish_action.name:
                 agent_return.response = language
                 agent_return.state = AgentStatusCode.END
                 break
             else:
-                self._inner_history.append(
+                inner_history.append(
                     dict(role='tool', content=action, name=name))
-                self._inner_history.append(
+                inner_history.append(
                     self._protocol.format_response(action_return, name=name))
 
-        agent_return.inner_steps = copy.deepcopy(self._inner_history)
-        self._session_history += self._inner_history
+        agent_return.inner_steps = copy.deepcopy(inner_history)
         return agent_return
