@@ -51,7 +51,7 @@ def tool_api(func: Optional[Callable] = None,
         return_dict (bool): suggest if returned data is a single dictionary. 
             When enabled, the returns sections in docstrings should indicate the 
             key-value infomation of the dictionary rather than hint a standard 
-            tuple returns. Defaults to ``False``.
+            tuple return. Defaults to ``False``.
             
             .. code-block:: python
                 
@@ -72,7 +72,7 @@ def tool_api(func: Optional[Callable] = None,
                     
                 print(foo.api_description)
             
-        returns_named_value (bool): Whether to parse ``thing: Description`` in 
+        returns_named_value (bool): whether to parse ``thing: Description`` in 
             returns sections as a name and description, rather than a type and 
             description. When true, type must be wrapped in parentheses: 
             ``(int): Description.``. When false, parentheses are optional but 

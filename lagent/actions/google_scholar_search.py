@@ -120,7 +120,7 @@ class GoogleScholar(BaseAction):
             return ActionReturn(
                 errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
 
-    @tool_api
+    @tool_api(return_dict=True)
     def get_author_information(self,
                                author_id: str,
                                hl: Optional[str] = None,
