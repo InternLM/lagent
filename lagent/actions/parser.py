@@ -1,6 +1,7 @@
 import json
+import re
 from ast import literal_eval
-from typing import Any
+from typing import Any, Union
 
 
 class ParseError(Exception):
@@ -82,11 +83,18 @@ class JsonParser(BaseParser):
 
     PARAMETER_DESCRIPTION = '如果调用该工具，你必须使用Json格式 {key: value} 传参，其中key为参数名称'
 
-    def parse_inputs(self, inputs: str, name: str = 'run') -> dict:
-        try:
-            inputs = json.loads(inputs)
-        except json.JSONDecodeError as exc:
-            raise ParseError(f'invalid json format: {inputs}') from exc
+    def parse_inputs(self,
+                     inputs: Union[str, dict],
+                     name: str = 'run') -> dict:
+        if not isinstance(inputs, dict):
+            try:
+                match = re.search(r'^\s*(```json\n)?(.*)\n```\s*$', inputs,
+                                  re.S)
+                if match:
+                    inputs = match.group(2).strip()
+                inputs = json.loads(inputs)
+            except json.JSONDecodeError as exc:
+                raise ParseError(f'invalid json format: {inputs}') from exc
         input_keys = set(inputs)
         all_keys = {param['name'] for param in self._api2param[name]}
         if not input_keys.issubset(all_keys):
@@ -107,11 +115,14 @@ class TupleParser(BaseParser):
 
     PARAMETER_DESCRIPTION = '如果调用该工具，你必须使用Tuple格式 (arg1, arg2, arg3) 传参，且参数是有序的'
 
-    def parse_inputs(self, inputs: str, name: str = 'run') -> dict:
-        try:
-            inputs = literal_eval(inputs)
-        except Exception as exc:
-            raise ParseError(f'invalid tuple format: {inputs}') from exc
+    def parse_inputs(self,
+                     inputs: Union[str, tuple],
+                     name: str = 'run') -> dict:
+        if not isinstance(inputs, tuple):
+            try:
+                inputs = literal_eval(inputs)
+            except Exception as exc:
+                raise ParseError(f'invalid tuple format: {inputs}') from exc
         if len(inputs) < len(self._api2required[name]):
             raise ParseError(
                 f'API takes {len(self._api2required[name])} required positional '

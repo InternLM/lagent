@@ -2,114 +2,8 @@ from typing import Dict, Optional, Type
 
 from pptx import Presentation
 
-from lagent.actions.base_action import BaseAction
+from lagent.actions.base_action import BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
-
-DEFAULT_DESCRIPTION = dict(
-    name='PPT',
-    description=
-    'This tool allows you to create ppt slides with text, paragraph, images, with good looking styles',
-    api_list=[
-        dict(
-            name='create_file',
-            description='Create a pptx file with specific themes',
-            parameters=[
-                dict(
-                    name='theme', type='STRING', description='the theme used'),
-                dict(
-                    name='abs_location',
-                    type='STRING',
-                    description='the ppt file\'s absolute location')
-            ],
-            required=['theme', 'abs_location'],
-            return_data=[
-                dict(name='status', description='the result of the execution')
-            ]),
-        dict(
-            name='get_image',
-            description=
-            'Get an image given comma separated keywords, return the image path.',
-            parameters=[
-                dict(
-                    name='keywords',
-                    type='STRING',
-                    description=
-                    'the comma separated keywords to describe the image')
-            ],
-            required=['keywords'],
-            return_data=[
-                dict(name='status', description='the result of the execution')
-            ]),
-        dict(
-            name='add_first_page',
-            description='Add the first page of ppt.',
-            parameters=[
-                dict(
-                    name='title',
-                    type='STRING',
-                    description='the title of ppt'),
-                dict(
-                    name='subtitle',
-                    type='STRING',
-                    description='the subtitle of ppt')
-            ],
-            required=['title', 'subtitle'],
-            return_data=[
-                dict(name='status', description='the result of the execution')
-            ]),
-        dict(
-            name='add_text_page',
-            description='Add text page of ppt',
-            parameters=[
-                dict(
-                    name='title',
-                    type='STRING',
-                    description='the title of the page'),
-                dict(
-                    name='bullet_items',
-                    type='STRING',
-                    description=
-                    'bullet_items should be string, for multiple bullet items, please use [SPAN] to separate them.'
-                )
-            ],
-            required=['title', 'bullet_items'],
-            return_data=[
-                dict(name='status', description='the result of the execution')
-            ]),
-        dict(
-            name='add_text_image_page',
-            description=
-            'Add a text page with one image. Image should be a path',
-            parameters=[
-                dict(
-                    name='title',
-                    type='STRING',
-                    description='the title of the page'),
-                dict(
-                    name='bullet_items',
-                    type='STRING',
-                    description=
-                    'bullet_items should be string, for multiple bullet items, please use [SPAN] to separate them.'
-                ),
-                dict(
-                    name='image',
-                    type='STRING',
-                    description='the path of the image')
-            ],
-            required=['title', 'bullet_items', 'image'],
-            return_data=[
-                dict(name='status', description='the result of the execution')
-            ]),
-        dict(
-            name='submit_file',
-            description=
-            'When all steps done, YOU MUST use submit_file() to submit your work.',
-            parameters=[],
-            required=[],
-            return_data=[
-                dict(name='status', description='the result of the execution')
-            ])
-    ])
 
 THEME_MAPPING = {
     'Default': {
@@ -129,12 +23,22 @@ class PPT(BaseAction):
                  description: Optional[dict] = None,
                  parser: Type[BaseParser] = JsonParser,
                  enable: bool = True):
-        super().__init__(description or DEFAULT_DESCRIPTION, parser, enable)
+        super().__init__(description, parser, enable)
         self.theme_mapping = theme_mapping or THEME_MAPPING
         self.pointer = None
         self.location = None
 
+    @tool_api(return_dict=True)
     def create_file(self, theme: str, abs_location: str) -> dict:
+        """Create a pptx file with specific themes
+
+        Args:
+            theme (:class:`str`): the theme used
+            abs_location (:class:`str`): the ppt file's absolute location
+
+        Returns:
+            status: the result of the execution
+        """
         self.location = abs_location
         try:
             self.pointer = Presentation(self.theme_mapping[theme]['template'])
@@ -144,7 +48,17 @@ class PPT(BaseAction):
             print(e)
         return dict(status='created a ppt file.')
 
+    @tool_api(return_dict=True)
     def add_first_page(self, title: str, subtitle: str) -> dict:
+        """Add the first page of ppt.
+
+        Args:
+            title (:class:`str`): the title of ppt
+            subtitle (:class:`str`): the subtitle of ppt
+
+        Returns:
+            status: the result of the execution
+        """
         layout_name = self.theme_mapping[
             self.pointer.slide_master.name]['title']
         layout = next(i for i in self.pointer.slide_master.slide_layouts
@@ -156,7 +70,17 @@ class PPT(BaseAction):
             ph_subtitle.text = subtitle
         return dict(status='added page')
 
+    @tool_api(return_dict=True)
     def add_text_page(self, title: str, bullet_items: str) -> dict:
+        """Add text page of ppt
+
+        Args:
+            title (:class:`str`): the title of the page
+            bullet_items (:class:`str`): bullet_items should be string, for multiple bullet items, please use [SPAN] to separate them.
+
+        Returns:
+            status: the result of the execution
+        """
         layout_name = self.theme_mapping[
             self.pointer.slide_master.name]['single']
         layout = next(i for i in self.pointer.slide_master.slide_layouts
@@ -175,8 +99,19 @@ class PPT(BaseAction):
             p.level = 0
         return dict(status='added page')
 
+    @tool_api(return_dict=True)
     def add_text_image_page(self, title: str, bullet_items: str,
                             image: str) -> dict:
+        """Add a text page with one image. Image should be a path
+
+        Args:
+            title (:class:`str`): the title of the page
+            bullet_items (:class:`str`): bullet_items should be string, for multiple bullet items, please use [SPAN] to separate them.
+            image (:class:`str`): the path of the image
+
+        Returns:
+            status: the result of the execution
+        """
         layout_name = self.theme_mapping[self.pointer.slide_master.name]['two']
         layout = next(i for i in self.pointer.slide_master.slide_layouts
                       if i.name == layout_name)
@@ -203,7 +138,13 @@ class PPT(BaseAction):
 
         return dict(status='added page')
 
+    @tool_api(return_dict=True)
     def submit_file(self) -> dict:
+        """When all steps done, YOU MUST use submit_file() to submit your work.
+
+        Returns:
+            status: the result of the execution
+        """
         # file_path = os.path.join(self.CACHE_DIR, f'{self._return_timestamp()}.pptx')
         # self.pointer.save(file_path)
         # retreival_url = upload_file(file_path)

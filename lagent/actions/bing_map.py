@@ -4,97 +4,8 @@ from typing import Optional, Type
 
 import requests
 
-from lagent.actions.base_action import BaseAction
+from lagent.actions.base_action import BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
-
-DEFAULT_DESCRIPTION = dict(
-    name='BINGMap',
-    description='Plugin for looking up map information',
-    api_list=[
-        dict(
-            name='get_distance',
-            description='Get the distance between two locations in km.',
-            parameters=[
-                dict(
-                    name='start',
-                    type='STRING',
-                    description='The start location.'),
-                dict(
-                    name='end', type='STRING', description='The end location.')
-            ],
-            required=['start', 'end'],
-            return_data=[
-                dict(name='distance', description='the distance in km.')
-            ]),
-        dict(
-            name='get_route',
-            description='Get the route between two locations in km.',
-            parameters=[
-                dict(
-                    name='start',
-                    type='STRING',
-                    description='The start location.'),
-                dict(
-                    name='end', type='STRING', description='The end location.')
-            ],
-            required=['start', 'end'],
-            return_data=[
-                dict(
-                    name='route', description='the route, a list of actions.')
-            ]),
-        dict(
-            name='get_coordinates',
-            description='Get the coordinates of a location.',
-            parameters=[
-                dict(
-                    name='location',
-                    type='STRING',
-                    description='the location need to get coordinates.')
-            ],
-            required=['location'],
-            return_data=[
-                dict(
-                    name='latitude',
-                    description='the latitude of the location.'),
-                dict(
-                    name='longitude',
-                    description='the longitude of the location.')
-            ]),
-        dict(
-            name='search_nearby',
-            description=
-            'Search for places nearby a location, within a given radius, and return the results into a list. You can use either the places name or the latitude and longitude.',
-            parameters=[
-                dict(
-                    name='search_term',
-                    type='STRING',
-                    description='the place name'),
-                dict(
-                    name='places',
-                    type='STRING',
-                    description='the name of the location.'),
-                dict(
-                    name='latitude',
-                    type='FLOAT',
-                    description='the latitude of the location.'),
-                dict(
-                    name='longitude',
-                    type='FLOAT',
-                    description='the longitude of the location.'),
-                dict(
-                    name='radius',
-                    type='NUMBER',
-                    description='radius in meters.')
-            ],
-            required=['search_term'],
-            return_data=[
-                dict(
-                    name='places',
-                    description=
-                    'the list of places, each place is a dict with name and address, at most 5 places.'
-                )
-            ]),
-    ])
 
 
 class BINGMap(BaseAction):
@@ -105,7 +16,7 @@ class BINGMap(BaseAction):
                  description: Optional[dict] = None,
                  parser: Type[BaseParser] = JsonParser,
                  enable: bool = True) -> None:
-        super().__init__(description or DEFAULT_DESCRIPTION, parser, enable)
+        super().__init__(description, parser, enable)
         key = os.environ.get('BING_MAP_KEY')
         if key is None:
             raise ValueError(
@@ -114,7 +25,17 @@ class BINGMap(BaseAction):
         self.key = key
         self.base_url = 'http://dev.virtualearth.net/REST/V1/'
 
+    @tool_api(return_dict=True)
     def get_distance(self, start: str, end: str) -> dict:
+        """Get the distance between two locations in km.
+
+        Args:
+            start (:class:`str`): The start location
+            end (:class:`str`): The end location
+
+        Returns:
+            distance (:class:`str`): the distance in km.
+        """
         # Request URL
         url = self.base_url + 'Routes/Driving?o=json&wp.0=' + start + '&wp.1=' + end + '&key=' + self.key
         # GET request
@@ -127,7 +48,17 @@ class BINGMap(BaseAction):
         distance = route['travelDistance']
         return dict(distance=distance)
 
+    @tool_api(return_dict=True)
     def get_route(self, start: str, end: str) -> dict:
+        """Get the route between two locations in km.
+
+        Args:
+            start (:class:`str`): The start location
+            end (:class:`str`): The end location
+
+        Returns:
+            route (:class:`list`): the route, a list of actions.
+        """
         # Request URL
         url = self.base_url + 'Routes/Driving?o=json&wp.0=' + start + '&wp.1=' + end + '&key=' + self.key
         # GET request
@@ -143,7 +74,17 @@ class BINGMap(BaseAction):
                 route_text.append(item['instruction']['text'])
         return dict(route=route_text)
 
+    @tool_api(return_dict=True)
     def get_coordinates(self, location: str) -> dict:
+        """Get the coordinates of a location.
+
+        Args:
+            location (:class:`str`): the location need to get coordinates.
+
+        Returns:
+            latitude (:class:`float`): the latitude of the location.
+            longitude (:class:`float`): the longitude of the location.
+        """
         url = self.base_url + 'Locations'
         params = {'query': location, 'key': self.key}
         response = requests.get(url, params=params)
@@ -152,12 +93,27 @@ class BINGMap(BaseAction):
             'coordinates']
         return dict(latitude=coordinates[0], longitude=coordinates[1])
 
+    @tool_api(return_dict=True)
     def search_nearby(self,
                       search_term: str,
                       places: str = 'unknown',
                       latitude: float = 0.0,
                       longitude: float = 0.0,
                       radius: int = 5000) -> dict:  #  radius in meters
+        """Search for places nearby a location, within a given radius, and \
+return the results into a list. You can use either the places name or the \
+latitude and longitude.
+
+        Args:
+            search_term (:class:`str`): the place name.
+            places (:class:`str`): the name of the location. Defaults to ``'unknown'``.
+            latitude (:class:`float`): the latitude of the location. Defaults to ``0.0``.
+            longitude (:class:`float`): the longitude of the location. Defaults to ``0.0``.
+            radius (:class:`int`): radius in meters. Defaults to ``5000``.
+
+        Returns:
+            places (:class:`list`): the list of places, each place is a dict with name and address, at most 5 places.
+        """
         url = self.base_url + 'LocalSearch'
         if places != 'unknown':
             pos = self.get_coordinates(**{'location': places})
