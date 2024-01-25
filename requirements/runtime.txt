@@ -5,3 +5,7 @@ requests
 tiktoken
 griffe
 phx-class-registry
+jupyter
+jupyter_client
+json5
+pillow
