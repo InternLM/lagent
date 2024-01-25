@@ -287,3 +287,123 @@ class StreamAgent(BaseAgent):
             yield agent_return
         agent_return.inner_steps = inner_history[offset:]
         yield agent_return
+
+    def stream_chat(self, message: List[dict], session_id=3) -> AgentReturn:
+        if isinstance(message, str):
+            message = dict(role='user', content=message)
+        if isinstance(message, dict):
+            message = [message]
+        inner_history = message[:]
+        offset = len(inner_history) - 1
+        agent_return = AgentReturn()
+        tool_start_token = self._protocol.tool['start_token']
+        plugin_token = self._protocol.tool['name_map']['plugin']
+        interpreter_token = self._protocol.tool['name_map']['interpreter']
+        tool_end_token = self._protocol.tool['end'].strip()
+
+        def handle_positive_state(chunk, state, agent_return, finish_thought):
+            if tool_start_token not in chunk:
+                # case 1: thought...
+                response = chunk
+            else:
+                if not finish_thought:
+                    # case 2: thought...<|action_start|>name=
+                    response = chunk.split(tool_start_token)[0]
+                    finish_thought = True
+                elif plugin_token in chunk:
+                    state, response = handle_plugin(chunk)
+                elif interpreter_token in chunk:
+                    state, response = handle_interpreter(chunk)
+            agent_return.state = state
+            agent_return.response = response
+            return agent_return, finish_thought
+
+        def handle_plugin(chunk):
+            state = (
+                AgentStatusCode.PLUGIN_END
+                if tool_end_token in chunk else AgentStatusCode.PLUGIN_START)
+            # case 1: thought...<|action_start|>name=<plugin>...
+            plugin_chunk = chunk.split(plugin_token)[-1]
+            # case 2: thought...<|action_start|>name=<plugin>...<|action_end|>
+            response = plugin_chunk.split(tool_end_token)[0]
+            return state, response
+
+        def handle_interpreter(chunk):
+            state = (
+                AgentStatusCode.CODE_END
+                if tool_end_token in chunk else AgentStatusCode.CODING)
+            # case 1: thought...<|action_start|>name=<interpreter>...
+            interpreter_chunk = chunk.split(interpreter_token)[-1]
+            # case 2: thought...<|action_start|>name=
+            # <interpreter>...<|action_end|>
+            response = interpreter_chunk.split(tool_end_token)[0]
+            return state, response
+
+        def handle_negative_state(res, state, agent_return):
+            agent_return.errmsg = res
+            agent_return.state = state
+            return agent_return
+
+        for turn in range(self.max_turn):
+            # list of dict
+            prompt = self._protocol.format(
+                inner_step=inner_history,
+                plugin_executor=self._action_executor,
+                interpreter_executor=self._interpreter_executor,
+            )
+            response = ''
+            finish_thought = False
+            for state, res, _ in self._llm.stream_chat(prompt, session_id):
+                response = res
+                if state.value >= 0:
+                    _agent_return, finish_thought = handle_positive_state(
+                        res, state, deepcopy(agent_return), finish_thought)
+                    yield _agent_return
+                elif state.value < 0:
+                    yield handle_negative_state(res, state,
+                                                deepcopy(agent_return))
+            name, language, action = self._protocol.parse(
+                message=response,
+                plugin_executor=self._action_executor,
+                interpreter_executor=self._interpreter_executor,
+            )
+            if name:
+                if name == 'plugin':
+                    if self._action_executor:
+                        executor = self._action_executor
+                    else:
+                        logging.info(msg='No plugin is instantiated!')
+                        continue
+                elif name == 'interpreter':
+                    if self._interpreter_executor:
+                        executor = self._interpreter_executor
+                    else:
+                        logging.info(msg='No interpreter is instantiated!')
+                        continue
+                else:
+                    logging.info(
+                        msg=(f"Invalid name '{name}'. Currently only 'plugin'"
+                             "and 'interpreter' are supported."))
+                    continue
+                action_return: ActionReturn = executor(action['name'],
+                                                       action['parameters'])
+                action_return.thought = language
+                agent_return.actions.append(action_return)
+            inner_history.append(dict(role='language', content=language))
+            if not name or action_return.type == executor.finish_action.name:
+                agent_return.response = language
+                agent_return.state = AgentStatusCode.END
+                break
+            else:
+                inner_history.append(
+                    dict(role='tool', content=action, name=name))
+                inner_history.append(
+                    self._protocol.format_response(action_return, name=name))
+                if name == 'interpreter':
+                    agent_return.state = AgentStatusCode.CODE_RETURN
+                else:
+                    agent_return.state = AgentStatusCode.PLUGIN_RETURN
+                yield agent_return
+        agent_return.inner_steps = inner_history[offset:]
+        agent_return.state = AgentStatusCode.END
+        yield agent_return

@@ -1,8 +1,4 @@
-import json
 from typing import List, Optional, Union
-
-
-import requests
 
 from lagent.llms.base_llm import BaseModel
 from lagent.schema import AgentStatusCode
@@ -102,9 +98,9 @@ class TritonClient(BaseModel):
             if status.value < 0:
                 break
         if status.value == 0:
-            self.chatbot._session.histories = \
-                self.chatbot._session.histories + self.chatbot._session.prompt + \
-                self.chatbot._session.response
+            self.chatbot._session.histories = (
+                self.chatbot._session.histories +
+                self.chatbot._session.prompt + self.chatbot._session.response)
             # remove stop_words
             res = filter_suffix(res, self.gen_params.get('stop_words'))
             return res
@@ -170,9 +166,9 @@ class TritonClient(BaseModel):
             else:
                 yield self.state_map.get(status), res, _
         if status.value == 0:
-            self.chatbot._session.histories = \
-                self.chatbot._session.histories + self.chatbot._session.prompt + \
-                self.chatbot._session.response
+            self.chatbot._session.histories = (
+                self.chatbot._session.histories +
+                self.chatbot._session.prompt + self.chatbot._session.response)
             yield self.state_map.get(status), res, _
         else:
             return ''
@@ -181,7 +177,8 @@ class TritonClient(BaseModel):
         import mmengine
         new_gen_params = self.update_gen_params(**kwargs)
         self.gen_params['stop_words'] = new_gen_params.pop('stop_words')
-        stop_words = self.chatbot._stop_words(self.gen_params.get('stop_words'))
+        stop_words = self.chatbot._stop_words(
+            self.gen_params.get('stop_words'))
         cfg = mmengine.Config(
             dict(
                 session_len=self.chatbot.model.session_len,
@@ -198,8 +195,8 @@ class LMDeployPipeline(BaseModel):
         path (str): The path to the model.
             It could be one of the following options:
                     - i) A local directory path of a turbomind model which is
-                        converted by `lmdeploy convert` command or download from
-                        ii) and iii).
+                        converted by `lmdeploy convert` command or download 
+                        from ii) and iii).
                     - ii) The model_id of a lmdeploy-quantized model hosted
                         inside a model repo on huggingface.co, such as
                         "InternLM/internlm-chat-20b-4bit",
@@ -270,20 +267,19 @@ class LMDeployServer(BaseModel):
         server_name (str): host ip for serving
         server_port (int): server port
         tp (int):
-        log_level (str): set log level whose value among [CRITICAL, ERROR, WARNING, INFO, DEBUG]
+        log_level (str): set log level whose value among
+            [CRITICAL, ERROR, WARNING, INFO, DEBUG]
     """
 
-    def __init__(
-        self,
-        path: str,
-        model_name: Optional[str] = None,
-        server_name: str = '0.0.0.0',
-        server_port: int = 23333,
-        tp: int = 1,
-        log_level: str = 'WARNING',
-        serve_cfg=dict(),
-        **kwargs
-    ):
+    def __init__(self,
+                 path: str,
+                 model_name: Optional[str] = None,
+                 server_name: str = '0.0.0.0',
+                 server_port: int = 23333,
+                 tp: int = 1,
+                 log_level: str = 'WARNING',
+                 serve_cfg=dict(),
+                 **kwargs):
         super().__init__(path=path, **kwargs)
         # TODO get_logger issue in multi processing
         import lmdeploy
@@ -296,15 +292,14 @@ class LMDeployServer(BaseModel):
             log_level=log_level,
             **serve_cfg)
 
-    def generate(
-            self,
-            inputs: Union[str, List[str]],
-            session_id: int = 2967,
-            sequence_start: bool = True,
-            sequence_end: bool = True,
-            ignore_eos: bool = False,
-            timeout: int = 30,
-            **kwargs) -> List[str]:
+    def generate(self,
+                 inputs: Union[str, List[str]],
+                 session_id: int = 2967,
+                 sequence_start: bool = True,
+                 sequence_end: bool = True,
+                 ignore_eos: bool = False,
+                 timeout: int = 30,
+                 **kwargs) -> List[str]:
         batched = True
         if isinstance(inputs, str):
             inputs = [inputs]
@@ -314,16 +309,15 @@ class LMDeployServer(BaseModel):
 
         resp = [''] * len(inputs)
         for text in self.client.completions_v1(
-            self.path,
-            inputs,
-            session_id=session_id,
-            sequence_start=sequence_start,
-            sequence_end=sequence_end,
-            stream=False,
-            ignore_eos=ignore_eos,
-            timeout=timeout,
-            **gen_params
-        ):
+                self.path,
+                inputs,
+                session_id=session_id,
+                sequence_start=sequence_start,
+                sequence_end=sequence_end,
+                stream=False,
+                ignore_eos=ignore_eos,
+                timeout=timeout,
+                **gen_params):
             resp = [
                 resp[i] + item['text']
                 for i, item in enumerate(text['choices'])
@@ -345,13 +339,14 @@ class LMDeployServer(BaseModel):
                     **kwargs):
 
         gen_params = self.update_gen_params(**kwargs)
+        prompt = self.template_parser(inputs)
 
         resp = ''
         finished = False
         stop_words = self.gen_params.get('stop_words')
         for text in self.client.completions_v1(
                 self.path,
-                inputs,
+                prompt,
                 session_id=session_id,
                 sequence_start=sequence_start,
                 sequence_end=sequence_end,
