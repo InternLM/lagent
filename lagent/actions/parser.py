@@ -1,7 +1,7 @@
 import json
 import re
 from ast import literal_eval
-from typing import Any, Union
+from typing import Any, List, Union
 
 
 class ParseError(Exception):
@@ -58,14 +58,15 @@ class BaseParser:
         inputs = {self._api2param[name][0]['name']: inputs}
         return inputs
 
-    def parse_outputs(self, outputs: Any) -> dict:
+    def parse_outputs(self, outputs: Any) -> List[dict]:
         """parser outputs returned by the action
 
         Args:
             outputs (:class:`Any`): raw output of the action
 
         Returns:
-            :class:`dict`: processed output
+            :class:`List[dict]`: processed output of which each member is a 
+                dictionary with two keys - 'type' and 'content'.
         """
         if isinstance(outputs, dict):
             outputs = json.dumps(outputs, ensure_ascii=False)
