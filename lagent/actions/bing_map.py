@@ -25,7 +25,7 @@ class BINGMap(BaseAction):
         self.key = key
         self.base_url = 'http://dev.virtualearth.net/REST/V1/'
 
-    @tool_api(return_dict=True)
+    @tool_api(explode_return=True)
     def get_distance(self, start: str, end: str) -> dict:
         """Get the distance between two locations in km.
 
@@ -34,7 +34,8 @@ class BINGMap(BaseAction):
             end (:class:`str`): The end location
 
         Returns:
-            distance (:class:`str`): the distance in km.
+            :class:`dict`: distance information
+                * distance (str): the distance in km.
         """
         # Request URL
         url = self.base_url + 'Routes/Driving?o=json&wp.0=' + start + '&wp.1=' + end + '&key=' + self.key
@@ -48,7 +49,7 @@ class BINGMap(BaseAction):
         distance = route['travelDistance']
         return dict(distance=distance)
 
-    @tool_api(return_dict=True)
+    @tool_api(explode_return=True)
     def get_route(self, start: str, end: str) -> dict:
         """Get the route between two locations in km.
 
@@ -57,7 +58,8 @@ class BINGMap(BaseAction):
             end (:class:`str`): The end location
 
         Returns:
-            route (:class:`list`): the route, a list of actions.
+            :class:`dict`: route information
+                * route (list): the route, a list of actions.
         """
         # Request URL
         url = self.base_url + 'Routes/Driving?o=json&wp.0=' + start + '&wp.1=' + end + '&key=' + self.key
@@ -74,7 +76,7 @@ class BINGMap(BaseAction):
                 route_text.append(item['instruction']['text'])
         return dict(route=route_text)
 
-    @tool_api(return_dict=True)
+    @tool_api(explode_return=True)
     def get_coordinates(self, location: str) -> dict:
         """Get the coordinates of a location.
 
@@ -82,8 +84,9 @@ class BINGMap(BaseAction):
             location (:class:`str`): the location need to get coordinates.
 
         Returns:
-            latitude (:class:`float`): the latitude of the location.
-            longitude (:class:`float`): the longitude of the location.
+            :class:`dict`: coordinates information        
+                * latitude (float): the latitude of the location.
+                * longitude (float): the longitude of the location.
         """
         url = self.base_url + 'Locations'
         params = {'query': location, 'key': self.key}
@@ -93,7 +96,7 @@ class BINGMap(BaseAction):
             'coordinates']
         return dict(latitude=coordinates[0], longitude=coordinates[1])
 
-    @tool_api(return_dict=True)
+    @tool_api(explode_return=True)
     def search_nearby(self,
                       search_term: str,
                       places: str = 'unknown',
@@ -112,7 +115,8 @@ latitude and longitude.
             radius (:class:`int`): radius in meters. Defaults to ``5000``.
 
         Returns:
-            places (:class:`list`): the list of places, each place is a dict with name and address, at most 5 places.
+            :class:`dict`: places information
+                * places (list): the list of places, each place is a dict with name and address, at most 5 places.
         """
         url = self.base_url + 'LocalSearch'
         if places != 'unknown':
