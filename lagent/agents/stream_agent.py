@@ -14,23 +14,31 @@ API_PREFIX = (
     "This is the subfunction for tool '{tool_name}', you can use this tool. "
     'The description of this function is: \n{description}')
 
-INTERPRETER_CN = ('你现在可以使用一个支持 Python 代码执行的 Jupyter 笔记本环境。只需向 python 发'
-                  '送代码，即可在这个有状态环境中进行运行。这个功能适用于数据分析或处理（如数据操作和'
-                  '图形制作），复杂计算（如数学和物理问题），编程示例（用于理解编程概念或语言特性），文'
-                  '本处理和分析（包括文本分析和自然语言处理），机器学习和数据科学（模型训练和数据可视化'
-                  '展示），以及文件操作和数据导入（处理CSV、JSON等格式文件）。')
+META_INS = ('You are InternLM, a large language model trained by PJLab. '
+            'Answer as concisely as possible. '
+            '当开启工具以及代码时，根据需求选择合适的工具进行调用')
 
-PLUGIN_CN = ('你可以使用如下工具：'
-             '\n{prompt}\n'
-             '如果你已经获得足够信息，请直接给出答案. 避免不必要的工具调用! '
-             '同时注意你可以使用的工具，不要随意捏造！')
+INTERPRETER_CN = ('你现在可以通过如下格式向 Jupyter Notebook 发送并执行代码:'
+                  '\n<|action_start|><|interpreter|>```python\n\n代码\n\n```\n'
+                  '\n当遇到以下问题时，请使用上述格式调用 Jupyter Notebook 去解决，并根据执行结果做出友好的回复：\n'
+                  '1. 文件操作和数据导入，比如处理CSV、JSON等格式文件\n'
+                  '2. 数据分析或处理，比如数据操作或图像绘制如折线图、柱状图等\n'
+                  '3. 数学相关的问题。当遇到数学问题时，你需要分析题目，并给出代码去解决这个题目')
+
+PLUGIN_CN = (
+    '你可以使用如下工具：'
+    '\n{prompt}\n'
+    '当你需要使用工具时，你可以使用如下格式：\n'
+    '<|action_start|><|plugin|>{{"name": "工具名称", "parameters": {{参数}}}}\n'
+    '如果你已经获得足够信息，请直接给出答案. 避免不必要的工具调用! '
+    '同时注意你可以使用的工具，不要随意捏造！')
 
 
 class StreamProtocol:
 
     def __init__(
         self,
-        meta_prompt=None,
+        meta_prompt=META_INS,
         interpreter_prompt=INTERPRETER_CN,
         plugin_prompt=PLUGIN_CN,
         few_shot=None,
@@ -41,11 +49,10 @@ class StreamProtocol:
         ),
         tool=dict(
             begin='{start_token}{name}\n',
-            start_token='[UNUSED_TOKEN_144]',
-            name_map=dict(
-                plugin='[UNUSED_TOKEN_141]', interpreter='[UNUSED_TOKEN_142]'),
+            start_token='<|action_start|>',
+            name_map=dict(plugin='<|plugin|>', interpreter='<|interpreter|>'),
             belong='assistant',
-            end='[UNUSED_TOKEN_143]\n',
+            end='<|action_end|>\n',
         ),
         execute: dict = dict(
             role='execute', begin='', end='', fallback_role='environment'),
@@ -124,10 +131,9 @@ class StreamProtocol:
         if self.meta_prompt:
             formatted.append(dict(role='system', content=self.meta_prompt))
         if interpreter_executor and self.interpreter_prompt:
-            interpreter_info = list(
-                interpreter_executor.get_actions_info().items())[0]
+            interpreter_info = interpreter_executor.get_actions_info()[0]
             interpreter_prompt = self.interpreter_prompt.format(
-                code_prompt=interpreter_info[1])
+                code_prompt=interpreter_info['description'])
             formatted.append(
                 dict(
                     role='system',
@@ -135,16 +141,12 @@ class StreamProtocol:
                     name='interpreter'))
         if plugin_executor and plugin_executor.actions and self.plugin_prompt:
             plugin_descriptions = []
-            for api_name, api_info in plugin_executor.get_actions_info().items(
-            ):
+            for api_info in plugin_executor.get_actions_info():
+                plugin = deepcopy(api_info)
                 if isinstance(api_info, dict):
-                    plugin = deepcopy(api_info)
-                    tool_name = api_name.split('.')[0]
-                    plugin['name'] = api_name
+                    tool_name = api_info['name'].split('.')[0]
                     plugin['description'] = API_PREFIX.format(
                         tool_name=tool_name, description=plugin['description'])
-                else:
-                    plugin = dict(name=api_name, description=api_info)
                 plugin_descriptions.append(plugin)
             plugin_prompt = self.plugin_prompt.format(
                 prompt=json.dumps(
@@ -258,6 +260,6 @@ class StreamAgent(BaseAgent):
                     dict(role='tool', content=action, name=name))
                 inner_history.append(
                     self._protocol.format_response(action_return, name=name))
-
+            yield agent_return
         agent_return.inner_steps = inner_history[offset:]
-        return agent_return
+        yield agent_return
