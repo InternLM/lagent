@@ -169,20 +169,22 @@ class ReActProtocol:
         action_input = arg_match[-1]
         return thought, action.strip(), action_input.strip().strip('"')
 
-    def format_response(self, action_return: ActionReturn) -> str:
+    def format_response(self, action_return: ActionReturn) -> dict:
         """format the final response at current step.
 
         Args:
             action_return (ActionReturn): return value of the current action.
 
         Returns:
-            str: the final response at current step.
+            dict: the final response at current step.
         """
         if action_return.state == ActionStatusCode.SUCCESS:
-            response = action_return.result['text']
+            response = action_return.format_result()
         else:
             response = action_return.errmsg
-        return self.response['begin'] + response + self.response['end']
+        return dict(
+            role='system',
+            content=self.response['begin'] + response + self.response['end'])
 
 
 class ReAct(BaseAgent):
@@ -237,12 +239,9 @@ class ReAct(BaseAgent):
             action_return.thought = thought
             agent_return.actions.append(action_return)
             if action_return.type == self._action_executor.finish_action.name:
-                agent_return.response = action_return.result['text']
+                agent_return.response = action_return.format_result()
                 break
-            inner_history.append(
-                dict(
-                    role='system',
-                    content=self._protocol.format_response(action_return)))
+            inner_history.append(self._protocol.format_response(action_return))
         else:
             agent_return.response = default_response
         agent_return.inner_steps = inner_history[offset:]

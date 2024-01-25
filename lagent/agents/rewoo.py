@@ -191,7 +191,7 @@ class ReWOOProtocol:
         worker_log = ''
         for thought, action_return in zip(thought_list, action_return_list):
             if action_return.state == ActionStatusCode.SUCCESS:
-                action_resp = action_return.result['text']
+                action_resp = action_return.format_result()
             else:
                 action_resp = action_return.errmsg
             worker_response = self.worker_prompt.format(
@@ -273,7 +273,7 @@ class ReWOO(BaseAgent):
             for prev_ptr in prev_ptrs:
                 ptr_num = int(prev_ptr.strip('#E')) - 1  # start from 0
                 actions_input[action_id] = actions_input[action_id].replace(
-                    prev_ptr, action_responses[ptr_num].result['text'])
+                    prev_ptr, action_responses[ptr_num].format_result())
             action_return: ActionReturn = self._action_executor(
                 actions[action_id], actions_input[action_id])
             action_responses.append(action_return)
