@@ -14,6 +14,18 @@
 
    switch_language.md
 
+.. toctree::
+   :maxdepth: 1
+   :caption: API 参考
+
+   autoapi/lagent/actions/index
+   autoapi/lagent/agents/index
+   autoapi/lagent/llms/index
+   autoapi/lagent/utils/index
+   autoapi/lagent/schema/index
+   autoapi/lagent/version/index
+
+
 导引
 ==================
 
