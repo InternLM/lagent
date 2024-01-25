@@ -36,11 +36,22 @@ class ActionReturn:
     args: Optional[dict] = None
     url: Optional[str] = None
     type: Optional[str] = None
-    result: Optional[str] = None
+    result: Optional[List[dict]] = None
     errmsg: Optional[str] = None
     state: Union[ActionStatusCode, int] = ActionStatusCode.SUCCESS
     thought: Optional[str] = None
     valid: Optional[ActionValidCode] = ActionValidCode.OPEN
+
+    def format_result(self) -> str:
+        """Concatenate items in result"""
+        result = []
+        for item in self.result or []:
+            if item['type'] == 'text':
+                result.append(item['content'])
+            else:
+                result.append(f"[{item['type']}]({item['content']})")
+        result = '\n'.join(result)
+        return result
 
 
 # 需要集成int，如此asdict可以把AgentStatusCode 转换成 int

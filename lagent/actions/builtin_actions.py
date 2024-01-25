@@ -102,7 +102,7 @@ class FinishAction(BaseAction):
         action_return = ActionReturn(
             url=None,
             args=dict(text=response),
-            result=dict(text=response),
+            result=[dict(type='text', content=response)],
             type=self.name,
             valid=ActionValidCode.FINISH,
             state=ActionStatusCode.SUCCESS)

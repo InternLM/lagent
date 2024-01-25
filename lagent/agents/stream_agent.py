@@ -177,32 +177,9 @@ class StreamProtocol:
                 parameters=dict(command=code))
         return None, message, None
 
-    def format_response(self, action_return, name) -> str:
+    def format_response(self, action_return, name) -> dict:
         if action_return.state == ActionStatusCode.SUCCESS:
-            if isinstance(action_return.result, list):
-                response = []
-                for item in action_return.result:
-                    if item['type'] == 'text':
-                        response.append(item['content'])
-                    else:
-                        response.append(f"[{item['type']}]({item['content']})")
-                response = '\n'.join(response)
-            elif isinstance(action_return.result, dict):
-                response = action_return.result['text']
-                if 'image' in action_return.result:
-                    response += '\n'.join([
-                        f'[image]({im})'
-                        for im in action_return.result['image']
-                    ])
-                if 'audio' in action_return.result:
-                    response += '\n'.join([
-                        f'[audio]({im})'
-                        for im in action_return.result['audio']
-                    ])
-            elif isinstance(action_return.result, str):
-                response = action_return.result
-            else:
-                raise NotImplementedError
+            response = action_return.format_result()
         else:
             response = action_return.errmsg
         content = self.execute['begin'] + response + self.execute['end']
@@ -212,8 +189,7 @@ class StreamProtocol:
         elif self.execute.get('belong'):
             return dict(
                 role=self.execute['belong'], content=content, name=name)
-        else:
-            return dict(role=self.execute['role'], content=response, name=name)
+        return dict(role=self.execute['role'], content=response, name=name)
 
 
 class StreamAgent(BaseAgent):
