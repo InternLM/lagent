@@ -28,7 +28,7 @@ class PPT(BaseAction):
         self.pointer = None
         self.location = None
 
-    @tool_api(return_dict=True)
+    @tool_api(explode_return=True)
     def create_file(self, theme: str, abs_location: str) -> dict:
         """Create a pptx file with specific themes
 
@@ -37,7 +37,8 @@ class PPT(BaseAction):
             abs_location (:class:`str`): the ppt file's absolute location
 
         Returns:
-            status: the result of the execution
+            :class:`dict`: operation status
+                * status: the result of the execution
         """
         self.location = abs_location
         try:
@@ -48,7 +49,7 @@ class PPT(BaseAction):
             print(e)
         return dict(status='created a ppt file.')
 
-    @tool_api(return_dict=True)
+    @tool_api(explode_return=True)
     def add_first_page(self, title: str, subtitle: str) -> dict:
         """Add the first page of ppt.
 
@@ -57,7 +58,8 @@ class PPT(BaseAction):
             subtitle (:class:`str`): the subtitle of ppt
 
         Returns:
-            status: the result of the execution
+            :class:`dict`: operation status
+                * status: the result of the execution
         """
         layout_name = self.theme_mapping[
             self.pointer.slide_master.name]['title']
@@ -70,7 +72,7 @@ class PPT(BaseAction):
             ph_subtitle.text = subtitle
         return dict(status='added page')
 
-    @tool_api(return_dict=True)
+    @tool_api(explode_return=True)
     def add_text_page(self, title: str, bullet_items: str) -> dict:
         """Add text page of ppt
 
@@ -79,7 +81,8 @@ class PPT(BaseAction):
             bullet_items (:class:`str`): bullet_items should be string, for multiple bullet items, please use [SPAN] to separate them.
 
         Returns:
-            status: the result of the execution
+            :class:`dict`: operation status
+                * status: the result of the execution
         """
         layout_name = self.theme_mapping[
             self.pointer.slide_master.name]['single']
@@ -99,7 +102,7 @@ class PPT(BaseAction):
             p.level = 0
         return dict(status='added page')
 
-    @tool_api(return_dict=True)
+    @tool_api(explode_return=True)
     def add_text_image_page(self, title: str, bullet_items: str,
                             image: str) -> dict:
         """Add a text page with one image. Image should be a path
@@ -110,7 +113,8 @@ class PPT(BaseAction):
             image (:class:`str`): the path of the image
 
         Returns:
-            status: the result of the execution
+            :class:`dict`: operation status
+                * status: the result of the execution
         """
         layout_name = self.theme_mapping[self.pointer.slide_master.name]['two']
         layout = next(i for i in self.pointer.slide_master.slide_layouts
@@ -138,12 +142,13 @@ class PPT(BaseAction):
 
         return dict(status='added page')
 
-    @tool_api(return_dict=True)
+    @tool_api(explode_return=True)
     def submit_file(self) -> dict:
         """When all steps done, YOU MUST use submit_file() to submit your work.
 
         Returns:
-            status: the result of the execution
+            :class:`dict`: operation status
+                * status: the result of the execution
         """
         # file_path = os.path.join(self.CACHE_DIR, f'{self._return_timestamp()}.pptx')
         # self.pointer.save(file_path)

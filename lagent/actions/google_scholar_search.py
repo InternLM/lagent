@@ -35,7 +35,7 @@ class GoogleScholar(BaseAction):
                 'as SERPER_API_KEY or pass it as `api_key` parameter.')
         self.api_key = api_key
 
-    @tool_api(return_dict=True)
+    @tool_api(explode_return=True)
     def search_google_scholar(
         self,
         query: str,
@@ -72,10 +72,11 @@ class GoogleScholar(BaseAction):
             as_vis (Optional[str]): Defines whether to include citations or not.
 
         Returns:
-            title: a list of the titles of the three selected papers
-            cited_by: a list of the citation numbers of the three selected papers
-            organic_id: a list of the organic results' ids of the three selected papers
-            pub_info: publication information of selected papers
+            :class:`dict`: article information
+                - title: a list of the titles of the three selected papers
+                - cited_by: a list of the citation numbers of the three selected papers
+                - organic_id: a list of the organic results' ids of the three selected papers
+                - pub_info: publication information of selected papers
         """
         params = {
             'q': query,
@@ -120,7 +121,7 @@ class GoogleScholar(BaseAction):
             return ActionReturn(
                 errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
 
-    @tool_api(return_dict=True)
+    @tool_api(explode_return=True)
     def get_author_information(self,
                                author_id: str,
                                hl: Optional[str] = None,
@@ -147,10 +148,11 @@ class GoogleScholar(BaseAction):
             output (Optional[str]): Defines the final output you want. Default is 'json'.
 
         Returns:
-            name: author's name
-            affliation: the affliation of the author
-            articles: at most 3 articles by the author
-            website: the author's homepage url
+            :class:`dict`: author information
+                * name: author's name
+                * affliation: the affliation of the author
+                * articles: at most 3 articles by the author
+                * website: the author's homepage url
         """
         params = {
             'engine': 'google_scholar_author',
@@ -183,7 +185,7 @@ class GoogleScholar(BaseAction):
             return ActionReturn(
                 errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
 
-    @tool_api(return_dict=True)
+    @tool_api(explode_return=True)
     def get_citation_format(self,
                             q: str,
                             no_cache: Optional[bool] = None,
@@ -198,8 +200,9 @@ class GoogleScholar(BaseAction):
             output (Optional[str]): Final output format. Set to 'json' to get a structured JSON of the results, or 'html' to get the raw html retrieved. Defaults to 'json'.
 
         Returns:
-            authors: the authors of the article
-            citation: the citation format of the article
+            :class:`dict`: citation format
+                * authors: the authors of the article
+                * citation: the citation format of the article
         """
         params = {
             'q': q,
@@ -219,7 +222,7 @@ class GoogleScholar(BaseAction):
             return ActionReturn(
                 errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
 
-    @tool_api(return_dict=True)
+    @tool_api(explode_return=True)
     def get_author_id(self,
                       mauthors: str,
                       hl: Optional[str] = 'en',
@@ -240,7 +243,8 @@ class GoogleScholar(BaseAction):
             output (Optional[str]): Defines the final output you want. It can be set to 'json' (default) to get a structured JSON of the results, or 'html' to get the raw html retrieved. Defaults to 'json'.
 
         Returns:
-            author_id: the author_id of the author
+            :class:`dict`: author id
+                * author_id: the author_id of the author
         """
         params = {
             'mauthors': mauthors,

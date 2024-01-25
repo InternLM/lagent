@@ -20,7 +20,7 @@ TOOL_REGISTRY = ClassRegistry('__tool_name__', unique=True)
 
 def tool_api(func: Optional[Callable] = None,
              *,
-             return_dict: bool = False,
+             explode_return: bool = False,
              returns_named_value: bool = False,
              **kwargs):
     """Turn functions into tools. It will parse typehints as well as docstrings 
@@ -48,15 +48,13 @@ def tool_api(func: Optional[Callable] = None,
             
     Args:
         func (Optional[Callable]): function to decorate. Defaults to ``None``.
-        return_dict (bool): suggest if returned data is a single dictionary. 
-            When enabled, the returns sections in docstrings should indicate the 
-            key-value infomation of the dictionary rather than hint a standard 
-            tuple return. Defaults to ``False``.
+        explode_return (bool): whether to flatten the dictionary or tuple return 
+            as the ``return_data`` field. When enabled, it is recommended to 
+            annotate the member in docstrings. Defaults to ``False``.
             
             .. code-block:: python
                 
-                # set `return_dict` True will force `returns_named_value` to be enabled
-                @tool_api(return_dict=True)
+                @tool_api(explode_return=True)
                 def foo(a, b):
                     '''A simple function
                     
@@ -65,8 +63,9 @@ def tool_api(func: Optional[Callable] = None,
                         b (int): b
                     
                     Returns:
-                        x: the value of input a
-                        y: the value of input b
+                        dict: information of inputs
+                            * x: value of a
+                            * y: value of b
                     '''
                     return {'x': a, 'y': b}
                     
@@ -75,14 +74,16 @@ def tool_api(func: Optional[Callable] = None,
         returns_named_value (bool): whether to parse ``thing: Description`` in 
             returns sections as a name and description, rather than a type and 
             description. When true, type must be wrapped in parentheses: 
-            ``(int): Description.``. When false, parentheses are optional but 
+            ``(int): Description``. When false, parentheses are optional but 
             the items cannot be named: ``int: Description``. Defaults to ``False``.
+            
+    Important:
+        ``return_data`` field will be added to ``api_description`` only
+        when ``explode_return`` or ``returns_named_value`` is enabled.
 
     Returns:
         Callable: wrapped function or partial decorator
     """
-    if return_dict:
-        returns_named_value = True
 
     def _detect_type(string):
         field_type = 'STRING'
@@ -96,6 +97,25 @@ def tool_api(func: Optional[Callable] = None,
             elif 'bool' in string:
                 field_type = 'BOOLEAN'
         return field_type
+
+    def _explode(desc):
+        kvs = []
+        desc = '\nArgs:\n' + '\n'.join([
+            '    ' + item.lstrip(' -+*#.')
+            for item in desc.split('\n')[1:] if item.strip()
+        ])
+        docs = Docstring(desc).parse('google')
+        if not docs:
+            return kvs
+        if docs[0].kind is DocstringSectionKind.parameters:
+            for d in docs[0].value:
+                d = d.as_dict()
+                if not d['annotation']:
+                    d.pop('annotation')
+                else:
+                    d['type'] = _detect_type(d.pop('annotation').lower())
+                kvs.append(d)
+        return kvs
 
     def _parse_tool(function):
         # remove rst syntax
@@ -114,13 +134,11 @@ def tool_api(func: Optional[Callable] = None,
             if doc.kind is DocstringSectionKind.parameters:
                 for d in doc.value:
                     d = d.as_dict()
-                    d['description'] = d['description']
                     d['type'] = _detect_type(d.pop('annotation').lower())
                     args_doc[d['name']] = d
             if doc.kind is DocstringSectionKind.returns:
                 for d in doc.value:
                     d = d.as_dict()
-                    d['description'] = d['description']
                     if not d['name']:
                         d.pop('name')
                     if not d['annotation']:
@@ -154,26 +172,11 @@ def tool_api(func: Optional[Callable] = None,
             if param.default is inspect.Signature.empty:
                 desc['required'].append(param.name)
 
-        return_data, return_annotation = [], sig.return_annotation
-        if return_dict:
+        return_data = []
+        if explode_return:
+            return_data = _explode(returns_doc[0]['description'])
+        elif returns_named_value:
             return_data = returns_doc
-        elif return_annotation is not inspect.Signature.empty:
-            if return_annotation is tuple:
-                return_data = returns_doc
-            elif get_origin(return_annotation) is tuple:
-                return_annotation = get_args(return_annotation)
-                if not return_annotation:
-                    return_data = returns_doc
-                elif len(return_annotation) >= 2:
-                    for i, item in enumerate(return_annotation):
-                        info = returns_doc[i]['description'] if i < len(
-                            returns_doc) else ''
-                        if get_origin(item) is Annotated:
-                            item, info = get_args(item)
-                        return_data.append({
-                            'description': info,
-                            'type': _detect_type(str(item))
-                        })
         if return_data:
             desc['return_data'] = return_data
         return desc

@@ -26,7 +26,7 @@ Electrical Engineering, and Economics from scientific articles on arxiv.org.
         self.max_query_len = max_query_len
         self.doc_content_chars_max = doc_content_chars_max
 
-    @tool_api(return_dict=True)
+    @tool_api(explode_return=True)
     def get_arxiv_article_information(self, query: str) -> dict:
         """Run Arxiv search and get the article meta information.
 
@@ -34,7 +34,8 @@ Electrical Engineering, and Economics from scientific articles on arxiv.org.
             query (:class:`str`): the content of search query
 
         Returns:
-            content (:class:`str`): a list of 3 arxiv search papers
+            :class:`dict`: article information
+                * content (str): a list of 3 arxiv search papers
         """
         try:
             results = arxiv.Search(  # type: ignore
