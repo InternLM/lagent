@@ -17,7 +17,7 @@ class BINGMap(BaseAction):
                  parser: Type[BaseParser] = JsonParser,
                  enable: bool = True) -> None:
         super().__init__(description, parser, enable)
-        key = os.environ.get('BING_MAP_KEY')
+        key = os.environ.get('BING_MAP_KEY', key)
         if key is None:
             raise ValueError(
                 'Please set BING Map API key either in the environment '
