@@ -14,8 +14,7 @@ class GoogleScholar(BaseAction):
     Args:
         api_key (str): API KEY to use serper google search API,
             You can create a free API key at https://serper.dev.
-        description (dict): The description of the action. Defaults to 
-            :py:data:`~DEFAULT_DESCRIPTION`.
+        description (dict): The description of the action. Defaults to ``None``.
         parser (Type[BaseParser]): The parser class to process the
             action's inputs and outputs. Defaults to :class:`JsonParser`.
         enable (bool, optional): Whether the action is enabled. Defaults to

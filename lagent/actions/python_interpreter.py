@@ -34,18 +34,18 @@ class PythonInterpreter(BaseAction):
     """A Python executor that can execute Python scripts.
 
     Args:
-        answer_symbol (str, Optional): the answer symbol from LLM
+        answer_symbol (str, Optional): the answer symbol from LLM. Defaults to ``None``.
         answer_expr (str, Optional): the answer function name of the Python
-            script. Default to 'solution()'.
-        answer_from_stdout (boolean): whether the execution results is from
-            stdout.
-        timeout (int): Upper bound of waiting time for Python script execution.
-        description (dict): The description of the action. Defaults to 
-            :py:data:`~DEFAULT_DESCRIPTION`.
+            script. Defaults to ``'solution()'``.
+        answer_from_stdout (boolean, Optional): whether the execution results is from
+            stdout. Defaults to ``False``.
+        timeout (int, Optional): Upper bound of waiting time for Python script execution.
+            Defaults to ``20``.
+        description (dict, Optional): The description of the action. Defaults to ``None``.
         parser (Type[BaseParser]): The parser class to process the
             action's inputs and outputs. Defaults to :class:`JsonParser`.
         enable (bool, optional): Whether the action is enabled. Defaults to
-            True.
+            ``True``.
     """
 
     def __init__(self,
