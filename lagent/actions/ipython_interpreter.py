@@ -40,8 +40,8 @@ class IPythonInterpreter(BaseAction):
         user_data_dir (str, optional): Specified the user data directory for files
             loading. If set to `ENV`, use `USER_DATA_DIR` environment variable.
             Defaults to `ENV`.
-        return_list (bool): whether to wrap the execution result into a list of 
-            dictionaries. Defaults to ``True``.
+        work_dir (str, optional): Specify which directory to save output images to. 
+            Defaults to ``'./work_dir/tmp_dir'``.
         description (dict): The description of the action. Defaults to ``None``.
         parser (Type[BaseParser]): The parser class to process the
             action's inputs and outputs. Defaults to :class:`JsonParser`.
@@ -53,7 +53,6 @@ class IPythonInterpreter(BaseAction):
     def __init__(self,
                  timeout: int = 20,
                  user_data_dir: str = 'ENV',
-                 return_list=True,
                  work_dir='./work_dir/tmp_dir',
                  description: Optional[dict] = None,
                  parser: Type[BaseParser] = JsonParser,
@@ -69,7 +68,6 @@ class IPythonInterpreter(BaseAction):
             user_data_dir = f"import os\nos.chdir('{user_data_dir}')"
         self.user_data_dir = user_data_dir
         self._initialized = False
-        self.return_list = return_list
         self.work_dir = work_dir
         if not os.path.exists(self.work_dir):
             os.makedirs(self.work_dir, exist_ok=True)
@@ -225,19 +223,10 @@ disabled. Do not make external web requests or API calls as they will fail.
         if succeed:
             text = result['text']
             image = result.get('image', [])
-            if self.return_list:
-                resp = [dict(type="text", content=text)]
-                if image:
-                    resp.extend(
-                        [dict(type="image", content=im) for im in image])
-                tool_return.result = resp
-            else:
-                if image:
-                    # image = image[0]
-                    tool_return.result = dict(text=text, image=image)
-                else:
-                    tool_return.result = dict(text=text)
-
+            resp = [dict(type="text", content=text)]
+            if image:
+                resp.extend([dict(type="image", content=im) for im in image])
+            tool_return.result = resp
             # tool_return.result = dict(
             #     text=result['text'], image=result.get('image', [])[0])
             tool_return.state = ActionStatusCode.SUCCESS
