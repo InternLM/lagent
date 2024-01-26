@@ -5,7 +5,7 @@ import os
 
 import streamlit as st
 
-from lagent.actions import ActionExecutor, ArxivSearch, GoogleScholar
+from lagent.actions import ActionExecutor, ArxivSearch, GoogleScholar, IPythonInterpreter
 from lagent.agents.stream_agent import (INTERPRETER_CN, META_INS, PLUGIN_CN,
                                         StreamAgent, StreamProtocol)
 from lagent.llms.lmdepoly_wrapper import LMDeployClient
@@ -104,7 +104,7 @@ class StreamlitUI:
             if da_flag:
                 st.session_state[
                     'chatbot']._interpreter_executor = ActionExecutor(
-                        actions=[])
+                        actions=[IPythonInterpreter()])
             else:
                 st.session_state['chatbot']._interpreter_executor = None
             st.session_state['chatbot']._protocol._meta_template = meta_prompt
@@ -128,7 +128,7 @@ class StreamlitUI:
             top_k=100,
             temperature=0,
             repetition_penalty=1.0,
-            stop_words=['<|im_end|>', '<|action_end|>'])
+            stop_words=['<|im_end|>'])
         return st.session_state['model_map'][option]
 
     def initialize_chatbot(self, model, plugin_action):
@@ -297,7 +297,7 @@ def main():
                         placeholder = st.empty()
                         st.session_state['placeholder'] = placeholder
 
-                    st.session_state['temp'] += agent_return.response
+                    st.session_state['temp'] = agent_return.response
                     st.session_state['placeholder'].markdown(
                         st.session_state['temp'])
             elif agent_return.state == AgentStatusCode.END:
