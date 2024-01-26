@@ -99,8 +99,7 @@ html_static_path = ['_static']
 
 
 def custom_skip(app, what, name, obj, skip, options):
-    if what in ['data', 'function', 'class'] and re.search(
-            'logger|wrapper', name):
+    if what in ['data', 'function', 'class'] and re.search('logger', name):
         skip = True
     return skip
 
