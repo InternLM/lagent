@@ -77,12 +77,12 @@ def tool_api(func: Optional[Callable] = None,
             ``(int): Description``. When false, parentheses are optional but 
             the items cannot be named: ``int: Description``. Defaults to ``False``.
             
+    Returns:
+        Callable: wrapped function or partial decorator
+
     Important:
         ``return_data`` field will be added to ``api_description`` only
         when ``explode_return`` or ``returns_named_value`` is enabled.
-
-    Returns:
-        Callable: wrapped function or partial decorator
     """
 
     def _detect_type(string):

@@ -8,6 +8,14 @@
    :caption: 新手入门
 
    get_started/overview.md
+   get_started/install.md
+   get_started/quickstart.md
+
+.. toctree::
+   :maxdepth: 2
+   :caption: 教程
+
+   tutorials/action.md
 
 .. toctree::
    :caption: 切换语言
