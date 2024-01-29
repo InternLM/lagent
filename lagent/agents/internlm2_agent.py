@@ -1,7 +1,7 @@
 import json
 import logging
 from copy import deepcopy
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Optional
 
 from ilagent.schema import AgentReturn, AgentStatusCode
 
@@ -34,27 +34,27 @@ PLUGIN_CN = (
     '同时注意你可以使用的工具，不要随意捏造！')
 
 
-class StreamProtocol:
+class Interlm2Protocol:
 
     def __init__(
         self,
-        meta_prompt=META_INS,
-        interpreter_prompt=INTERPRETER_CN,
-        plugin_prompt=PLUGIN_CN,
-        few_shot=None,
-        language=dict(
+        meta_prompt: str=META_INS,
+        interpreter_prompt: str=INTERPRETER_CN,
+        plugin_prompt: str=PLUGIN_CN,
+        few_shot: Optional[List]=None,
+        language: Dict=dict(
             begin='',
             end='',
             belong='assistant',
         ),
-        tool=dict(
+        tool: Dict=dict(
             begin='{start_token}{name}\n',
             start_token='<|action_start|>',
             name_map=dict(plugin='<|plugin|>', interpreter='<|interpreter|>'),
             belong='assistant',
             end='<|action_end|>\n',
         ),
-        execute: dict = dict(
+        execute: Dict = dict(
             role='execute', begin='', end='', fallback_role='environment'),
     ) -> None:
         self.meta_prompt = meta_prompt
@@ -193,13 +193,13 @@ class StreamProtocol:
         return dict(role=self.execute['role'], content=response, name=name)
 
 
-class StreamAgent(BaseAgent):
+class Internlm2Agent(BaseAgent):
 
     def __init__(self,
                  llm: Union[BaseModel, BaseAPIModel],
                  plugin_executor: ActionExecutor = None,
                  interpreter_executor: ActionExecutor = None,
-                 protocol=StreamProtocol(),
+                 protocol=Interlm2Protocol(),
                  max_turn: int = 3) -> None:
         self.max_turn = max_turn
         self._interpreter_executor = interpreter_executor
@@ -263,7 +263,7 @@ class StreamAgent(BaseAgent):
         agent_return.inner_steps = inner_history[offset:]
         yield agent_return
 
-    def stream_chat(self, message: List[dict], session_id=3, **kwargs) -> AgentReturn:
+    def stream_chat(self, message: List[dict], **kwargs) -> AgentReturn:
         if isinstance(message, str):
             message = dict(role='user', content=message)
         if isinstance(message, dict):
@@ -281,7 +281,7 @@ class StreamAgent(BaseAgent):
             )
             response = ''
             for model_state, res, _ in self._llm.stream_chat(
-                    prompt, session_id, **kwargs):
+                    prompt, **kwargs):
                 response = res
                 if model_state.value < 0:
                     agent_return.state = model_state

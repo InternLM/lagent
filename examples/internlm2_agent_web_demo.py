@@ -6,8 +6,8 @@ import os
 import streamlit as st
 
 from lagent.actions import ActionExecutor, ArxivSearch, GoogleScholar, IPythonInterpreter
-from lagent.agents.stream_agent import (INTERPRETER_CN, META_INS, PLUGIN_CN,
-                                        StreamAgent, StreamProtocol)
+from lagent.agents.internlm2_agent import (INTERPRETER_CN, META_INS, PLUGIN_CN,
+                                           Internlm2Agent, Interlm2Protocol)
 from lagent.llms.lmdepoly_wrapper import LMDeployClient
 from lagent.llms.meta_template import INTERNLM2_META as META
 from lagent.schema import AgentStatusCode
@@ -133,9 +133,9 @@ class StreamlitUI:
 
     def initialize_chatbot(self, model, plugin_action):
         """Initialize the chatbot with the given model and plugin actions."""
-        return StreamAgent(
+        return Internlm2Agent(
             llm=model,
-            protocol=StreamProtocol(
+            protocol=Interlm2Protocol(
                 tool=dict(
                     begin='{start_token}{name}\n',
                     start_token='<|action_start|>',
