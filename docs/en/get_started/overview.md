@@ -1,4 +1,4 @@
-# OVERVIEW
+# Overview
 
 This chapter introduces you to the framework of Lagent, and provides links to detailed tutorials about Lagent.
 

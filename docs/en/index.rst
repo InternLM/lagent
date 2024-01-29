@@ -8,8 +8,14 @@ You can switch between English and Chinese in the lower-left corner of the layou
    :caption: Get Started
 
    get_started/overview.md
-   get_started/action.md
+   get_started/install.md
+   get_started/quickstart.md
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Tutorials
+
+   tutorials/action.md
 
 .. toctree::
    :caption: Switch Language
