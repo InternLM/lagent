@@ -206,7 +206,7 @@ class StreamAgent(BaseAgent):
         super().__init__(
             llm=llm, action_executor=plugin_executor, protocol=protocol)
 
-    def chat(self, message: Union[str, Dict], **kwargs) -> AgentReturn:
+    def chat(self, message: Union[str, Dict], session_id=3, **kwargs) -> AgentReturn:
         if isinstance(message, str):
             message = dict(role='user', content=message)
         if isinstance(message, dict):
@@ -221,7 +221,7 @@ class StreamAgent(BaseAgent):
                 plugin_executor=self._action_executor,
                 interpreter_executor=self._interpreter_executor,
             )
-            response = self._llm.chat(prompt, **kwargs)
+            response = self._llm.chat(prompt, session_id, **kwargs)
             name, language, action = self._protocol.parse(
                 message=response,
                 plugin_executor=self._action_executor,
@@ -263,7 +263,7 @@ class StreamAgent(BaseAgent):
         agent_return.inner_steps = inner_history[offset:]
         yield agent_return
 
-    def stream_chat(self, message: List[dict], session_id=3) -> AgentReturn:
+    def stream_chat(self, message: List[dict], session_id=3, **kwargs) -> AgentReturn:
         if isinstance(message, str):
             message = dict(role='user', content=message)
         if isinstance(message, dict):
@@ -281,7 +281,7 @@ class StreamAgent(BaseAgent):
             )
             response = ''
             for model_state, res, _ in self._llm.stream_chat(
-                    prompt, session_id):
+                    prompt, session_id, **kwargs):
                 response = res
                 if model_state.value < 0:
                     agent_return.state = model_state
@@ -303,6 +303,12 @@ class StreamAgent(BaseAgent):
                                     logging.info(
                                         msg='No plugin is instantiated!')
                                     continue
+                                try:
+                                    action = json.loads(action)
+                                except Exception as e:
+                                    logging.info(
+                                        msg=f'Invaild action {e}')
+                                    continue
                             elif name == 'interpreter':
                                 if self._interpreter_executor:
                                     executor = self._interpreter_executor
@@ -310,22 +316,24 @@ class StreamAgent(BaseAgent):
                                     logging.info(
                                         msg='No interpreter is instantiated!')
                                     continue
-
+                            agent_return.state = agent_state
+                            agent_return.response = action
                         else:
                             agent_state = (
                                 AgentStatusCode.PLUGIN_START if name
                                 == 'plugin' else AgentStatusCode.CODING)
+                            if agent_state != last_agent_state:
+                                # agent_return.state = agent_state
+                                agent_return.response = language
+                                yield deepcopy(agent_return)
                             agent_return.state = agent_state
-                            agent_return.response = language
-                            yield deepcopy(agent_return)
-                            continue
+                            agent_return.response = action
                     else:
                         agent_state = AgentStatusCode.STREAM_ING
                         agent_return.state = agent_state
                         agent_return.response = language
-                        yield deepcopy(agent_return)
-                        continue
                     last_agent_state = agent_state
+                    yield deepcopy(agent_return)
             if name:
                 action_return: ActionReturn = executor(action['name'],
                                                        action['parameters'])
@@ -335,13 +343,15 @@ class StreamAgent(BaseAgent):
             if not name or action_return.type == executor.finish_action.name:
                 agent_return.response = language
                 agent_return.state = AgentStatusCode.END
+                break
             else:
                 inner_history.append(
                     dict(role='tool', content=action, name=name))
                 inner_history.append(
                     self._protocol.format_response(action_return, name=name))
+                agent_state += 1
+                agent_return.state = agent_state
                 yield agent_return
-
         agent_return.inner_steps = deepcopy(inner_history[offset:])
         agent_return.state = AgentStatusCode.END
         yield agent_return

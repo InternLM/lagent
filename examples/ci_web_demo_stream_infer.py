@@ -70,7 +70,7 @@ class StreamlitUI:
         meta_prompt = st.sidebar.text_area('系统提示词', value=META_INS)
         da_prompt = st.sidebar.text_area('数据分析提示词', value=INTERPRETER_CN)
         plugin_prompt = st.sidebar.text_area('插件提示词', value=PLUGIN_CN)
-        model_ip = st.sidebar.text_input('模型IP：', value='10.140.66.182:10054')
+        model_ip = st.sidebar.text_input('模型IP：', value='10.140.0.220:23333')
         if model_name != st.session_state[
                 'model_selected'] or st.session_state['ip'] != model_ip:
             st.session_state['ip'] = model_ip
@@ -199,6 +199,19 @@ class StreamlitUI:
                 audio_data = action.result['audio']
                 audio_data = open(audio_data, 'rb').read()
                 st.audio(audio_data)
+        elif isinstance(action.result, list):
+            for item in action.result:
+                if item['type'] == 'text':
+                    st.markdown('```\n' + item['content'] + '\n```')
+                elif item['type'] == 'image':
+                    image_data = open(item['content'], 'rb').read()
+                    st.image(image_data, caption='Generated Image')
+                elif item['type'] == 'video':
+                    video_data = open(item['content'], 'rb').read()
+                    st.video(video_data)
+                elif item['type'] == 'audio':
+                    audio_data = open(item['content'], 'rb').read()
+                    st.audio(audio_data)
         if action.errmsg:
             st.error(action.errmsg)
 
@@ -290,18 +303,22 @@ def main():
                 # 清除占位符的当前内容，并显示新内容
                 with st.container():
                     if agent_return.state != st.session_state['last_status']:
-                        st.session_state['temp'] = (
-                            '\n\n IPythonInterpreter: \n\n'
-                            if agent_return.state == AgentStatusCode.CODING
-                            else '')
+                        st.session_state['temp'] = ''
                         placeholder = st.empty()
                         st.session_state['placeholder'] = placeholder
-
-                    st.session_state['temp'] = agent_return.response
+                    if isinstance(agent_return.response, dict):
+                        action = f"\n\n {agent_return.response['name']}: \n\n"
+                        action_input = agent_return.response['parameters']
+                        if agent_return.response['name'] == 'IPythonInterpreter':
+                            action_input = action_input['command']
+                        response = action + action_input
+                    else:
+                        response = agent_return.response
+                    st.session_state['temp'] = response
                     st.session_state['placeholder'].markdown(
                         st.session_state['temp'])
             elif agent_return.state == AgentStatusCode.END:
-                st.session_state['session_history'] += agent_return.inner_steps
+                st.session_state['session_history'] += (user_input + agent_return.inner_steps)
                 agent_return = copy.deepcopy(agent_return)
                 agent_return.response = st.session_state['temp']
                 st.session_state['assistant'].append(
