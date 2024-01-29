@@ -206,7 +206,7 @@ class Internlm2Agent(BaseAgent):
         super().__init__(
             llm=llm, action_executor=plugin_executor, protocol=protocol)
 
-    def chat(self, message: Union[str, Dict], session_id=3, **kwargs) -> AgentReturn:
+    def chat(self, message: Union[str, Dict], **kwargs) -> AgentReturn:
         if isinstance(message, str):
             message = dict(role='user', content=message)
         if isinstance(message, dict):
@@ -221,7 +221,7 @@ class Internlm2Agent(BaseAgent):
                 plugin_executor=self._action_executor,
                 interpreter_executor=self._interpreter_executor,
             )
-            response = self._llm.chat(prompt, session_id, **kwargs)
+            response = self._llm.chat(prompt, **kwargs)
             name, language, action = self._protocol.parse(
                 message=response,
                 plugin_executor=self._action_executor,
@@ -233,6 +233,12 @@ class Internlm2Agent(BaseAgent):
                         executor = self._action_executor
                     else:
                         logging.info(msg='No plugin is instantiated!')
+                        continue
+                    try:
+                        action = json.loads(action)
+                    except Exception as e:
+                        logging.info(
+                            msg=f'Invaild action {e}')
                         continue
                 elif name == 'interpreter':
                     if self._interpreter_executor:
