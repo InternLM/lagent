@@ -63,7 +63,8 @@ python_interpreter = PythonInterpreter()
 # Specify the actions the chatbot can perform.
 chatbot = ReAct(
     llm=llm,  # Provide the Language Model instance.
-    action_executor=ActionExecutor(actions=[python_interpreter]),
+    action_executor=ActionExecutor(
+        actions=[search_tool, python_interpreter]),
 )
 # Ask the chatbot a mathematical question in LaTeX format.
 response = chatbot.chat('若$z=-1+\sqrt{3}i$,则$\frac{z}{{z\overline{z}-1}}=\left(\ \ \right)$')

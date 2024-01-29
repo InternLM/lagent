@@ -1,48 +1,46 @@
-# Action
+# 动作
 
-Actions, also called **tools**, provide a suite of functions LLM-driven agents can use to interact with the real world and perform complex tasks.
+动作，也被称为工具，提供了一套LLM驱动的智能体用来与真实世界交互并执行复杂任务的函数。
 
-## Basic Concepts
+## 基本概念
 
-### Tool & Toolkit
+### 工具 & 工具包
 
-There are two categories of tools:
+有两种类型的工具：
 
-* tool: provide only one API to call.
-* toolkit: implement multiple APIs that undertake different sub-tasks.
+* 简单工具: 只提供一个API接口供调用。
+* 工具包: 实现多个API接口，承担不同的子任务。
 
-### Tool Description
+### 工具描述
 
-In Lagent, the tool description is a dictionary containing the action's core information of usage, observed by LLMs for decision-making.
+在Lagent中，工具描述是一个刻画工具调用方式的字典，能够被LLM观察并用于决策。
 
-For simple tools, the description can be created as follows
+对于简单工具，描述可按如下格式声明:
 
 ```python
 TOOL_DESCRIPTION = {
-    'name': 'bold',  # name of the tool
-    'description': 'a function used to make text bold',  # introduce the tool's function
-    'parameters': [  # a list of parameters the tool take.
+    'name': 'bold',  # 工具名称
+    'description': 'a function used to make text bold',  # 介绍工具的功能
+    'parameters': [  # 这个工具所需要的参数列表
         {
             'name': 'text', 'type': 'STRING', 'description': 'input content'
         }
     ],
-    'required': ['text'],  # specify names of parameters required
+    'required': ['text'],  # 指定必需的参数名
 }
 ```
-
-In some situations there may be optional `return_data`, `parameter_description` keys describing the returns and argument passing format respectively.
+在某些情况下，可能还包含 `return_data`，`parameter_description` 字段，分别描述返回内容及参数传递格式。
 
 ```{attention}
-`parameter_description` is usually inserted into the tool description automatically by the action's parser. It will be introduced in [Interface Design](#interface-design) .
+`parameter_description` 通常被动作的解析器自动插入到工具描述中，这部分将在[接口设计](#id6)中进行介绍。
 ```
 
-
-For toolkits, the description is very similar but nest submethods
+对于工具包，描述非常相似，但嵌套了子方法
 
 ```python
 TOOL_DESCRIPTION = {
-    'name': 'PhraseEmphasis',  # name of the toolkit
-    'description': 'a toolkit which provides different styles of text emphasis',  # introduce the tool's function
+    'name': 'PhraseEmphasis',  # 工具包的名字
+    'description': 'a toolkit which provides different styles of text emphasis',  # 介绍工具包的功能
     'api_list': [
         {
             'name': 'bold',
@@ -68,9 +66,9 @@ TOOL_DESCRIPTION = {
 }
 ```
 
-## Make Functions Tools
+## 将函数转换为工具
 
-It's not necessary to prepare an extra description for a defined function. In Lagent we provide a decorator `tool_api` which can conveniently turn a function into a tool by automatically parsing the function's typehints and dosctrings to generate the description dictionary and binding it to an attribute `api_description`.
+对于已定义好的函数，无需人工添加额外的描述。在 Lagent 中，我们提供了一个修饰器 `tool_api`，它可以通过自动解析函数的类型提示和文档字符串来生成描述字典，并将其绑定到属性 `api_description`。
 
 ```python
 from lagent import tool_api
@@ -100,7 +98,7 @@ bold.api_description
  'required': ['text']}
 ```
 
-Once `returns_named_value` is enabled you should declare the name of the return data, which will be processed to form a new field `return_data`:
+一旦启用 `returns_named_value`，您应当声明返回值的名称，这将被处理成一个新的字段 `return_data`：
 
 ```python
 @tool_api(returns_named_value=True)
@@ -130,7 +128,7 @@ bold.api_description
    'type': 'STRING'}]}
 ```
 
-Sometimes the tool may return a `dict` or `tuple`, and you want to elaborate each member in `return_data` rather than take them as a whole. Set `explode_return=True` and list them in the return part of docstrings.
+有时工具可能返回一个 `dict` 或 `tuple`，如果你想在 `return_data` 中详细说明每个成员的含义而不是把它们当作一个整体，设置 `explode_return=True` 并在文档字符串的 Returns 部分中罗列它们。
 
 ```python
 @tool_api(explode_return=True)
@@ -164,17 +162,15 @@ def list_args(a: str, b: int, c: float = 0.0) -> dict:
 ```
 
 ```{warning}
-Only Google style Python docstrings is currently supported.
+目前仅支持 Google 格式的 Python 文档字符串。
 ```
 
-## Interface Design
+## 接口设计
 
-`BaseAction(description=None, parser=JsonParser, enable=True)` is the base class all actions should inherit from. It takes three initialization arguments
+`BaseAction(description=None, parser=JsonParser, enable=True)` 是所有动作应该继承的基类，它接收三个初始化参数：
 
-* **description**: a tool description dictionary, used set instance attribute `description`. Mostly you don't need explicitly pass this argument since the meta class of `BaseAction` will search methods decorated by `tool_api` and assemble their `api_description` as a class attribute `__tool_description__`, and if the initial `description` is left null, then `__tool_description__` will be copied as `description`.
-* **parser**: `BaseParser` class. It will instantialize a parser used to validate the arguments of APIs in `description`.
-
-    For example, `JsonParser` requires arguments passed in the format of JSON or `dict`. To make LLMs aware of this, It inserts a field `parameter_description` into the `description`.
+* **description**：一个工具描述的字典，用于设置实例属性 `description`。通常不需要显式地传递这个参数，因为 `BaseAction` 的元类将查找被 `tool_api` 装饰的方法，并组装它们的 `api_description` 构造一个类属性 `__tool_description__`，如果实例化时 `description` 为空，那么该实例属性将置为 `__tool_description__`。
+* **parser**：`BaseParser` 类，用于实例化一个动作解析器校验 `description` 所描述的工具的参数。例如，`JsonParser` 会要求模型在调用工具时传入一个 JSON 格式字符串或者 Python 字典，为了让 LLM 感知到该指令，它会在 `description` 中插入一个 `parameter_description` 字段。
 
     ```python
     from lagent import BaseAction
@@ -203,11 +199,12 @@ Only Google style Python docstrings is currently supported.
      'required': ['text'],
      'parameter_description': '如果调用该工具，你必须使用Json格式 {key: value} 传参，其中key为参数名称'}
     ```
-* **enable**: specify whether the tool is available.
 
-### Custom Action
+* **enable**: 指明该动作是否生效。
 
-A simple tool must have its `run` method implemented, while APIs of toolkits should avoid naming conflicts with this reserved word.
+### 自定义动作
+
+一个简单工具必须实现 `run` 方法，而工具包则应当避免将各子API名称定义为该保留字段。
 
 ```python
 class Bold(BaseAction):
@@ -251,13 +248,13 @@ class PhraseEmphasis(BaseAction):
         """
         return '*' + text + '*'
 
-# Inspect the default description 
+# 查看默认工具描述
 # Bold.__tool_description__, PhraseEmphasis.__tool_description__
 ```
 
-### Auto-registration
+### 自动注册
 
-Any subclass of `BaseAction` will be registered automatically. You can use `list_tools()` and `get_tool()` to view all tools and initialize by name.
+任何 `BaseAction` 的子类都会自动被注册。你可以使用 `list_tools()` 和 `get_tool()` 来查看所有工具类并通过工具名进行初始化。
 
 ```python
 from lagent import list_tools, get_tool
@@ -280,7 +277,8 @@ list_tools()
  'Bold',
  'PhraseEmphasis']
 ```
-Create a `PhraseEmphasis` object
+
+创建一个 `PhraseEmphasis` 对象。
 
 ```python
 action = get_tool('PhraseEmphasis')
@@ -307,25 +305,25 @@ action.description
 ```
 
 
-## Tool Calling
+## 工具调用
 
-### Run a Tool
+### 执行工具
 
-`__call__` method of `Action` takes two arguments
+`Action` 的 `__call__` 方法需要传入两个参数
 
-* `inputs`: It depends on the action's parser. Often a string in specific formats generated by LLMs.
-  + `JsonParser`: Allow passing arguements in the format of JSON string or Python `dict`.
-  + `TupleParser`: Allow passing arguments in the format of tuple string format or Python `tuple`.
-* `name`: Which API to call. Default is `run`.
+* `inputs`: 其类型与动作绑定的 `BaseParser` 相关，通常是由大语言模型生成的字符串。
+  + `JsonParser`: 允许传入 JSON 格式字符串或 Python 字典。
+  + `TupleParser`: 允许传入字面量为元组的字符串或 Python 元组。
+* `name`: 调用哪个 API，默认为 `run`。
 
-It returns an `ActionReturn` object which encapsulates calling details
+工具会返回一个封装了调用细节的 `ActionReturn` 对象。
 
-* `args`: Dictionary of action inputs.
-* `type`: Action name.
-* `result`: List of dicts. Each contains two keys: 'type' and 'content'. when errors occur, it is `None`.
-* `errmsg`: Error message. Default is `None`.
+* `args`: 一个字典，表示该动作的入参。
+* `type`: 动作名称。
+* `result`: 以字典为成员的列表，每个字典包含两个键——'type' 和 'content'，发生异常时该字段为 `None`。
+* `errmsg`: 错误信息，默认为 `None`。
 
-Below is an example
+以下是一个例子：
 
 ```python
 from lagent import IPythonInterpreter, TupleParser
@@ -350,15 +348,15 @@ print(ret.result)
 [{'type': 'text', 'content': '10.0'}]
 ```
 
-### Dynamic Invocation
+### 动态触发
 
-Lagent provides an `ActionExecutor` to manage multiple tools. It will flatten `api_list` of toolkits and rename each `{tool_name}.{api_name}`.
+Lagent 提供 `ActionExecutor` 接口管理多个工具，它会将工具包的 `api_list` 平展并将各 API 更名为 `{tool_name}.{api_name}`。
 
 ```python
 from lagent import ActionExecutor, ArxivSearch, IPythonInterpreter
 
 executor = ActionExecutor(actions=[ArxivSearch(), IPythonInterpreter()])
-executor.get_actions_info()  # This information is fed to LLMs as the tool meta prompt
+executor.get_actions_info()  # 该结果会作为LLM系统提示词的一部分
 ```
 
 ```python
@@ -384,7 +382,7 @@ executor.get_actions_info()  # This information is fed to LLMs as the tool meta 
   'parameter_description': '如果调用该工具，你必须使用Json格式 {key: value} 传参，其中key为参数名称'}]
 ```
 
-Trigger an action through the executor
+通过动作执行器来触发一个工具
 
 ```python
 ret = executor('IPythonInterpreter', '{"command": "import math;math.sqrt(100)"}')
