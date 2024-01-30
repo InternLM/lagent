@@ -105,7 +105,8 @@ class HFTransformer(BaseModel):
         Returns:
             (a list of/batched) text/chat completion
         """
-        for chunk in self.stream_generate(inputs, do_sample, **kwargs):
+        for status, chunk, _ in self.stream_generate(inputs, do_sample,
+                                                     **kwargs):
             response = chunk
         return response
 
