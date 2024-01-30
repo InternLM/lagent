@@ -195,8 +195,8 @@ class BaseModel:
             **gen_params
         ):
         warn(
-            "This function will be deprecated after three months and"
-            "will be replaced by the function 'chat' in the current class!", 
+            "This function will be deprecated after three months and will be replaced."
+            "Please use `.chat()`", 
             DeprecationWarning, 2)
         return self.chat(inputs, **gen_params)
 
