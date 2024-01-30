@@ -1,4 +1,3 @@
-import copy
 import re
 import warnings
 from typing import Dict, List, Optional, Tuple, Union
@@ -192,7 +191,7 @@ class ReWOOProtocol:
         worker_log = ''
         for thought, action_return in zip(thought_list, action_return_list):
             if action_return.state == ActionStatusCode.SUCCESS:
-                action_resp = action_return.result['text']
+                action_resp = action_return.format_result()
             else:
                 action_resp = action_return.errmsg
             worker_response = self.worker_prompt.format(
@@ -227,9 +226,17 @@ class ReWOO(BaseAgent):
 
         self.max_turn = max_turn
 
-    def chat(self, message: str) -> AgentReturn:
-        self._inner_history = []
-        self._inner_history.append(dict(role='user', content=message))
+    def chat(self, message: Union[str, dict, List[dict]],
+             **kwargs) -> AgentReturn:
+        if isinstance(message, str):
+            inner_history = [dict(role='user', content=message)]
+        elif isinstance(message, dict):
+            inner_history = [message]
+        elif isinstance(message, list):
+            inner_history = message[:]
+        else:
+            raise TypeError(f'unsupported type: {type(message)}')
+        offset = len(inner_history)
         agent_return = AgentReturn()
 
         # planner
@@ -237,13 +244,12 @@ class ReWOO(BaseAgent):
         reformat_request = ''
         while turn_id < self.max_turn:
             planner_prompt = self._protocol.format_planner(
-                chat_history=self.session_history,
-                inner_step=self._inner_history,
+                chat_history=[],
+                inner_step=inner_history,
                 action_executor=self._action_executor,
                 reformat_request=reformat_request)
-            response = self._llm.generate_from_template(planner_prompt, 512)
-            self._inner_history.append(
-                dict(role='assistant', content=response))
+            response = self._llm.chat(planner_prompt, **kwargs)
+            inner_history.append(dict(role='assistant', content=response))
             try:
                 thoughts, actions, actions_input = self._protocol.parse_worker(
                     response)
@@ -267,18 +273,17 @@ class ReWOO(BaseAgent):
             for prev_ptr in prev_ptrs:
                 ptr_num = int(prev_ptr.strip('#E')) - 1  # start from 0
                 actions_input[action_id] = actions_input[action_id].replace(
-                    prev_ptr, action_responses[ptr_num].result['text'])
+                    prev_ptr, action_responses[ptr_num].format_result())
             action_return: ActionReturn = self._action_executor(
                 actions[action_id], actions_input[action_id])
             action_responses.append(action_return)
 
         solver_prompt, worker_log = self._protocol.format_solver(
             message, thoughts, action_responses)
-        self._inner_history.append(dict(role='system', content=worker_log))
+        inner_history.append(dict(role='system', content=worker_log))
 
-        final_response = self._llm.generate_from_template(solver_prompt, 512)
-        self._inner_history.append(
-            dict(role='assistant', content=final_response))
-        agent_return.inner_steps = copy.deepcopy(self._inner_history)
+        final_response = self._llm.chat(solver_prompt, **kwargs)
+        inner_history.append(dict(role='assistant', content=final_response))
+        agent_return.inner_steps = inner_history[offset:]
         agent_return.response = final_response
         return agent_return

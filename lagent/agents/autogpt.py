@@ -1,6 +1,5 @@
 # flake8: noqa
 import ast
-import copy
 import platform
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -220,21 +219,20 @@ class AutoGPTProtocol:
             dict(role='user', content=self.triggering_prompt))
         return formatted_data
 
-    def format_response(self, action_return):
+    def format_response(self, action_return) -> dict:
         """format the final response at current step.
 
         Args:
             action_return (ActionReturn): return value of the current action.
 
         Returns:
-            str: the final response at current step.
+            dict: the final response at current step.
         """
         if action_return.state == ActionStatusCode.SUCCESS:
-            response = action_return.result['text']
-            response = f'Command {action_return.type} returned: {response}'
+            response = f'Command {action_return.type} returned: {response.format_result()}'
         else:
             response = action_return.errmsg
-        return response
+        return dict(role='system', content=response)
 
 
 class AutoGPT(BaseAgent):
@@ -261,30 +259,26 @@ class AutoGPT(BaseAgent):
         super().__init__(
             llm=llm, action_executor=action_executor, protocol=protocol)
 
-    def chat(self, goal: str) -> AgentReturn:
-        self._inner_history = []
+    def chat(self, goal: str, **kwargs) -> AgentReturn:
+        inner_history = []
         agent_return = AgentReturn()
         default_response = 'Sorry that I cannot answer your question.'
         for _ in range(self.max_turn):
             prompt = self._protocol.format(
                 goal=goal,
-                inner_history=self._inner_history,
+                inner_history=inner_history,
                 action_executor=self._action_executor)
-            response = self._llm.generate_from_template(prompt, 512)
-            self._inner_history.append(
-                dict(role='assistant', content=response))
+            response = self._llm.chat(prompt, **kwargs)
+            inner_history.append(dict(role='assistant', content=response))
             action, action_input = self._protocol.parse(
                 response, self._action_executor)
             action_return: ActionReturn = self._action_executor(
                 action, action_input)
             agent_return.actions.append(action_return)
             if action_return.type == self._action_executor.finish_action.name:
-                agent_return.response = action_return.result['text']
+                agent_return.response = action_return.format_result()
                 return agent_return
-            self._inner_history.append(
-                dict(
-                    role='system',
-                    content=self._protocol.format_response(action_return)))
-        agent_return.inner_steps = copy.deepcopy(self._inner_history)
+            inner_history.append(self._protocol.format_response(action_return))
+        agent_return.inner_steps = inner_history
         agent_return.response = default_response
         return agent_return

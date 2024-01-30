@@ -1,5 +1,7 @@
 from abc import abstractclassmethod
+from copy import copy
 from typing import Dict, List, Optional, Tuple, Union
+from warnings import warn
 
 
 class LMTemplateParser:
@@ -21,7 +23,7 @@ class LMTemplateParser:
                     'role in meta prompt must be unique!'
                 self.roles[item['role']] = item.copy()
 
-    def parse_template(self, dialog) -> str:
+    def __call__(self, dialog) -> str:
         """Parse a prompt template, and wrap it with meta template if
         applicable.
 
@@ -111,12 +113,17 @@ class BaseModel:
 
     def __init__(self,
                  path: str,
-                 max_seq_len: int = 2048,
                  tokenizer_only: bool = False,
                  template_parser: 'LMTemplateParser' = LMTemplateParser,
-                 meta_template: Optional[List[Dict]] = None):
+                 meta_template: Optional[List[Dict]] = None,
+                 *,
+                 max_tokens: int = 512,
+                 top_p: float = 0.8,
+                 top_k: float = None,
+                 temperature: float = 0.8,
+                 repetition_penalty: float = 1.0,
+                 stop_words: Union[List[str], str] = None):
         self.path = path
-        self.max_seq_len = max_seq_len
         self.tokenizer_only = tokenizer_only
         # meta template
         self.template_parser = template_parser(meta_template)
@@ -124,41 +131,99 @@ class BaseModel:
         if meta_template and 'eos_token_id' in meta_template:
             self.eos_token_id = meta_template['eos_token_id']
 
-    @abstractclassmethod
-    def generate(self, inputs: List[str], max_out_len: int) -> List[str]:
-        """Generate results given a list of inputs.
+        self.gen_params = dict(
+            max_tokens=max_tokens,
+            top_p=top_p,
+            top_k=top_k,
+            temperature=temperature,
+            repetition_penalty=repetition_penalty,
+            stop_words=stop_words)
+
+    def generate(self, inputs: Union[str, List[str]], **gen_params) -> str:
+        """Generate results given a str (or list of) inputs.
 
         Args:
-            inputs (List[str]): A list of strings.
-            max_out_len (int): The maximum length of the output.
+            inputs (Union[str, List[str]]):
+            gen_params (dict): The input params for generation.
 
         Returns:
-            List[str]: A list of generated strings.
-        """
+            Union[str, List[str]]: A (list of) generated strings.
 
-    def parse_template(self, dialog) -> str:
-        """Parse a prompt template, and wrap it with meta template if
-        applicable.
+        eg.
+            batched = True
+            if isinstance(inputs, str):
+                inputs = [inputs]
+                batched = False
+            response = ['']
+            if batched:
+                return response
+            return response[0]
+        """
+        raise NotImplementedError
+
+    def stream_generate(self, inputs: str, **gen_params) -> List[str]:
+        """Generate results as streaming given a str inputs.
 
         Args:
-            dialog (List[str or PromptList]): A prompt
-                template (potentially before being wrapped by meta template).
-            mode (str): Parsing mode. Choices are 'ppl' and 'gen'.
+            inputs (str):
+            gen_params (dict): The input params for generation.
 
         Returns:
-            str: The final string.
+            str: A generated string.
         """
-        return self.template_parser.parse_template(dialog)
+        raise NotImplementedError
 
-    def generate_from_template(self, templates, max_out_len: int, **kwargs):
+    def chat(self, inputs: Union[List[dict], List[List[dict]]], **gen_params):
         """Generate completion from a list of templates.
 
         Args:
-            templates (List[PromptType]): A list of templates.
-            max_out_len (int): The maximum length of the output.
+            inputs (Union[List[dict], List[List[dict]]]):
+            gen_params (dict): The input params for generation.
+        Returns:
         """
-        inputs = self.parse_template(templates)
-        return self.generate(inputs, max_out_len=max_out_len, **kwargs)
+        if isinstance(inputs[0], list):
+            inputs = list()
+            for msg in inputs:
+                inputs.append(self.template_parser(msg))
+        else:
+            inputs = self.template_parser(inputs)
+        return self.generate(inputs, **gen_params)
 
-    def to(self, device):
-        self.model.to(device)
+    def generate_from_template(
+            self, 
+            inputs: Union[List[dict], List[List[dict]]], 
+            **gen_params
+        ):
+        warn(
+            "This function will be deprecated after three months and will be replaced."
+            "Please use `.chat()`", 
+            DeprecationWarning, 2)
+        return self.chat(inputs, **gen_params)
+
+    def stream_chat(self, inputs: List[dict], **gen_params):
+        """Generate results as streaming given a list of templates.
+
+        Args:
+            inputs (Union[List[dict]):
+            gen_params (dict): The input params for generation.
+        Returns:
+        """
+        raise NotImplementedError
+
+    def tokenize(self, prompts: Union[str, List[str], List[dict],
+                                      List[List[dict]]]):
+        """Tokenize the input prompts.
+
+        Args:
+            prompts(str | List[str]): user's prompt, or a batch prompts
+
+        Returns:
+            Tuple(numpy.ndarray, numpy.ndarray, numpy.ndarray): prompt's token
+            ids, ids' length and requested output length
+        """
+        raise NotImplementedError
+
+    def update_gen_params(self, **kwargs):
+        gen_params = copy(self.gen_params)
+        gen_params.update(kwargs)
+        return gen_params

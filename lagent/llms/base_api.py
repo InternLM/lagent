@@ -27,7 +27,7 @@ class APITemplateParser:
                     'role in meta prompt must be unique!'
                 self.roles[item['role']] = item.copy()
 
-    def parse_template(self, dialog: List[Union[str, List]]):
+    def __call__(self, dialog: List[Union[str, List]]):
         """Parse the intermidate prompt template, and wrap it with meta
         template if applicable. When the meta template is set and the input is
         a list, the return value will be a list containing the full
@@ -155,7 +155,14 @@ class BaseAPIModel(BaseModel):
                  retry: int = 2,
                  max_seq_len: int = 2048,
                  template_parser: 'APITemplateParser' = APITemplateParser,
-                 meta_template: Optional[Dict] = None):
+                 meta_template: Optional[Dict] = None,
+                 *,
+                 max_out_len: int = 512,
+                 top_p: float = 0.8,
+                 top_k: float = None,
+                 temperature: float = 0.8,
+                 repetition_penalty: float = 0.0,
+                 stop_words: Union[List[str], str] = None):
         self.model_type = model_type
         self.max_seq_len = max_seq_len
         self.meta_template = meta_template
@@ -165,52 +172,20 @@ class BaseAPIModel(BaseModel):
         if template_parser:
             self.template_parser = template_parser(meta_template)
 
-    @abstractclassmethod
-    def generate(self, inputs, max_out_len: int) -> List[str]:
-        """Generate results given a list of inputs.
+        self.gen_params = dict(
+            max_out_len=max_out_len,
+            top_p=top_p,
+            top_k=top_k,
+            temperature=temperature,
+            repetition_penalty=repetition_penalty,
+            stop_words=stop_words)
 
-        Args:
-            inputs (List[str or list]): A list of strings or PromptDicts.
-                The PromptDict should be organized in OpenCompass'
-                API format.
-            max_out_len (int): The maximum length of the output.
-
-        Returns:
-            List[str]: A list of generated strings.
-        """
-
-    def get_token_len(self, prompt: str) -> int:
-        """Get lengths of the tokenized string. Only English and Chinese
-        characters are counted for now. Users are encouraged to override this
-        method if more accurate length is needed.
-
-        Args:
-            prompt (str): Input string.
-
-        Returns:
-            int: Length of the input tokens
-        """
-
-        english_parts = re.findall(r'[A-Za-z0-9]+', prompt)
-        chinese_parts = re.findall(r'[\u4e00-\u9FFF]+', prompt)
-
-        # Count English words
-        english_count = sum(len(part.split()) for part in english_parts)
-
-        # Count Chinese words
-        chinese_count = sum(len(part) for part in chinese_parts)
-
-        return english_count + chinese_count
-
-    def wait(self):
+    def _wait(self):
         """Wait till the next query can be sent.
 
         Applicable in both single-thread and multi-thread environments.
         """
         return self.token_bucket.get_token()
-
-    def to(self, device):
-        pass
 
 
 class TokenBucket:

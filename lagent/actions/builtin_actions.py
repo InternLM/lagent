@@ -1,6 +1,7 @@
 from typing import Optional
 
-from lagent.actions.base_action import BaseAction
+from lagent.actions.base_action import BaseAction, tool_api
+from lagent.actions.parser import BaseParser
 from lagent.schema import ActionReturn, ActionStatusCode, ActionValidCode
 
 
@@ -19,12 +20,13 @@ class InvalidAction(BaseAction):
     def __init__(self,
                  err_msg:
                  str = 'The action is invalid, please check the action name.',
-                 **kwargs) -> None:
-
-        super().__init__(enable=False, **kwargs)
+                 description: Optional[dict] = None,
+                 parser=BaseParser) -> None:
+        super().__init__(description, parser, enable=False)
         self._err_msg = err_msg
 
-    def __call__(self, err_msg: Optional[str] = None):
+    @tool_api
+    def run(self, err_msg: Optional[str] = None) -> ActionReturn:
         """Return the error message.
 
         Args:
@@ -35,7 +37,7 @@ class InvalidAction(BaseAction):
         action_return = ActionReturn(
             url=None,
             args=dict(text=err_msg),
-            errmsg=err_msg if err_msg else self._err_msg,
+            errmsg=err_msg or self._err_msg,
             type=self.name,
             valid=ActionValidCode.INVALID,
             state=ActionStatusCode.API_ERROR)
@@ -51,12 +53,15 @@ class NoAction(BaseAction):
             'Please follow the format'.
     """
 
-    def __init__(self, err_msg: str = 'Please follow the format', **kwargs):
-
-        super().__init__(enable=False, **kwargs)
+    def __init__(self,
+                 err_msg: str = 'Please follow the format',
+                 description: Optional[dict] = None,
+                 parser=BaseParser):
+        super().__init__(description, parser, enable=False)
         self._err_msg = err_msg
 
-    def __call__(self, err_msg: Optional[str] = None):
+    @tool_api
+    def run(self, err_msg: Optional[str] = None) -> ActionReturn:
         """Return the error message.
 
         Args:
@@ -71,7 +76,7 @@ class NoAction(BaseAction):
             url=None,
             args=dict(text=err_msg),
             type=self.name,
-            errmsg=err_msg if err_msg else self._err_msg,
+            errmsg=err_msg or self._err_msg,
             valid=ActionValidCode.INVALID,
             state=ActionStatusCode.API_ERROR)
         return action_return
@@ -81,7 +86,11 @@ class FinishAction(BaseAction):
     """This is a finish action class, which is used to return the final
     result."""
 
-    def __call__(self, response: str) -> ActionReturn:
+    def __init__(self, description: Optional[dict] = None, parser=BaseParser):
+        super().__init__(description, parser, enable=True)
+
+    @tool_api
+    def run(self, response: str) -> ActionReturn:
         """Return the final result.
 
         Args:
@@ -93,7 +102,7 @@ class FinishAction(BaseAction):
         action_return = ActionReturn(
             url=None,
             args=dict(text=response),
-            result=dict(text=response),
+            result=[dict(type='text', content=response)],
             type=self.name,
             valid=ActionValidCode.FINISH,
             state=ActionStatusCode.SUCCESS)

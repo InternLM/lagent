@@ -1,4 +1,3 @@
-import copy
 from typing import Dict, List, Tuple, Union
 
 from lagent.actions import ActionExecutor
@@ -43,7 +42,7 @@ To use a tool, please use the following format:
 The response after utilizing tools should using the following format:
 ```
 {response}the results after call the tool.
-``
+```
 If you already know the answer, or you do not need to use tools,
 please using the following format to reply:
 ```
@@ -170,20 +169,22 @@ class ReActProtocol:
         action_input = arg_match[-1]
         return thought, action.strip(), action_input.strip().strip('"')
 
-    def format_response(self, action_return: ActionReturn) -> str:
+    def format_response(self, action_return: ActionReturn) -> dict:
         """format the final response at current step.
 
         Args:
             action_return (ActionReturn): return value of the current action.
 
         Returns:
-            str: the final response at current step.
+            dict: the final response at current step.
         """
         if action_return.state == ActionStatusCode.SUCCESS:
-            response = action_return.result['text']
+            response = action_return.format_result()
         else:
             response = action_return.errmsg
-        return self.response['begin'] + response + self.response['end']
+        return dict(
+            role='system',
+            content=self.response['begin'] + response + self.response['end'])
 
 
 class ReAct(BaseAgent):
@@ -210,20 +211,27 @@ class ReAct(BaseAgent):
         super().__init__(
             llm=llm, action_executor=action_executor, protocol=protocol)
 
-    def chat(self, message: str) -> AgentReturn:
-        self._inner_history = []
-        self._inner_history.append(dict(role='user', content=message))
+    def chat(self, message: Union[str, dict, List[dict]],
+             **kwargs) -> AgentReturn:
+        if isinstance(message, str):
+            inner_history = [dict(role='user', content=message)]
+        elif isinstance(message, dict):
+            inner_history = [message]
+        elif isinstance(message, list):
+            inner_history = message[:]
+        else:
+            raise TypeError(f'unsupported type: {type(message)}')
+        offset = len(inner_history)
         agent_return = AgentReturn()
         default_response = 'Sorry that I cannot answer your question.'
         for turn in range(self.max_turn):
             prompt = self._protocol.format(
-                chat_history=self.session_history,
-                inner_step=self._inner_history,
+                chat_history=[],
+                inner_step=inner_history,
                 action_executor=self._action_executor,
                 force_stop=(turn == self.max_turn - 1))
-            response = self._llm.generate_from_template(prompt, 512)
-            self._inner_history.append(
-                dict(role='assistant', content=response))
+            response = self._llm.chat(prompt, **kwargs)
+            inner_history.append(dict(role='assistant', content=response))
             thought, action, action_input = self._protocol.parse(
                 response, self._action_executor)
             action_return: ActionReturn = self._action_executor(
@@ -231,17 +239,10 @@ class ReAct(BaseAgent):
             action_return.thought = thought
             agent_return.actions.append(action_return)
             if action_return.type == self._action_executor.finish_action.name:
-                agent_return.response = action_return.result['text']
+                agent_return.response = action_return.format_result()
                 break
-            self._inner_history.append(
-                dict(
-                    role='system',
-                    content=self._protocol.format_response(action_return)))
+            inner_history.append(self._protocol.format_response(action_return))
         else:
             agent_return.response = default_response
-        agent_return.inner_steps = copy.deepcopy(self._inner_history)
-        # only append the user and final response
-        self._session_history.append(dict(role='user', content=message))
-        self._session_history.append(
-            dict(role='assistant', content=agent_return.response))
+        agent_return.inner_steps = inner_history[offset:]
         return agent_return

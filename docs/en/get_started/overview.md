@@ -1,4 +1,4 @@
-# OVERVIEW
+# Overview
 
 This chapter introduces you to the framework of Lagent, and provides links to detailed tutorials about Lagent.
 
@@ -18,6 +18,6 @@ Lagent consists of 3 main parts, agents, llms, and actions.
 
 Here is a detailed step-by-step guide to learn more about Lagent:
 
-1. For installation instructions, please see [README](../README.md).
+1. For installation instructions, please see [README](https://github.com/InternLM/lagent/blob/main/README.md).
 
-2. We provide several examples to build agents with Lagent in [examples](examples/) by simply run `python examples/react_example.py`.
+2. We provide several examples to build agents with Lagent in [examples](https://github.com/InternLM/lagent/tree/main/examples) by simply run `python examples/react_example.py`.

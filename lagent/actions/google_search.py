@@ -1,15 +1,11 @@
 import os
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Type, Union
 
 import requests
 
 from lagent.schema import ActionReturn, ActionStatusCode
-from .base_action import BaseAction
-
-DEFAULT_DESCRIPTION = """一个可以从谷歌搜索结果的API。
-当你需要对于一个特定问题找到简短明了的回答时，可以使用它。
-输入应该是一个搜索查询。
-"""
+from .base_action import BaseAction, tool_api
+from .parser import BaseParser, JsonParser
 
 
 class GoogleSearch(BaseAction):
@@ -28,15 +24,10 @@ class GoogleSearch(BaseAction):
         timeout (int): Upper bound of waiting time for a serper request.
         search_type (str): Serper API support ['search', 'images', 'news',
             'places'] types of search, currently we only support 'search'.
-        k (int): select first k results in the search results as response.
-        description (str): The description of the action. Defaults to
-            None.
-        name (str, optional): The name of the action. If None, the name will
-            be class name. Defaults to None.
-        enable (bool, optional): Whether the action is enabled. Defaults to
-            True.
-        disable_description (str, optional): The description of the action when
-            it is disabled. Defaults to None.
+        description (dict): The description of the action. Defaults to ``None``.
+        parser (Type[BaseParser]): The parser class to process the
+            action's inputs and outputs. Defaults to :class:`JsonParser`.
+        enable (bool): Whether the action is enabled. Defaults to ``True``.
     """
     result_key_for_type = {
         'news': 'news',
@@ -49,36 +40,29 @@ class GoogleSearch(BaseAction):
                  api_key: Optional[str] = None,
                  timeout: int = 5,
                  search_type: str = 'search',
-                 k: int = 10,
-                 description: str = DEFAULT_DESCRIPTION,
-                 name: Optional[str] = None,
-                 enable: bool = True,
-                 disable_description: Optional[str] = None) -> None:
-        super().__init__(description, name, enable, disable_description)
-
+                 description: Optional[dict] = None,
+                 parser: Type[BaseParser] = JsonParser,
+                 enable: bool = True):
+        super().__init__(description, parser, enable)
         api_key = os.environ.get('SERPER_API_KEY', api_key)
         if api_key is None:
             raise ValueError(
                 'Please set Serper API key either in the environment '
-                ' as SERPER_API_KEY or pass it as `api_key` parameter.')
+                'as SERPER_API_KEY or pass it as `api_key` parameter.')
         self.api_key = api_key
         self.timeout = timeout
         self.search_type = search_type
-        self.k = k
 
-    def __call__(self, query: str) -> ActionReturn:
-        """Return the search response.
-
+    @tool_api
+    def run(self, query: str, k: int = 10) -> ActionReturn:
+        """一个可以从谷歌搜索结果的API。当你需要对于一个特定问题找到简短明了的回答时，可以使用它。输入应该是一个搜索查询。
+        
         Args:
-            query (str): The search content.
-
-        Returns:
-            ActionReturn: The action return.
+            query (str): the search content
+            k (int): select first k results in the search results as response
         """
-
-        tool_return = ActionReturn(url=None, args=None, type=self.name)
-        status_code, response = self._search(
-            query, search_type=self.search_type, k=self.k)
+        tool_return = ActionReturn(type=self.name)
+        status_code, response = self._search(query, k=k)
         # convert search results to ToolReturn format
         if status_code == -1:
             tool_return.errmsg = response
@@ -139,7 +123,7 @@ class GoogleSearch(BaseAction):
 
     def _search(self,
                 search_term: str,
-                search_type: str = 'search',
+                search_type: Optional[str] = None,
                 **kwargs) -> Tuple[int, Union[dict, str]]:
         """HTTP requests to Serper API.
 
@@ -166,7 +150,7 @@ class GoogleSearch(BaseAction):
         }
         try:
             response = requests.post(
-                f'https://google.serper.dev/{search_type}',
+                f'https://google.serper.dev/{search_type or self.search_type}',
                 headers=headers,
                 params=params,
                 timeout=self.timeout)
