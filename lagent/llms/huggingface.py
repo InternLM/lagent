@@ -3,7 +3,7 @@ import logging
 import sys
 import traceback
 import warnings
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from lagent.schema import AgentStatusCode
 from .base_llm import BaseModel
@@ -93,10 +93,18 @@ class HFTransformer(BaseModel):
 
     def generate(
         self,
-        inputs: List[str],
+        inputs: Union[str, List[str]],
         do_sample=True,
         **kwargs,
     ):
+        """Return the chat completions in non-stream mode.
+
+        Args:
+            inputs (Union[str, List[str]]): input texts to be completed.
+            do_sample (bool): do sampling if enabled
+        Returns:
+            (a list of/batched) text/chat completion
+        """
         for chunk in self.stream_generate(inputs, do_sample, **kwargs):
             response = chunk
         return response
@@ -107,6 +115,15 @@ class HFTransformer(BaseModel):
         do_sample=True,
         **kwargs,
     ):
+        """Return the chat completions in stream mode.
+
+        Args:
+            inputs (Union[str, List[str]]): input texts to be completed.
+            do_sample (bool): do sampling if enabled
+        Returns:
+            tuple(Status, str, int): status, text/chat completion,
+            generated token number
+        """
         try:
             import torch
             from torch import nn

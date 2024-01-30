@@ -116,7 +116,7 @@ class TritonClient(BaseModel):
                     sequence_end: bool = True,
                     **kwargs):
         """Start a new round conversation of a session. Return the chat
-        completions in non-stream mode.
+        completions in stream mode.
 
         Args:
             session_id (int): the identical id of a session
@@ -206,10 +206,10 @@ class LMDeployPipeline(BaseModel):
                         "Qwen/Qwen-7B-Chat ", "baichuan-inc/Baichuan2-7B-Chat"
                         and so on.
         model_name (str): needed when model_path is a pytorch model on
-            huggingface.co, such as "internlm/internlm-chat-7b",
-            "Qwen/Qwen-7B-Chat ", "baichuan-inc/Baichuan2-7B-Chat" and so on.
-        tp (int):
-        pipeline_cfg (dict):
+            huggingface.co, such as "internlm-chat-7b",
+            "Qwen-7B-Chat ", "Baichuan2-7B-Chat" and so on.
+        tp (int): tensor parallel
+        pipeline_cfg (dict): config of pipeline
     """
 
     def __init__(self,
@@ -226,8 +226,18 @@ class LMDeployPipeline(BaseModel):
 
     def generate(self,
                  inputs: Union[str, List[str]],
-                 do_preprocess=None,
+                 do_preprocess: bool = None,
                  **kwargs):
+        """Return the chat completions in non-stream mode.
+
+        Args:
+            inputs (Union[str, List[str]]): input texts to be completed.
+            do_preprocess (bool): whether pre-process the messages. Default to
+                True, which means chat_template will be applied.
+
+        Returns:
+            (a list of/batched) text/chat completion
+        """
         batched = True
         if isinstance(inputs, str):
             inputs = [inputs]
@@ -262,11 +272,11 @@ class LMDeployServer(BaseModel):
                     "Qwen/Qwen-7B-Chat ", "baichuan-inc/Baichuan2-7B-Chat"
                     and so on.
         model_name (str): needed when model_path is a pytorch model on
-            huggingface.co, such as "internlm/internlm-chat-7b",
-            "Qwen/Qwen-7B-Chat ", "baichuan-inc/Baichuan2-7B-Chat" and so on.
+            huggingface.co, such as "internlm-chat-7b",
+            "Qwen-7B-Chat ", "Baichuan2-7B-Chat" and so on.
         server_name (str): host ip for serving
         server_port (int): server port
-        tp (int):
+        tp (int): tensor parallel
         log_level (str): set log level whose value among
             [CRITICAL, ERROR, WARNING, INFO, DEBUG]
     """
@@ -300,6 +310,20 @@ class LMDeployServer(BaseModel):
                  ignore_eos: bool = False,
                  timeout: int = 30,
                  **kwargs) -> List[str]:
+        """Start a new round conversation of a session. Return the chat
+        completions in non-stream mode.
+
+        Args:
+            inputs (str, List[str]): user's prompt(s) in this round
+            session_id (int): the identical id of a session
+            sequence_start (bool): start flag of a session
+            sequence_end (bool): end flag of a session
+            ignore_eos (bool): indicator for ignoring eos
+            timeout (int): max time to wait for response
+        Returns:
+            (a list of/batched) text/chat completion
+        """
+
         batched = True
         if isinstance(inputs, str):
             inputs = [inputs]
@@ -337,7 +361,21 @@ class LMDeployServer(BaseModel):
                     ignore_eos: bool = False,
                     timeout: int = 30,
                     **kwargs):
+        """Start a new round conversation of a session. Return the chat
+        completions in stream mode.
 
+        Args:
+            session_id (int): the identical id of a session
+            inputs (List[dict]): user's inputs in this round conversation
+            sequence_start (bool): start flag of a session
+            sequence_end (bool): end flag of a session
+            stream (bool): return in a streaming format if enabled
+            ignore_eos (bool): indicator for ignoring eos
+            timeout (int): max time to wait for response
+        Returns:
+            tuple(Status, str, int): status, text/chat completion,
+            generated token number
+        """
         gen_params = self.update_gen_params(**kwargs)
         prompt = self.template_parser(inputs)
 
@@ -374,7 +412,8 @@ class LMDeployClient(LMDeployServer):
 
     Args:
         path (str): The path to the model.
-        url (str):
+        url (str): communicating address 'http://<ip>:<port>' of
+            api_server
     """
 
     def __init__(self, path: str, url: str, **kwargs):
