@@ -5,7 +5,7 @@ import traceback
 import warnings
 from typing import Dict, List, Optional
 
-from lagent.schema import AgentStatusCode
+from lagent.schema import ModelStatusCode
 from .base_llm import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -266,18 +266,18 @@ class HFTransformer(BaseModel):
                     # print(response)
                     if not batched:
                         response = response[0]
-                    yield AgentStatusCode.STREAM_ING, response, None
+                    yield ModelStatusCode.STREAM_ING, response, None
                     # stop when each sentence is finished,
                     # or if we exceed the maximum length
                     if (unfinished_sequences.max() == 0
                             or stopping_criteria(input_ids, scores)):
                         break
-                yield AgentStatusCode.END, response, None
+                yield ModelStatusCode.END, response, None
         except Exception:
             response = ''.join(traceback.format_exception(*sys.exc_info()))
             if batched:
                 response = [response]
-            yield AgentStatusCode.SERVER_ERR, response, None
+            yield ModelStatusCode.SERVER_ERR, response, None
 
 
 class HFTransformerCasualLM(HFTransformer):
