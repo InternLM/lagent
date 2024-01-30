@@ -5,9 +5,10 @@ import os
 
 import streamlit as st
 
-from lagent.actions import ActionExecutor, ArxivSearch, GoogleScholar, IPythonInterpreter
+from lagent.actions import (ActionExecutor, ArxivSearch, GoogleScholar,
+                            IPythonInterpreter)
 from lagent.agents.internlm2_agent import (INTERPRETER_CN, META_INS, PLUGIN_CN,
-                                           Internlm2Agent, Interlm2Protocol)
+                                           Internlm2Agent, Internlm2Protocol)
 from lagent.llms.lmdepoly_wrapper import LMDeployClient
 from lagent.llms.meta_template import INTERNLM2_META as META
 from lagent.schema import AgentStatusCode
@@ -135,7 +136,7 @@ class StreamlitUI:
         """Initialize the chatbot with the given model and plugin actions."""
         return Internlm2Agent(
             llm=model,
-            protocol=Interlm2Protocol(
+            protocol=Internlm2Protocol(
                 tool=dict(
                     begin='{start_token}{name}\n',
                     start_token='<|action_start|>',
@@ -309,7 +310,8 @@ def main():
                     if isinstance(agent_return.response, dict):
                         action = f"\n\n {agent_return.response['name']}: \n\n"
                         action_input = agent_return.response['parameters']
-                        if agent_return.response['name'] == 'IPythonInterpreter':
+                        if agent_return.response[
+                                'name'] == 'IPythonInterpreter':
                             action_input = action_input['command']
                         response = action + action_input
                     else:
@@ -318,7 +320,8 @@ def main():
                     st.session_state['placeholder'].markdown(
                         st.session_state['temp'])
             elif agent_return.state == AgentStatusCode.END:
-                st.session_state['session_history'] += (user_input + agent_return.inner_steps)
+                st.session_state['session_history'] += (
+                    user_input + agent_return.inner_steps)
                 agent_return = copy.deepcopy(agent_return)
                 agent_return.response = st.session_state['temp']
                 st.session_state['assistant'].append(

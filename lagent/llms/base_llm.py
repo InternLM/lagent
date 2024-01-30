@@ -1,4 +1,3 @@
-from abc import abstractclassmethod
 from copy import copy
 from typing import Dict, List, Optional, Tuple, Union
 from warnings import warn
@@ -189,15 +188,13 @@ class BaseModel:
             inputs = self.template_parser(inputs)
         return self.generate(inputs, **gen_params)
 
-    def generate_from_template(
-            self, 
-            inputs: Union[List[dict], List[List[dict]]], 
-            **gen_params
-        ):
+    def generate_from_template(self, inputs: Union[List[dict],
+                                                   List[List[dict]]],
+                               **gen_params):
         warn(
-            "This function will be deprecated after three months and will be replaced."
-            "Please use `.chat()`", 
-            DeprecationWarning, 2)
+            'This function will be deprecated after three months'
+            'and will be replaced. Please use `.chat()`', DeprecationWarning,
+            2)
         return self.chat(inputs, **gen_params)
 
     def stream_chat(self, inputs: List[dict], **gen_params):

@@ -145,7 +145,7 @@ class TritonClient(BaseModel):
         elif self.chatbot._session.status == 0:
             logger.error(f'session {session_id} has been ended. Please set '
                          f'`sequence_start` be True if you want to restart it')
-            return ''
+            return AgentStatusCode.SESSION_CLOSED, '', 0
 
         self.chatbot._session.status = 1
         self.chatbot._session.request_id = request_id
@@ -171,7 +171,7 @@ class TritonClient(BaseModel):
                 self.chatbot._session.prompt + self.chatbot._session.response)
             yield self.state_map.get(status), res, _
         else:
-            return ''
+            return self.state_map.get(status), res, _
 
     def _update_gen_params(self, **kwargs):
         import mmengine
@@ -195,7 +195,7 @@ class LMDeployPipeline(BaseModel):
         path (str): The path to the model.
             It could be one of the following options:
                     - i) A local directory path of a turbomind model which is
-                        converted by `lmdeploy convert` command or download 
+                        converted by `lmdeploy convert` command or download
                         from ii) and iii).
                     - ii) The model_id of a lmdeploy-quantized model hosted
                         inside a model repo on huggingface.co, such as
