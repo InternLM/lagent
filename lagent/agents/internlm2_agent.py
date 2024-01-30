@@ -3,7 +3,7 @@ import logging
 from copy import deepcopy
 from typing import Dict, List, Union, Optional
 
-from ilagent.schema import AgentReturn, AgentStatusCode
+from lagent.schema import AgentReturn, AgentStatusCode
 
 from lagent import BaseAgent
 from lagent.actions import ActionExecutor
