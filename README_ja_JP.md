@@ -16,19 +16,9 @@ English | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | [ह�
     👋 <a href="https://twitter.com/intern_lm" target="_blank">Twitter</a>, <a href="https://discord.gg/xa29JuW87d" target="_blank">Discord</a> そして <a href="https://r.vansin.top/?r=internwx" target="_blank">WeChat</a> に参加する
 </p>
 
-## はじめに
-
-Lagent は、大規模言語モデル(LLM)ベースのエージェントを効率的に構築できる軽量なオープンソースフレームワークです。また、LLM を拡張するための典型的なツールも提供します。我々のフレームワークの概要を以下に示します:
-
-![image](https://github.com/InternLM/lagent/assets/24351120/cefc4145-2ad8-4f80-b88b-97c05d1b9d3e)
-
-### 主な特徴
-
-- **複数のエージェントをすぐにサポート** Lagent は現在、[ReAct](https://arxiv.org/abs/2210.03629)、[AutoGPT](https://github.com/Significant-Gravitas/Auto-GPT)、[ReWOO](https://arxiv.org/abs/2305.18323) をサポートしており、推論や関数呼び出しの複数の試行に対して大規模言語モデル(LLM)を駆動することができる。
-
-- **非常にシンプルで、拡張も簡単。** フレームワークは非常にシンプルで、明確な構造を持っています。わずか 20 行のコードで、独自のエージェントを構築することができます。また、3 つの代表的なツールをサポートしています： Python インタプリタ、API コール、google 検索です。
-
-- **様々な大規模言語モデルをサポート。** API ベース(GPT-3.5/4)やオープンソース(LLaMA 2, InternLM)を含む様々な LLM をサポートしています。
+<p align="center">
+    <iframe src="https://upos-hz-mirrorakam.akamaized.net/upgcxcode/99/71/1412447199/1412447199-1-16.mp4?e=ig8euxZM2rNcNbRVhwdVhwdlhWdVhwdVhoNvNC8BqJIzNbfq9rVEuxTEnE8L5F6VnEsSTx0vkX8fqJeYTj_lta53NCM=&uipk=5&nbs=1&deadline=1706626499&gen=playurlv2&os=akam&oi=804486655&trid=b0750df67f8a4dfdb7021782a73a2b3eh&mid=0&platform=html5&upsig=7cbe56bea911db3153660c6a94eaa187&uparams=e,uipk,nbs,deadline,gen,os,oi,trid,mid,platform&hdnts=exp=1706626499~hmac=965cf78a445fa19afb6ba490c602c155b5a0baae9ec1ff609cb91023ceca9de3&bvc=vod&nettype=0&f=h_0_0&bw=39605&logo=80000000" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true" height=360 width=640></iframe>
+</p>
 
 ## はじめに
 
@@ -42,72 +32,20 @@ pip でインストールする（推奨）。
 pip install lagent
 ```
 
-オプションとして、コードを修正したい場合に備えて、Lagent をソースからビルドすることもできる:
+### ウェブデモの実行
+
+最初に streamlit をインストールする必要があります
 
 ```bash
-git clone https://github.com/InternLM/lagent.git
-cd lagent
-pip install -e .
-```
-
-### ReAct ウェブデモの実行
-
-```bash
-# 最初に streamlit をインストールする必要があります
 # pip install streamlit
-streamlit run examples/react_web_demo.py
+streamlit run examples/internlm2_agent_web_demo.py
 ```
 
-その後、以下のような UI からチャットができます
-![image](https://github.com/InternLM/lagent/assets/24622904/3aebb8b4-07d1-42a2-9da3-46080c556f68)
+## はじめに
 
-### GPT-3.5 で ReWOO エージェントを動かす
+Lagent は、大規模言語モデル(LLM)ベースのエージェントを効率的に構築できる軽量なオープンソースフレームワークです。また、LLM を拡張するための典型的なツールも提供します。我々のフレームワークの概要を以下に示します:
 
-以下は、GPT-3.5 で ReWOO を実行する例です
-
-```python
-from lagent.agents import ReWOO
-from lagent.actions import ActionExecutor, GoogleSearch, LLMQA
-from lagent.llms import GPTAPI
-
-llm = GPTAPI(model_type='gpt-3.5-turbo', key=['Your OPENAI_API_KEY'])
-search_tool = GoogleSearch(api_key='Your SERPER_API_KEY')
-llmqa_tool = LLMQA(llm)
-
-chatbot = ReWOO(
-    llm=llm,
-    action_executor=ActionExecutor(
-        actions=[search_tool, llmqa_tool]),
-)
-
-response = chatbot.chat('What profession does Nicholas Ray and Elia Kazan have in common')
-print(response.response)
->>> Film director.
-```
-
-### InternLM で ReAct エージェントを動かす
-
-注: Hugging Face モデルを実行したい場合は、まず `pip install -e .[all]` を実行してください。
-
-```python
-from lagent.agents import ReAct
-from lagent.actions import ActionExecutor, GoogleSearch, PythonInterpreter
-from lagent.llms import HFTransformer
-
-llm = HFTransformer('internlm/internlm-chat-7b-v1_1')
-search_tool = GoogleSearch(api_key='Your SERPER_API_KEY')
-python_interpreter = PythonInterpreter()
-
-chatbot = ReAct(
-    llm=llm,
-    action_executor=ActionExecutor(
-        actions=[search_tool, python_interpreter]),
-)
-
-response = chatbot.chat('若$z=-1+\sqrt{3}i$,则$\frac{z}{{z\overline{z}-1}}=\left(\ \ \right)$')
-print(response.response)
->>> $-\\frac{1}{3}+\\frac{{\\sqrt{3}}}{3}i$
-```
+![image](https://github.com/InternLM/lagent/assets/24351120/cefc4145-2ad8-4f80-b88b-97c05d1b9d3e)
 
 ## ライセンス
 
