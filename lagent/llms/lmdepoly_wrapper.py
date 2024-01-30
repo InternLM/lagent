@@ -195,7 +195,7 @@ class LMDeployPipeline(BaseModel):
         path (str): The path to the model.
             It could be one of the following options:
                     - i) A local directory path of a turbomind model which is
-                        converted by `lmdeploy convert` command or download 
+                        converted by `lmdeploy convert` command or download
                         from ii) and iii).
                     - ii) The model_id of a lmdeploy-quantized model hosted
                         inside a model repo on huggingface.co, such as

@@ -1,13 +1,14 @@
 import copy
-import warnings
 import logging
-from typing import Dict, List, Optional, Union
-from dataclasses import asdict
-import traceback
 import sys
+import traceback
+import warnings
+from typing import Dict, List, Optional
 
-from .base_llm import BaseModel
 from lagent.schema import AgentStatusCode
+from .base_llm import BaseModel
+
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,7 @@ class HFTransformer(BaseModel):
         inputs: List[str],
         do_sample=True,
         **kwargs,
-    ):  
+    ):
         try:
             import torch
             from torch import nn
@@ -116,14 +117,17 @@ class HFTransformer(BaseModel):
                     batched = False
                 # import pdb; pdb.set_trace()
                 inputs = self.tokenizer(
-                    inputs, padding=True, return_tensors='pt', return_length=True)
+                    inputs,
+                    padding=True,
+                    return_tensors='pt',
+                    return_length=True)
                 input_length = inputs['length']
                 for k, v in inputs.items():
                     inputs[k] = v.cuda()
                 input_ids = inputs['input_ids']
                 attention_mask = inputs['attention_mask']
-                batch_size, input_ids_seq_length = input_ids.shape[
-                    0], input_ids.shape[-1]  # noqa: F841  # pylint: disable=W0612
+                batch_size = input_ids.shape[0]
+                input_ids_seq_length = input_ids.shape[-1]
                 generation_config = self.model.generation_config
                 generation_config = copy.deepcopy(generation_config)
                 new_gen_params = self.update_gen_params(**kwargs)
@@ -144,31 +148,45 @@ class HFTransformer(BaseModel):
                 has_default_max_length = (
                     kwargs.get('max_length') is None
                     and generation_config.max_length is not None)
-                if has_default_max_length and generation_config.max_new_tokens is None:
+                if (has_default_max_length
+                        and generation_config.max_new_tokens is None):
                     warnings.warn(
-                        f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
-                        'This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we'
-                        ' recommend using `max_new_tokens` to control the maximum length of the generation.',
+                        "Using `max_length`'s default"
+                        f'({generation_config.max_length})'
+                        'to control the generation length. '
+                        'This behaviour is deprecated and will be removed'
+                        ' from the config in v5 of Transformers -- we'
+                        ' recommend using `max_new_tokens` to control the'
+                        ' maximum length of the generation.',
                         UserWarning,
                     )
                 elif generation_config.max_new_tokens is not None:
                     generation_config.max_length = (
-                        generation_config.max_new_tokens + input_ids_seq_length)
+                        generation_config.max_new_tokens +
+                        input_ids_seq_length)
                     if not has_default_max_length:
                         logger.warn(  # pylint: disable=W4902
-                            f'Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(='
-                            f'{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. '
-                            'Please refer to the documentation for more information. '
-                            '(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)',
+                            'Both `max_new_tokens`'
+                            f'(={generation_config.max_new_tokens})'
+                            'and `max_length`'
+                            f'(={generation_config.max_length})'
+                            ' seem to have been set.`max_new_tokens`'
+                            ' will take precedence. Please refer to'
+                            ' the documentation for more information. '
+                            '(https://huggingface.co/docs/transformers/main/en'
+                            '/main_classes/text_generation)',
                             UserWarning,
                         )
 
                 if input_ids_seq_length >= generation_config.max_length:
                     input_ids_string = 'input_ids'
                     logger.warning(
-                        f'Input length of {input_ids_string} is {input_ids_seq_length}, but `max_length` is set to'
-                        f' {generation_config.max_length}. This can lead to unexpected behavior. You should consider'
-                        ' increasing `max_new_tokens`.')
+                        f'Input length of {input_ids_string}'
+                        f' is {input_ids_seq_length},'
+                        ' but `max_length` is set to'
+                        f' {generation_config.max_length}.'
+                        'This can lead to unexpected behavior.'
+                        ' You should consider increasing `max_new_tokens`.')
 
                 # 2. Set generation parameters if not already defined
                 logits_processor = self.logits_processor
@@ -185,7 +203,8 @@ class HFTransformer(BaseModel):
                 stopping_criteria = self.model._get_stopping_criteria(
                     generation_config=generation_config,
                     stopping_criteria=stopping_criteria)
-                logits_warper = self.model._get_logits_warper(generation_config)
+                logits_warper = self.model._get_logits_warper(
+                    generation_config)
 
                 unfinished_sequences = input_ids.new(batch_size).fill_(1)
                 scores = None
@@ -203,9 +222,10 @@ class HFTransformer(BaseModel):
                     next_token_logits = outputs.logits[:, -1, :]
 
                     # pre-process distribution
-                    next_token_scores = logits_processor(input_ids,
-                                                        next_token_logits)
-                    next_token_scores = logits_warper(input_ids, next_token_scores)
+                    next_token_scores = logits_processor(
+                        input_ids, next_token_logits)
+                    next_token_scores = logits_warper(input_ids,
+                                                      next_token_scores)
 
                     # sample
                     probs = nn.functional.softmax(next_token_scores, dim=-1)
@@ -215,25 +235,29 @@ class HFTransformer(BaseModel):
                     else:
                         next_tokens = torch.argmax(probs, dim=-1)
 
-                    # update generated ids, model inputs, and length for next step
+                    # update generated ids, model inputs,
+                    # and length for next step
                     input_ids = torch.cat([input_ids, next_tokens[:, None]],
-                                        dim=-1)
-                    model_kwargs = self.model._update_model_kwargs_for_generation(
-                        outputs, model_kwargs, is_encoder_decoder=False)
+                                          dim=-1)
+                    model_kwargs = self.model._update_model_kwargs_for_generation(  # noqa: E501
+                        outputs,
+                        model_kwargs,
+                        is_encoder_decoder=False)
                     unfinished_sequences = unfinished_sequences.mul(
                         next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(
                             eos_token_id_tensor.unsqueeze(1)).prod(dim=0))
-                    # output_token_ids = input_ids.cpu()[:, input_length:].tolist()
                     output_token_ids = input_ids.cpu().tolist()
                     for i in range(len(output_token_ids)):
                         output_token_ids[i] = output_token_ids[i][:][
                             input_length[i]:]
-                        # Find the first occurrence of an EOS token in the sequence
-                        first_eos_idx = next(
-                            (idx
+                        # Find the first occurrence of
+                        # an EOS token in the sequence
+                        first_eos_idx = next((
+                            idx
                             for idx, token_id in enumerate(output_token_ids[i])
                             if token_id in eos_token_id), None)
-                        # If an EOS token is found, only the previous part of it is retained
+                        # If an EOS token is found, only the previous
+                        # part of it is retained
                         if first_eos_idx is not None:
                             output_token_ids[i] = output_token_ids[
                                 i][:first_eos_idx]
@@ -243,15 +267,16 @@ class HFTransformer(BaseModel):
                     if not batched:
                         response = response[0]
                     yield AgentStatusCode.STREAM_ING, response, None
-                    # stop when each sentence is finished, or if we exceed the maximum length
+                    # stop when each sentence is finished,
+                    # or if we exceed the maximum length
                     if (unfinished_sequences.max() == 0
                             or stopping_criteria(input_ids, scores)):
                         break
                 yield AgentStatusCode.END, response, None
-        except Exception as e:
+        except Exception:
             response = ''.join(traceback.format_exception(*sys.exc_info()))
             if batched:
-                response = [response]          
+                response = [response]
             yield AgentStatusCode.SERVER_ERR, response, None
 
 
