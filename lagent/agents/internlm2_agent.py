@@ -1,7 +1,7 @@
 import json
 import logging
 from copy import deepcopy
-from typing import Dict, List, Union, Optional
+from typing import Dict, List, Optional, Union
 
 from ilagent.schema import AgentReturn, AgentStatusCode
 
@@ -34,20 +34,20 @@ PLUGIN_CN = (
     '同时注意你可以使用的工具，不要随意捏造！')
 
 
-class Interlm2Protocol:
+class Internlm2Protocol:
 
     def __init__(
         self,
-        meta_prompt: str=META_INS,
-        interpreter_prompt: str=INTERPRETER_CN,
-        plugin_prompt: str=PLUGIN_CN,
-        few_shot: Optional[List]=None,
-        language: Dict=dict(
+        meta_prompt: str = META_INS,
+        interpreter_prompt: str = INTERPRETER_CN,
+        plugin_prompt: str = PLUGIN_CN,
+        few_shot: Optional[List] = None,
+        language: Dict = dict(
             begin='',
             end='',
             belong='assistant',
         ),
-        tool: Dict=dict(
+        tool: Dict = dict(
             begin='{start_token}{name}\n',
             start_token='<|action_start|>',
             name_map=dict(plugin='<|plugin|>', interpreter='<|interpreter|>'),
@@ -199,7 +199,7 @@ class Internlm2Agent(BaseAgent):
                  llm: Union[BaseModel, BaseAPIModel],
                  plugin_executor: ActionExecutor = None,
                  interpreter_executor: ActionExecutor = None,
-                 protocol=Interlm2Protocol(),
+                 protocol=Internlm2Protocol(),
                  max_turn: int = 3) -> None:
         self.max_turn = max_turn
         self._interpreter_executor = interpreter_executor
@@ -237,8 +237,7 @@ class Internlm2Agent(BaseAgent):
                     try:
                         action = json.loads(action)
                     except Exception as e:
-                        logging.info(
-                            msg=f'Invaild action {e}')
+                        logging.info(msg=f'Invaild action {e}')
                         continue
                 elif name == 'interpreter':
                     if self._interpreter_executor:
@@ -265,9 +264,8 @@ class Internlm2Agent(BaseAgent):
                     dict(role='tool', content=action, name=name))
                 inner_history.append(
                     self._protocol.format_response(action_return, name=name))
-            yield agent_return
         agent_return.inner_steps = inner_history[offset:]
-        yield agent_return
+        return agent_return
 
     def stream_chat(self, message: List[dict], **kwargs) -> AgentReturn:
         if isinstance(message, str):
@@ -286,8 +284,7 @@ class Internlm2Agent(BaseAgent):
                 interpreter_executor=self._interpreter_executor,
             )
             response = ''
-            for model_state, res, _ in self._llm.stream_chat(
-                    prompt, **kwargs):
+            for model_state, res, _ in self._llm.stream_chat(prompt, **kwargs):
                 response = res
                 if model_state.value < 0:
                     agent_return.state = model_state
@@ -312,8 +309,7 @@ class Internlm2Agent(BaseAgent):
                                 try:
                                     action = json.loads(action)
                                 except Exception as e:
-                                    logging.info(
-                                        msg=f'Invaild action {e}')
+                                    logging.info(msg=f'Invaild action {e}')
                                     continue
                             elif name == 'interpreter':
                                 if self._interpreter_executor:
