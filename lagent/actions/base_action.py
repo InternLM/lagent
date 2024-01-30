@@ -221,8 +221,14 @@ class ToolMeta(ABCMeta):
                     if api_desc.get('return_data'):
                         tool_desc['return_data'] = api_desc['return_data']
                     is_toolkit = False
-                    break
-                tool_desc.setdefault('api_list', []).append(api_desc)
+                else:
+                    tool_desc.setdefault('api_list', []).append(api_desc)
+        if not is_toolkit and 'api_list' in tool_desc:
+            raise KeyError('`run` and other tool APIs can not be implemented '
+                           'at the same time')
+        if is_toolkit and 'api_list' not in tool_desc:
+            is_toolkit = False
+            tool_desc['parameters'], tool_desc['required'] = [], []
         attrs['_is_toolkit'] = is_toolkit
         attrs['__tool_description__'] = tool_desc
         return super().__new__(mcs, name, base, attrs)
