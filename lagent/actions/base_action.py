@@ -238,6 +238,8 @@ class ToolMeta(ABCMeta):
                 if api_desc.get('return_data'):
                     tool_desc['return_data'] = api_desc['return_data']
                 attrs['run'] = run_api
+            else:
+                tool_desc['parameters'], tool_desc['required'] = [], []
         attrs['_is_toolkit'] = is_toolkit
         attrs['__tool_description__'] = tool_desc
         return super().__new__(mcs, name, base, attrs)
@@ -263,7 +265,6 @@ class BaseAction(metaclass=AutoRegister(TOOL_REGISTRY, ToolMeta)):
             class Bold(BaseAction):
                 '''Make text bold'''
             
-                @tool_api
                 def run(self, text: str):
                     '''
                     Args:

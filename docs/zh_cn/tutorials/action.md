@@ -206,10 +206,13 @@ def list_args(a: str, b: int, c: float = 0.0) -> dict:
 
 一个简单工具必须实现 `run` 方法，而工具包则应当避免将各子API名称定义为该保留字段。
 
+```{tip}
+对于非工具包的 Action，`run` 允许不被 `tool_api` 装饰，除非你想提示返回信息。
+```
+
 ```python
 class Bold(BaseAction):
     
-    @tool_api
     def run(self, text: str):
         """make text bold
 
