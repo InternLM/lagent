@@ -221,8 +221,25 @@ class ToolMeta(ABCMeta):
                     if api_desc.get('return_data'):
                         tool_desc['return_data'] = api_desc['return_data']
                     is_toolkit = False
-                    break
-                tool_desc.setdefault('api_list', []).append(api_desc)
+                else:
+                    tool_desc.setdefault('api_list', []).append(api_desc)
+        if not is_toolkit and 'api_list' in tool_desc:
+            raise KeyError('`run` and other tool APIs can not be implemented '
+                           'at the same time')
+        if is_toolkit and 'api_list' not in tool_desc:
+            is_toolkit = False
+            if callable(attrs.get('run')):
+                run_api = tool_api(attrs['run'])
+                api_desc = run_api.api_description
+                tool_desc['parameters'] = api_desc['parameters']
+                tool_desc['required'] = api_desc['required']
+                if api_desc['description']:
+                    tool_desc['description'] = api_desc['description']
+                if api_desc.get('return_data'):
+                    tool_desc['return_data'] = api_desc['return_data']
+                attrs['run'] = run_api
+            else:
+                tool_desc['parameters'], tool_desc['required'] = [], []
         attrs['_is_toolkit'] = is_toolkit
         attrs['__tool_description__'] = tool_desc
         return super().__new__(mcs, name, base, attrs)
@@ -248,7 +265,6 @@ class BaseAction(metaclass=AutoRegister(TOOL_REGISTRY, ToolMeta)):
             class Bold(BaseAction):
                 '''Make text bold'''
             
-                @tool_api
                 def run(self, text: str):
                     '''
                     Args:

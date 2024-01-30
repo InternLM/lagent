@@ -209,10 +209,13 @@ Only Google style Python docstrings is currently supported.
 
 A simple tool must have its `run` method implemented, while APIs of toolkits should avoid naming conflicts with this reserved word.
 
+```{tip}
+`run` is allowed not to be decorated by `tool_api` for simple tools unless you want to hint the return data.
+```
+
 ```python
 class Bold(BaseAction):
     
-    @tool_api
     def run(self, text: str):
         """make text bold
 
