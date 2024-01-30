@@ -3,12 +3,10 @@ import logging
 from copy import deepcopy
 from typing import Dict, List, Optional, Union
 
-from lagent.schema import AgentReturn, AgentStatusCode
-
 from lagent import BaseAgent
 from lagent.actions import ActionExecutor
 from lagent.llms import BaseAPIModel, BaseModel
-from lagent.schema import ActionReturn, ActionStatusCode
+from lagent.schema import ActionReturn, ActionStatusCode, AgentReturn, AgentStatusCode, ModelStatusCode  # noqa: E501
 
 API_PREFIX = (
     "This is the subfunction for tool '{tool_name}', you can use this tool. "
@@ -285,9 +283,11 @@ class Internlm2Agent(BaseAgent):
             )
             response = ''
             for model_state, res, _ in self._llm.stream_chat(prompt, **kwargs):
+                model_state: ModelStatusCode
                 response = res
                 if model_state.value < 0:
-                    agent_return.state = model_state
+                    agent_return.state = getattr(AgentStatusCode,
+                                                 model_state.name)
                     yield deepcopy(agent_return)
                     return
                 else:
@@ -297,7 +297,7 @@ class Internlm2Agent(BaseAgent):
                         interpreter_executor=self._interpreter_executor,
                     )
                     if name:
-                        if model_state == AgentStatusCode.END:
+                        if model_state == ModelStatusCode.END:
                             agent_state = last_agent_state + 1
                             if name == 'plugin':
                                 if self._action_executor:

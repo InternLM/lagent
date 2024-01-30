@@ -1,7 +1,7 @@
 from typing import List, Optional, Union
 
 from lagent.llms.base_llm import BaseModel
-from lagent.schema import AgentStatusCode
+from lagent.schema import ModelStatusCode
 from lagent.utils.util import filter_suffix
 
 
@@ -25,15 +25,15 @@ class TritonClient(BaseModel):
         super().__init__(path=None, **kwargs)
         from lmdeploy.serve.turbomind.chatbot import Chatbot, StatusCode
         self.state_map = {
-            StatusCode.TRITON_STREAM_END: AgentStatusCode.END,
-            StatusCode.TRITON_SERVER_ERR: AgentStatusCode.SERVER_ERR,
-            StatusCode.TRITON_SESSION_CLOSED: AgentStatusCode.SESSION_CLOSED,
-            StatusCode.TRITON_STREAM_ING: AgentStatusCode.STREAM_ING,
+            StatusCode.TRITON_STREAM_END: ModelStatusCode.END,
+            StatusCode.TRITON_SERVER_ERR: ModelStatusCode.SERVER_ERR,
+            StatusCode.TRITON_SESSION_CLOSED: ModelStatusCode.SESSION_CLOSED,
+            StatusCode.TRITON_STREAM_ING: ModelStatusCode.STREAM_ING,
             StatusCode.TRITON_SESSION_OUT_OF_LIMIT:
-            AgentStatusCode.SESSION_OUT_OF_LIMIT,
+            ModelStatusCode.SESSION_OUT_OF_LIMIT,
             StatusCode.TRITON_SESSION_INVALID_ARG:
-            AgentStatusCode.SESSION_INVALID_ARG,
-            StatusCode.TRITON_SESSION_READY: AgentStatusCode.SESSION_READY
+            ModelStatusCode.SESSION_INVALID_ARG,
+            StatusCode.TRITON_SESSION_READY: ModelStatusCode.SESSION_READY
         }
         self.chatbot = Chatbot(
             tritonserver_addr=tritonserver_addr,
@@ -145,7 +145,7 @@ class TritonClient(BaseModel):
         elif self.chatbot._session.status == 0:
             logger.error(f'session {session_id} has been ended. Please set '
                          f'`sequence_start` be True if you want to restart it')
-            return AgentStatusCode.SESSION_CLOSED, '', 0
+            return ModelStatusCode.SESSION_CLOSED, '', 0
 
         self.chatbot._session.status = 1
         self.chatbot._session.request_id = request_id
@@ -401,10 +401,10 @@ class LMDeployServer(BaseModel):
                     resp = filter_suffix(resp, stop_words)
                     finished = True
                     break
-            yield AgentStatusCode.STREAM_ING, resp, None
+            yield ModelStatusCode.STREAM_ING, resp, None
             if finished:
                 break
-        yield AgentStatusCode.END, resp, None
+        yield ModelStatusCode.END, resp, None
 
 
 class LMDeployClient(LMDeployServer):
