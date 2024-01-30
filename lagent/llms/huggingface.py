@@ -94,7 +94,7 @@ class HFTransformer(BaseModel):
     def generate(
         self,
         inputs: Union[str, List[str]],
-        do_sample=True,
+        do_sample: bool = True,
         **kwargs,
     ):
         """Return the chat completions in non-stream mode.
@@ -112,7 +112,7 @@ class HFTransformer(BaseModel):
     def stream_generate(
         self,
         inputs: List[str],
-        do_sample=True,
+        do_sample: bool = True,
         **kwargs,
     ):
         """Return the chat completions in stream mode.
