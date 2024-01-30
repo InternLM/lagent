@@ -194,7 +194,10 @@ class BaseModel:
             inputs: Union[List[dict], List[List[dict]]], 
             **gen_params
         ):
-        warn("This function will be deprecated after three months!", DeprecationWarning, 2)
+        warn(
+            "This function will be deprecated after three months and"
+            "will be replaced by the function 'chat' in the current class!", 
+            DeprecationWarning, 2)
         return self.chat(inputs, **gen_params)
 
     def stream_chat(self, inputs: List[dict], **gen_params):
