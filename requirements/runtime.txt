@@ -3,6 +3,7 @@ func_timeout
 jsonschema
 requests
 tiktoken
+timeout_decorator
 griffe
 phx-class-registry
 jupyter
