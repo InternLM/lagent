@@ -130,8 +130,7 @@ class TritonClient(BaseModel):
             tuple(Status, str, int): status, text/chat completion,
             generated token number
         """
-        from lmdeploy.serve.turbomind.chatbot import (Session, StatusCode,
-                                                      get_logger)
+        from lmdeploy.serve.turbomind.chatbot import Session, StatusCode, get_logger
         assert isinstance(session_id, int), \
             f'INT session id is required, but got {type(session_id)}'
 
@@ -291,6 +290,7 @@ class LMDeployServer(BaseModel):
                  serve_cfg=dict(),
                  **kwargs):
         super().__init__(path=path, **kwargs)
+        self.model_name = model_name
         # TODO get_logger issue in multi processing
         import lmdeploy
         self.client = lmdeploy.serve(
@@ -333,7 +333,7 @@ class LMDeployServer(BaseModel):
 
         resp = [''] * len(inputs)
         for text in self.client.completions_v1(
-                self.path,
+                self.model_name,
                 inputs,
                 session_id=session_id,
                 sequence_start=sequence_start,
@@ -383,7 +383,7 @@ class LMDeployServer(BaseModel):
         finished = False
         stop_words = self.gen_params.get('stop_words')
         for text in self.client.completions_v1(
-                self.path,
+                self.model_name,
                 prompt,
                 session_id=session_id,
                 sequence_start=sequence_start,
