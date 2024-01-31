@@ -5,10 +5,8 @@ import os
 
 import streamlit as st
 
-from lagent.actions import (ActionExecutor, ArxivSearch, GoogleScholar,
-                            IPythonInterpreter)
-from lagent.agents.internlm2_agent import (INTERPRETER_CN, META_INS, PLUGIN_CN,
-                                           Internlm2Agent, Internlm2Protocol)
+from lagent.actions import ActionExecutor, ArxivSearch, IPythonInterpreter
+from lagent.agents.internlm2_agent import INTERPRETER_CN, META_INS, PLUGIN_CN, Internlm2Agent, Internlm2Protocol
 from lagent.llms.lmdepoly_wrapper import LMDeployClient
 from lagent.llms.meta_template import INTERNLM2_META as META
 from lagent.schema import AgentStatusCode
@@ -24,9 +22,6 @@ class SessionState:
         st.session_state['user'] = []
 
         action_list = [
-            GoogleScholar(
-                api_key=('a558de7dee10146326ca86fbaa0736b'
-                         'dd947c9e646cd3f14da5aff177d6b2ff0')),
             ArxivSearch(),
         ]
         st.session_state['plugin_map'] = {
