@@ -9,3 +9,4 @@ jupyter
 jupyter_client
 json5
 pillow
+typing-extensions
