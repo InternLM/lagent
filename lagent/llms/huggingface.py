@@ -297,6 +297,23 @@ class HFTransformer(BaseModel):
                 response = [response]
             yield ModelStatusCode.SERVER_ERR, response, None
 
+    def stream_chat(
+        self,
+        inputs: List[dict],
+        do_sample: bool = True,
+        **kwargs,
+    ):
+        """Return the chat completions in stream mode.
+
+        Args:
+            inputs (List[dict]): input messages to be completed.
+            do_sample (bool): do sampling if enabled
+        Returns:
+            the text/chat completion
+        """
+        prompt = self.template_parser(inputs)
+        yield from self.stream_generate(prompt, do_sample, **kwargs)
+
 
 class HFTransformerCasualLM(HFTransformer):
 
