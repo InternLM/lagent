@@ -56,15 +56,15 @@ class HFTransformer(BaseModel):
         if not tokenizer_only:
             self._load_model(path=path, model_kwargs=model_kwargs)
 
-        from transformers.generation.utils import (LogitsProcessorList,
-                                                   StoppingCriteriaList)
+        from transformers.generation.utils import LogitsProcessorList, StoppingCriteriaList  # noqa: E501
         self.logits_processor = LogitsProcessorList()
         self.stopping_criteria = StoppingCriteriaList()
         self.prefix_allowed_tokens_fn = None
 
         stop_words_id = []
-        for sw in self.gen_params.get('stop_words', []):
-            stop_words_id.append(self.tokenizer(sw)['input_ids'][1])
+        if self.gen_params.get('stop_words'):
+            for sw in self.gen_params.get('stop_words'):
+                stop_words_id.append(self.tokenizer(sw)['input_ids'][-1])
         self.additional_eos_token_id = stop_words_id
 
     def _load_tokenizer(self, path: str, tokenizer_path: Optional[str],

@@ -18,9 +18,6 @@ class GPTAPI(BaseAPIModel):
 
     Args:
         model_type (str): The name of OpenAI's model.
-        max_seq_len (int): The maximum allowed sequence length of a model.
-            Note that the length of prompt + generated tokens shall not exceed
-            this value. Defaults to 2048.
         query_per_second (int): The maximum queries allowed per second
             between two consecutive calls of the API. Defaults to 1.
         retry (int): Number of retires if the API call fails. Defaults to 2.
@@ -38,7 +35,7 @@ class GPTAPI(BaseAPIModel):
             wrapping of any meta instructions.
         openai_api_base (str): The base url of OpenAI's API. Defaults to
             'https://api.openai.com/v1/chat/completions'.
-        gen_params: Default generation configuration which could be overrided
+        gen_params: Default generation configuration which could be overridden
             on the fly of generation.
     """
 
@@ -46,7 +43,6 @@ class GPTAPI(BaseAPIModel):
 
     def __init__(self,
                  model_type: str = 'gpt-3.5-turbo',
-                 max_seq_len: int = 4096,
                  query_per_second: int = 1,
                  retry: int = 2,
                  key: Union[str, List[str]] = 'ENV',
@@ -60,7 +56,6 @@ class GPTAPI(BaseAPIModel):
                  **gen_params):
         super().__init__(
             model_type=model_type,
-            max_seq_len=max_seq_len,
             meta_template=meta_template,
             query_per_second=query_per_second,
             retry=retry,
@@ -103,7 +98,7 @@ class GPTAPI(BaseAPIModel):
         """Generate responses given the contexts.
 
         Args:
-            inputs (Union[List[dict], List[List[dict]]]): a list of messages 
+            inputs (Union[List[dict], List[List[dict]]]): a list of messages
                 or list of lists of messages
             gen_params: additional generation configuration
 
@@ -137,10 +132,10 @@ class GPTAPI(BaseAPIModel):
         gen_params = gen_params.copy()
 
         # Hold out 100 tokens due to potential errors in tiktoken calculation
-        max_out_len = min(
-            gen_params.pop('max_out_len'),
+        max_tokens = min(
+            gen_params.pop('max_tokens'),
             self.context_window - len(self.tokenize(str(input))) - 100)
-        if max_out_len <= 0:
+        if max_tokens <= 0:
             return ''
 
         max_num_retries = 0
@@ -178,7 +173,7 @@ class GPTAPI(BaseAPIModel):
                 data = dict(
                     model=self.model_type,
                     messages=messages,
-                    max_tokens=max_out_len,
+                    max_tokens=max_tokens,
                     n=1,
                     stop=gen_params.pop('stop_words'),
                     frequency_penalty=gen_params.pop('repetition_penalty'),

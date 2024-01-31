@@ -1,7 +1,5 @@
-import re
 import threading
 import warnings
-from abc import abstractclassmethod
 from time import sleep
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -140,8 +138,6 @@ class BaseAPIModel(BaseModel):
         query_per_second (int): The maximum queries allowed per second
             between two consecutive calls of the API. Defaults to 1.
         retry (int): Number of retires if the API call fails. Defaults to 2.
-        max_seq_len (int): The maximum sequence length of the model. Defaults
-            to 2048.
         meta_template (Dict, optional): The model's meta prompt
             template if needed, in case the requirement of injecting or
             wrapping of any meta instructions.
@@ -153,18 +149,16 @@ class BaseAPIModel(BaseModel):
                  model_type: str,
                  query_per_second: int = 1,
                  retry: int = 2,
-                 max_seq_len: int = 2048,
                  template_parser: 'APITemplateParser' = APITemplateParser,
                  meta_template: Optional[Dict] = None,
                  *,
-                 max_out_len: int = 512,
+                 max_tokens: int = 512,
                  top_p: float = 0.8,
                  top_k: float = None,
                  temperature: float = 0.8,
                  repetition_penalty: float = 0.0,
                  stop_words: Union[List[str], str] = None):
         self.model_type = model_type
-        self.max_seq_len = max_seq_len
         self.meta_template = meta_template
         self.retry = retry
         self.query_per_second = query_per_second
@@ -172,8 +166,10 @@ class BaseAPIModel(BaseModel):
         if template_parser:
             self.template_parser = template_parser(meta_template)
 
+        if isinstance(stop_words, str):
+            stop_words = [stop_words]
         self.gen_params = dict(
-            max_out_len=max_out_len,
+            max_tokens=max_tokens,
             top_p=top_p,
             top_k=top_k,
             temperature=temperature,
