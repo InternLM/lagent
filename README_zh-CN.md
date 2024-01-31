@@ -16,25 +16,12 @@ English | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | [ह�
     👋 join us on <a href="https://twitter.com/intern_lm" target="_blank">Twitter</a>, <a href="https://discord.gg/xa29JuW87d" target="_blank">Discord</a> and <a href="https://r.vansin.top/?r=internwx" target="_blank">WeChat</a>
 </p>
 
+<div align="center">
+
+  [![Alt text](https://img.youtube.com/vi/YAelRLi0Zak/0.jpg)](https://www.youtube.com/watch?v=YAelRLi0Zak)
+</div>
+
 [English](README.md) | 简体中文
-
-## 简介
-
-Lagent 是一个轻量级、开源的基于大语言模型的智能体（agent）框架，支持用户快速地将一个大语言模型转变为多种类型的智能体，并提供了一些典型工具为大语言模型赋能。它的整个框架图如下:
-
-![image](https://github.com/InternLM/lagent/assets/24351120/cefc4145-2ad8-4f80-b88b-97c05d1b9d3e)
-
-### 主要特点
-
-**0.1.2** 版本已经在 2023.10.24 发布
-
-- **支持高性能推理.** 我们现在支持了高性能推理 [lmdeploy turbomind](https://github.com/InternLM/lmdeploy/tree/main).
-
-- **实现了多种类型的智能体，** 我们支持了经典的 [ReAct](https://arxiv.org/abs/2210.03629)，[AutoGPT](https://github.com/Significant-Gravitas/Auto-GPT) 和 [ReWoo](https://arxiv.org/abs/2305.18323) 等智能体，这些智能体能够调用大语言模型进行多轮的推理和工具调用。
-
-- **框架简单易拓展.** 框架的代码结构清晰且简单，只需要不到20行代码你就能够创造出一个你自己的智能体（agent）。同时我们支持了 Python 解释器、API 调用和搜索三类常用典型工具。
-
-- **灵活支持多个大语言模型.** 我们提供了多种大语言模型支持，包括 InternLM、Llama-2 等开源模型和 GPT-4/3.5 等基于 API 的闭源模型。
 
 ## 教程
 
@@ -48,71 +35,29 @@ Lagent 是一个轻量级、开源的基于大语言模型的智能体（agent�
 pip install lagent
 ```
 
-同时，如果你想修改这部分的代码，也可以通过以下命令从源码编译 Lagent:
+### 运行一个智能体的网页样例
+
+你可能需要先安装 Streamlit 包
 
 ```bash
-git clone https://github.com/InternLM/lagent.git
-cd lagent
-pip install -e .
-```
-
-### 运行一个 ReAct 智能体的网页样例
-
-```bash
-# 可能先需要安装 streamlit 包
 # pip install streamlit
-streamlit run examples/react_web_demo.py
+streamlit run examples/internlm2_agent_web_demo.py
 ```
 
-然后你就可以在网页端和智能体进行对话了，效果如下图所示
+## 简介
 
-![image](https://github.com/InternLM/lagent/assets/24622904/3aebb8b4-07d1-42a2-9da3-46080c556f68)
+Lagent 是一个轻量级、开源的基于大语言模型的智能体（agent）框架，支持用户快速地将一个大语言模型转变为多种类型的智能体，并提供了一些典型工具为大语言模型赋能。它的整个框架图如下:
 
-### 用 GPT-3.5 构建一个 ReWOO 智能体
+![image](https://github.com/InternLM/lagent/assets/24351120/cefc4145-2ad8-4f80-b88b-97c05d1b9d3e)
 
-```python
-from lagent.agents import ReWOO
-from lagent.actions import ActionExecutor, GoogleSearch, LLMQA
-from lagent.llms import GPTAPI
+## 特性
 
-llm = GPTAPI(model_type='gpt-3.5-turbo', key='OPENAI_API_KEY')
-search_tool = GoogleSearch(api_key='SERPER_API_KEY')
-llmqa_tool = LLMQA(llm)
-
-chatbot = ReWOO(
-    llm=llm,
-    action_executor=ActionExecutor(
-        actions=[search_tool, llmqa_tool]),
-)
-
-response = chatbot.chat('What profession does Nicholas Ray and Elia Kazan have in common')
-print(response.response)
->>> Film director.
-```
-
-### 用 InternLM 构建一个 ReAct 智能体
-
-注意：如果你想要启动一个HuggingFace的模型，请先运行 `pip install -e .[all]`。
-
-```python
-from lagent.agents import ReAct
-from lagent.actions import ActionExecutor, GoogleSearch, PythonInterpreter
-from lagent.llms import HFTransformer
-
-llm = HFTransformer('internlm/internlm-chat-7b-v1_1')
-search_tool = GoogleSearch(api_key='SERPER_API_KEY')
-python_interpreter = PythonInterpreter()
-
-chatbot = ReAct(
-    llm=llm,
-    action_executor=ActionExecutor(
-        actions=[search_tool, python_interpreter]),
-)
-
-response = chatbot.chat('若$z=-1+\sqrt{3}i$,则$\frac{z}{{z\overline{z}-1}}=\left(\ \ \right)$')
-print(response.response)
->>> $-\\frac{1}{3}+\\frac{{\\sqrt{3}}}{3}i
-```
+- 流式输出：提供 `stream_chat` 接口作流式输出，本地就能演示酷炫的流式 Demo。
+- 接口统一，设计全面升级，提升拓展性，包括
+  - Model : 不论是 OpenAI API, Transformers 还是推理加速框架 LMDeploy 一网打尽，模型切换可以游刃有余；
+  - Action: 简单的继承和装饰，即可打造自己个人的工具集，不论 InternLM 还是 GPT 均可适配；
+  - Agent：与 Model 的输入接口保持一致，模型到智能体的蜕变只需一步，便捷各种 agent 的探索实现；
+- 文档全面升级，API 文档全覆盖。
 
 ## 引用
 
