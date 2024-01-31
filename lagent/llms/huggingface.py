@@ -303,13 +303,13 @@ class HFTransformer(BaseModel):
         do_sample: bool = True,
         **kwargs,
     ):
-        """Return the chat completions in non-stream mode.
+        """Return the chat completions in stream mode.
 
         Args:
-            inputs (Union[str, List[str]]): input texts to be completed.
+            inputs (List[dict]): input messages to be completed.
             do_sample (bool): do sampling if enabled
         Returns:
-            (a list of/batched) text/chat completion
+            the text/chat completion
         """
         prompt = self.template_parser(inputs)
         yield from self.stream_generate(prompt, do_sample, **kwargs)
