@@ -11,6 +11,11 @@ def parse_args():
         type=str,
         default='internlm/internlm2-chat-20b',
         help='The path to the model')
+    parser.add_argument(
+        '--mode',
+        type=str,
+        default='chat',
+        help='Completion through chat or generate')
     args = parser.parse_args()
     return args
 
@@ -42,6 +47,8 @@ def main():
         if prompt == 'exit':
             exit(0)
         history.append(dict(role='user', content=prompt))
+        if args.mode == 'generate':
+            history = [dict(role='user', content=prompt)]
         print('\nInternLm2：', end='')
         current_length = 0
         for status, response, _ in model.stream_chat(
