@@ -16,10 +16,6 @@ English | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | [ह�
     👋 <a href="https://twitter.com/intern_lm" target="_blank">Twitter</a>, <a href="https://discord.gg/xa29JuW87d" target="_blank">Discord</a> এবং <a href="https://r.vansin.top/?r=internwx" target="_blank">WeChat</a> সাথে আমাদের সাথে যোগদান করুন
 </p>
 
-<p align="center">
-    <iframe src="https://upos-hz-mirrorakam.akamaized.net/upgcxcode/99/71/1412447199/1412447199-1-16.mp4?e=ig8euxZM2rNcNbRVhwdVhwdlhWdVhwdVhoNvNC8BqJIzNbfq9rVEuxTEnE8L5F6VnEsSTx0vkX8fqJeYTj_lta53NCM=&uipk=5&nbs=1&deadline=1706626499&gen=playurlv2&os=akam&oi=804486655&trid=b0750df67f8a4dfdb7021782a73a2b3eh&mid=0&platform=html5&upsig=7cbe56bea911db3153660c6a94eaa187&uparams=e,uipk,nbs,deadline,gen,os,oi,trid,mid,platform&hdnts=exp=1706626499~hmac=965cf78a445fa19afb6ba490c602c155b5a0baae9ec1ff609cb91023ceca9de3&bvc=vod&nettype=0&f=h_0_0&bw=39605&logo=80000000" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true" height=360 width=640></iframe>
-</p>
-
 
 ## শুরু করা
 

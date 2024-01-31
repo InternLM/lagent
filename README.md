@@ -20,10 +20,6 @@ English | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | [ह�
     👋 join us on <a href="https://twitter.com/intern_lm" target="_blank">𝕏 (Twitter)</a>, <a href="https://discord.gg/xa29JuW87d" target="_blank">Discord</a> and <a href="https://r.vansin.top/?r=internwx" target="_blank">WeChat</a>
 </p>
 
-<p align="center">
-    <iframe src="https://upos-hz-mirrorakam.akamaized.net/upgcxcode/99/71/1412447199/1412447199-1-16.mp4?e=ig8euxZM2rNcNbRVhwdVhwdlhWdVhwdVhoNvNC8BqJIzNbfq9rVEuxTEnE8L5F6VnEsSTx0vkX8fqJeYTj_lta53NCM=&uipk=5&nbs=1&deadline=1706626499&gen=playurlv2&os=akam&oi=804486655&trid=b0750df67f8a4dfdb7021782a73a2b3eh&mid=0&platform=html5&upsig=7cbe56bea911db3153660c6a94eaa187&uparams=e,uipk,nbs,deadline,gen,os,oi,trid,mid,platform&hdnts=exp=1706626499~hmac=965cf78a445fa19afb6ba490c602c155b5a0baae9ec1ff609cb91023ceca9de3&bvc=vod&nettype=0&f=h_0_0&bw=39605&logo=80000000" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true" height=360 width=640></iframe>
-</p>
-
 
 ## Getting Started
 
@@ -51,6 +47,15 @@ streamlit run examples/internlm2_agent_web_demo.py
 Lagent is a lightweight open-source framework that allows users to efficiently build large language model(LLM)-based agents. It also provides some typical tools to augment LLM. The overview of our framework is shown below:
 
 ![image](https://github.com/InternLM/lagent/assets/24351120/cefc4145-2ad8-4f80-b88b-97c05d1b9d3e)
+
+## Major Features
+
+- Stream Output: Provides the `stream_chat` interface for streaming output, allowing cool streaming demos right at your local setup.
+- Interfacing is unified, with a comprehensive design upgrade for enhanced extensibility, including:
+  - Model: Whether it's the OpenAI API, Transformers, or LMDeploy inference acceleration framework, you can seamlessly switch between models.
+  - Action: Simple inheritance and decoration allow you to create your own personal toolkit, adaptable to both InternLM and GPT.
+  - Agent: Consistent with the Model's input interface, the transformation from model to intelligent agent only takes one step, facilitating the exploration and implementation of various agents.
+- Documentation has been thoroughly upgraded with full API documentation coverage.
 
 ## 💻Tech Stack
 
