@@ -20,6 +20,10 @@ English | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | [ह�
     👋 join us on <a href="https://twitter.com/intern_lm" target="_blank">𝕏 (Twitter)</a>, <a href="https://discord.gg/xa29JuW87d" target="_blank">Discord</a> and <a href="https://r.vansin.top/?r=internwx" target="_blank">WeChat</a>
 </p>
 
+<div align="center">
+
+  [![Alt text](https://img.youtube.com/vi/YAelRLi0Zak/0.jpg)](https://www.youtube.com/watch?v=YAelRLi0Zak)
+</div>
 
 ## Getting Started
 

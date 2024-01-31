@@ -16,6 +16,11 @@ English | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | [ह�
     👋 <a href="https://twitter.com/intern_lm" target="_blank">Twitter</a>, <a href="https://discord.gg/xa29JuW87d" target="_blank">Discord</a> এবং <a href="https://r.vansin.top/?r=internwx" target="_blank">WeChat</a> সাথে আমাদের সাথে যোগদান করুন
 </p>
 
+<div align="center">
+
+  [![Alt text](https://img.youtube.com/vi/YAelRLi0Zak/0.jpg)](https://www.youtube.com/watch?v=YAelRLi0Zak)
+</div>
+
 
 ## শুরু করা
 
