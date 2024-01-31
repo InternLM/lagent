@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
 
 from lagent.actions import ActionExecutor, ArxivSearch, IPythonInterpreter
-from lagent.agents.internlm2_agent import INTERPRETER_CN, META_INS, PLUGIN_CN, Internlm2Agent, Internlm2Protocol
+from lagent.agents.internlm2_agent import INTERPRETER_CN, META_CN, PLUGIN_CN, Internlm2Agent, Internlm2Protocol
 from lagent.llms import HFTransformer
 from lagent.llms.meta_template import INTERNLM2_META as META
 from lagent.schema import AgentStatusCode
@@ -37,7 +37,7 @@ def main():
         plugin_executor=None,
         interpreter_executor=interpreter_executor,
         protocol=Internlm2Protocol(
-            meta_prompt=META_INS,
+            meta_prompt=META_CN,
             interpreter_prompt=INTERPRETER_CN,
             plugin_prompt=PLUGIN_CN,
             tool=dict(
