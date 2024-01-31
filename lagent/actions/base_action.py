@@ -4,7 +4,12 @@ import re
 from abc import ABCMeta
 from copy import deepcopy
 from functools import wraps
-from typing import Annotated, Callable, Optional, Type, get_args, get_origin
+from typing import Callable, Optional, Type, get_args, get_origin
+
+try:
+    from typing import Annotated
+except ImportError:
+    from typing_extensions import Annotated
 
 from class_registry import AutoRegister, ClassRegistry
 from griffe import Docstring
