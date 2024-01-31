@@ -18,7 +18,8 @@ English | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | [ह�
 
 <div align="center">
 
-  [![Alt text](https://img.youtube.com/vi/YAelRLi0Zak/0.jpg)](https://www.youtube.com/watch?v=YAelRLi0Zak)
+[![Alt text](https://img.youtube.com/vi/YAelRLi0Zak/0.jpg)](https://www.youtube.com/watch?v=YAelRLi0Zak)
+
 </div>
 
 ## はじめに
@@ -51,4 +52,5 @@ Lagent は、大規模言語モデル(LLM)ベースのエージェントを効�
 ## ライセンス
 
 このプロジェクトは [Apache 2.0 license](LICENSE) の下でリリースされています。
+
 <p align="right"><a href="#top">🔼 Back to top</a></p>

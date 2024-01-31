@@ -40,7 +40,7 @@ class IPythonInterpreter(BaseAction):
         user_data_dir (str, optional): Specified the user data directory for files
             loading. If set to `ENV`, use `USER_DATA_DIR` environment variable.
             Defaults to `ENV`.
-        work_dir (str, optional): Specify which directory to save output images to. 
+        work_dir (str, optional): Specify which directory to save output images to.
             Defaults to ``'./work_dir/tmp_dir'``.
         description (dict): The description of the action. Defaults to ``None``.
         parser (Type[BaseParser]): The parser class to process the
@@ -207,11 +207,12 @@ class IPythonInterpreter(BaseAction):
 
     @tool_api
     def run(self, command: str, timeout: Optional[int] = None) -> ActionReturn:
-        """When you send a message containing Python code to python, it will be \
-executed in a stateful Jupyter notebook environment. python will respond with \
-the output of the execution or time out after 60.0 seconds. The drive at '/mnt/data' \
-can be used to save and persist user files. Internet access for this session is \
-disabled. Do not make external web requests or API calls as they will fail.
+        r"""When you send a message containing Python code to python, it will be
+        \ executed in a stateful Jupyter notebook environment. python will
+        respond with \ the output of the execution or time out after 60.0
+        seconds. The drive at '/mnt/data' \ can be used to save and persist
+        user files. Internet access for this session is \ disabled. Do not make
+        external web requests or API calls as they will fail.
 
         Args:
             command (:class:`str`): Python code
@@ -223,15 +224,15 @@ disabled. Do not make external web requests or API calls as they will fail.
         if succeed:
             text = result['text']
             image = result.get('image', [])
-            resp = [dict(type="text", content=text)]
+            resp = [dict(type='text', content=text)]
             if image:
-                resp.extend([dict(type="image", content=im) for im in image])
+                resp.extend([dict(type='image', content=im) for im in image])
             tool_return.result = resp
             # tool_return.result = dict(
             #     text=result['text'], image=result.get('image', [])[0])
             tool_return.state = ActionStatusCode.SUCCESS
         else:
-            tool_return.errmsg = result.get("text", "") if isinstance(
+            tool_return.errmsg = result.get('text', '') if isinstance(
                 result, dict) else result
             tool_return.state = ActionStatusCode.API_ERROR
         return tool_return

@@ -14,7 +14,8 @@ English | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | [ह�
 
 <div align="center">
 
-  [![Alt text](https://img.youtube.com/vi/YAelRLi0Zak/0.jpg)](https://www.youtube.com/watch?v=YAelRLi0Zak)
+[![Alt text](https://img.youtube.com/vi/YAelRLi0Zak/0.jpg)](https://www.youtube.com/watch?v=YAelRLi0Zak)
+
 </div>
 
 ## शुरू करना
@@ -46,4 +47,5 @@ Lagent एक हल्का ओपन-सोर्स फ्रेमवर्
 ## लाइसेंस
 
 यह प्रोजेक्ट [Apache 2.0 license](LICENSE) के तहत जारी किया गया है।
+
 <p align="right"><a href="#top">🔼 Back to top</a></p>

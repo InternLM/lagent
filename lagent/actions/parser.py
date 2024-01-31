@@ -5,7 +5,7 @@ from typing import Any, List, Union
 
 
 class ParseError(Exception):
-    """Parsing exception class"""
+    """Parsing exception class."""
 
     def __init__(self, err_msg: str):
         self.err_msg = err_msg
@@ -47,11 +47,11 @@ class BaseParser:
                 self._api2required[api_name] = api['required']
 
     def parse_inputs(self, inputs: str, name: str = 'run') -> dict:
-        """parse inputs LLMs generate for the action
+        """Parse inputs LLMs generate for the action.
 
         Args:
             inputs (:class:`str`): input string extracted from responses
-            
+
         Returns:
             :class:`dict`: processed input
         """
@@ -59,13 +59,13 @@ class BaseParser:
         return inputs
 
     def parse_outputs(self, outputs: Any) -> List[dict]:
-        """parser outputs returned by the action
+        """Parser outputs returned by the action.
 
         Args:
             outputs (:class:`Any`): raw output of the action
 
         Returns:
-            :class:`List[dict]`: processed output of which each member is a 
+            :class:`List[dict]`: processed output of which each member is a
                 dictionary with two keys - 'type' and 'content'.
         """
         if isinstance(outputs, dict):

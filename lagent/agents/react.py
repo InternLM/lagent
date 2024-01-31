@@ -170,7 +170,7 @@ class ReActProtocol:
         return thought, action.strip(), action_input.strip().strip('"')
 
     def format_response(self, action_return: ActionReturn) -> dict:
-        """format the final response at current step.
+        """Format the final response at current step.
 
         Args:
             action_return (ActionReturn): return value of the current action.

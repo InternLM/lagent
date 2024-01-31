@@ -23,10 +23,10 @@ __all__ = [
 
 
 def list_tools(with_class: bool = False):
-    """List available tools
+    """List available tools.
 
     Args:
-        with_class (bool): whether to return the action class along 
+        with_class (bool): whether to return the action class along
             with its name. Defaults to ``False``.
 
     Returns:
@@ -37,7 +37,7 @@ def list_tools(with_class: bool = False):
 
 
 def get_tool_cls(specifier: str) -> Type[BaseAction]:
-    """Get the action class
+    """Get the action class.
 
     Args:
         specifier (:class:`str`): tool name
@@ -49,7 +49,7 @@ def get_tool_cls(specifier: str) -> Type[BaseAction]:
 
 
 def get_tool(specifier: str, *args, **kwargs) -> BaseAction:
-    """Instantiate an action
+    """Instantiate an action.
 
     Args:
         specifier (str): tool name

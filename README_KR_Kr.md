@@ -18,7 +18,8 @@ English | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | [ह�
 
 <div align="center">
 
-  [![Alt text](https://img.youtube.com/vi/YAelRLi0Zak/0.jpg)](https://www.youtube.com/watch?v=YAelRLi0Zak)
+[![Alt text](https://img.youtube.com/vi/YAelRLi0Zak/0.jpg)](https://www.youtube.com/watch?v=YAelRLi0Zak)
+
 </div>
 
 ## 시작하기
@@ -64,4 +65,5 @@ Lagent는 사용자가 효율적으로 대규모 언어 모델(LLM) 기반 에�
 ## 라이선스
 
 이 프로젝트는 [Apache 2.0](LICENSE) 하에 공개되었습니다.
+
 <p align="right"><a href="#top">🔼 Back to top</a></p>
