@@ -5,10 +5,8 @@ import os
 
 import streamlit as st
 
-from lagent.actions import (ActionExecutor, ArxivSearch, GoogleScholar,
-                            IPythonInterpreter)
-from lagent.agents.internlm2_agent import (INTERPRETER_CN, META_INS, PLUGIN_CN,
-                                           Internlm2Agent, Internlm2Protocol)
+from lagent.actions import ActionExecutor, ArxivSearch, GoogleScholar, IPythonInterpreter  # noqa: E501
+from lagent.agents.internlm2_agent import INTERPRETER_CN, META_INS, PLUGIN_CN, Internlm2Agent, Internlm2Protocol
 from lagent.llms.lmdepoly_wrapper import LMDeployClient
 from lagent.llms.meta_template import INTERNLM2_META as META
 from lagent.schema import AgentStatusCode
@@ -299,7 +297,8 @@ def main():
                     st.session_state['ui'].render_action_results(
                         agent_return.actions[-1])
             elif (agent_return.state == AgentStatusCode.STREAM_ING
-                  or agent_return.state == AgentStatusCode.CODING):
+                  or agent_return.state == AgentStatusCode.CODING
+                  or agent_return.state == AgentStatusCode.END):
                 # st.markdown(agent_return.response)
                 # 清除占位符的当前内容，并显示新内容
                 with st.container():
