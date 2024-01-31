@@ -67,7 +67,7 @@ class IPythonInteractive(BaseAction):
 
     @tool_api
     def run(self, command: str, timeout: Optional[int] = None) -> ActionReturn:
-        """启动IPython Interactive Shell用于执行Python代码。
+        """Launch an IPython Interactive Shell to execute code.
 
         Args:
             command (:class:`str`): Python code snippet
