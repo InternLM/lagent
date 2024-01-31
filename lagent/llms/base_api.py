@@ -166,6 +166,8 @@ class BaseAPIModel(BaseModel):
         if template_parser:
             self.template_parser = template_parser(meta_template)
 
+        if isinstance(stop_words, str):
+            stop_words = [stop_words]
         self.gen_params = dict(
             max_tokens=max_tokens,
             top_p=top_p,

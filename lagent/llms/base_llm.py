@@ -130,6 +130,8 @@ class BaseModel:
         if meta_template and 'eos_token_id' in meta_template:
             self.eos_token_id = meta_template['eos_token_id']
 
+        if isinstance(stop_words, str):
+            stop_words = [stop_words]
         self.gen_params = dict(
             max_tokens=max_tokens,
             top_p=top_p,
