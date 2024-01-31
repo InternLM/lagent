@@ -10,3 +10,6 @@ jupyter_client
 json5
 pillow
 typing-extensions
+arxiv
+google-search-results
+python-pptx
