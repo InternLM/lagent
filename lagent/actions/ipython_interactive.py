@@ -32,14 +32,6 @@ class IPythonInteractive(BaseAction):
     """An interactive IPython shell for code execution.
 
     Args:
-        description (str): The description of the action. Defaults to
-            :py:data:`DEFAULT_DESCRIPTION`.
-        name (str, optional): The name of the action. If None, the name will
-            be class nameDefaults to ``None``.
-        enable (bool, optional): Whether the action is enabled. Defaults to
-            ``True``.
-        disable_description (str, optional): The description of the action when
-            it is disabled. Defaults to ``None``.
         timeout (int): Upper bound of waiting time for Python script execution.
             Defaults to ``20``.
         max_out_len (int): maximum output length. No truncation occurs if negative.
@@ -47,6 +39,10 @@ class IPythonInteractive(BaseAction):
         use_signals (bool): whether signals should be used for timing function out
             or the multiprocessing. Set to ``False`` when not running in the main 
             thread, e.g. web applications. Defaults to ``True``
+        description (dict): The description of the action. Defaults to ``None``.
+        parser (Type[BaseParser]): The parser class to process the
+            action's inputs and outputs. Defaults to :class:`JsonParser`.
+        enable (bool): Whether the action is enabled. Defaults to ``True``.
     """
 
     def __init__(
@@ -57,7 +53,7 @@ class IPythonInteractive(BaseAction):
         description: Optional[dict] = None,
         parser: type[BaseParser] = JsonParser,
         enable: bool = True,
-    ) -> None:
+    ):
         super().__init__(description, parser, enable)
         self.timeout = timeout
         self._executor = InteractiveShell()
