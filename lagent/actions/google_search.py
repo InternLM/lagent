@@ -69,7 +69,7 @@ class GoogleSearch(BaseAction):
             tool_return.state = ActionStatusCode.HTTP_ERROR
         elif status_code == 200:
             parsed_res = self._parse_results(response)
-            tool_return.result = dict(text=str(parsed_res))
+            tool_return.result = [dict(type='text', content=str(parsed_res))]
             tool_return.state = ActionStatusCode.SUCCESS
         else:
             tool_return.errmsg = str(status_code)
