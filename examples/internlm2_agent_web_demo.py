@@ -6,7 +6,7 @@ import os
 import streamlit as st
 
 from lagent.actions import ActionExecutor, ArxivSearch, IPythonInterpreter
-from lagent.agents.internlm2_agent import INTERPRETER_CN, META_INS, PLUGIN_CN, Internlm2Agent, Internlm2Protocol
+from lagent.agents.internlm2_agent import INTERPRETER_CN, META_CN, PLUGIN_CN, Internlm2Agent, Internlm2Protocol
 from lagent.llms.lmdepoly_wrapper import LMDeployClient
 from lagent.llms.meta_template import INTERNLM2_META as META
 from lagent.schema import AgentStatusCode
@@ -63,7 +63,7 @@ class StreamlitUI:
     def setup_sidebar(self):
         """Setup the sidebar for model and plugin selection."""
         model_name = st.sidebar.selectbox('模型选择：', options=['internlm'])
-        meta_prompt = st.sidebar.text_area('系统提示词', value=META_INS)
+        meta_prompt = st.sidebar.text_area('系统提示词', value=META_CN)
         da_prompt = st.sidebar.text_area('数据分析提示词', value=INTERPRETER_CN)
         plugin_prompt = st.sidebar.text_area('插件提示词', value=PLUGIN_CN)
         model_ip = st.sidebar.text_input('模型IP：', value='10.140.0.220:23333')

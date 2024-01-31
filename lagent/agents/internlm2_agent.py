@@ -12,31 +12,27 @@ API_PREFIX = (
     "This is the subfunction for tool '{tool_name}', you can use this tool. "
     'The description of this function is: \n{description}')
 
-META_INS = ('You are InternLM, a large language model trained by PJLab. '
-            'Answer as concisely as possible. '
-            '当开启工具以及代码时，根据需求选择合适的工具进行调用')
+META_CN = ('当开启工具以及代码时，根据需求选择合适的工具进行调用')
 
-INTERPRETER_CN = ('你现在可以通过如下格式向 Jupyter Notebook 发送并执行代码:'
-                  '\n<|action_start|><|interpreter|>```python\n\n代码\n\n```\n'
-                  '\n当遇到以下问题时，请使用上述格式调用 Jupyter Notebook 去解决，并根据执行结果做出友好的回复：\n'
-                  '1. 文件操作和数据导入，比如处理CSV、JSON等格式文件\n'
-                  '2. 数据分析或处理，比如数据操作或图像绘制如折线图、柱状图等\n'
-                  '3. 数学相关的问题。当遇到数学问题时，你需要分析题目，并给出代码去解决这个题目')
+INTERPRETER_CN = ('你现在已经能够在一个有状态的 Jupyter 笔记本环境中运行 Python 代码。'
+                  '当你向 python 发送含有 Python 代码的消息时，它将在该环境中执行。'
+                  '这个工具适用于多种场景，如数据分析或处理（包括数据操作、统计分析、图表绘制），'
+                  '复杂的计算问题（解决数学和物理难题），编程示例（理解编程概念或特性），'
+                  '文本处理和分析（比如文本解析和自然语言处理），'
+                  '机器学习和数据科学（用于展示模型训练和数据可视化），'
+                  '以及文件操作和数据导入（处理CSV、JSON等格式的文件）。')
 
-PLUGIN_CN = (
-    '你可以使用如下工具：'
-    '\n{prompt}\n'
-    '当你需要使用工具时，你可以使用如下格式：\n'
-    '<|action_start|><|plugin|>{{"name": "工具名称", "parameters": {{参数}}}}\n'
-    '如果你已经获得足够信息，请直接给出答案. 避免不必要的工具调用! '
-    '同时注意你可以使用的工具，不要随意捏造！')
+PLUGIN_CN = ('你可以使用如下工具：'
+             '\n{prompt}\n'
+             '如果你已经获得足够信息，请直接给出答案. 避免不必要的工具调用! '
+             '同时注意你可以使用的工具，不要随意捏造！')
 
 
 class Internlm2Protocol:
 
     def __init__(
         self,
-        meta_prompt: str = META_INS,
+        meta_prompt: str = META_CN,
         interpreter_prompt: str = INTERPRETER_CN,
         plugin_prompt: str = PLUGIN_CN,
         few_shot: Optional[List] = None,
