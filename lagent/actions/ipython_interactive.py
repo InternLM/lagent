@@ -15,12 +15,14 @@ from .parser import BaseParser, JsonParser
 
 
 class Status(str, Enum):
+    """Execution status"""
     SUCCESS = 'success'
     FAILURE = 'failure'
 
 
 @dataclass
 class ExecutionResult:
+    """Execution result"""
     status: Status
     value: Optional[str] = None
     msg: Optional[str] = None
@@ -76,8 +78,7 @@ class IPythonInteractive(BaseAction):
             timeout (:class:`Optional[int]`): timeout for execution. This 
                 argument only works in the main thread. Defaults to ``None``.
         """
-        tool_return = ActionReturn(url=None, args=None, type=self.name)
-        tool_return.args = {'text': command}
+        tool_return = ActionReturn(args={'text': command}, type=self.name)
         ret = (
             timer(timeout or self.timeout)(self.exec)(command)
             if self._use_signals else self.exec(command))
