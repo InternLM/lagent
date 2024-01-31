@@ -84,7 +84,7 @@ html_context = {
     'github_user': 'InternLM',
     'github_repo': 'lagent',
     'github_version': 'main',
-    'conf_py_path': '/docs/en/',
+    'conf_py_path': '/docs/zh_cn/',
 }
 html_title = 'Lagent'
 html_logo = '../imgs/lagent_logo.png'
