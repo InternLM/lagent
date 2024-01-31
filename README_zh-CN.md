@@ -18,7 +18,8 @@ English | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | [ह�
 
 <div align="center">
 
-  [![Alt text](https://img.youtube.com/vi/YAelRLi0Zak/0.jpg)](https://www.youtube.com/watch?v=YAelRLi0Zak)
+[![Alt text](https://img.youtube.com/vi/YAelRLi0Zak/0.jpg)](https://www.youtube.com/watch?v=YAelRLi0Zak)
+
 </div>
 
 [English](README.md) | 简体中文
@@ -75,4 +76,5 @@ Lagent 是一个轻量级、开源的基于大语言模型的智能体（agent�
 ## 开源许可证
 
 该项目采用[Apache 2.0 开源许可证](LICENSE)。
+
 <p align="right"><a href="#top">🔼 Back to top</a></p>

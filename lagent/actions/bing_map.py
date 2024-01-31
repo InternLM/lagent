@@ -9,7 +9,7 @@ from lagent.actions.parser import BaseParser, JsonParser
 
 
 class BINGMap(BaseAction):
-    """BING Map plugin for looking up map information"""
+    """BING Map plugin for looking up map information."""
 
     def __init__(self,
                  key: Optional[str] = None,
@@ -84,7 +84,7 @@ class BINGMap(BaseAction):
             location (:class:`str`): the location need to get coordinates.
 
         Returns:
-            :class:`dict`: coordinates information        
+            :class:`dict`: coordinates information
                 * latitude (float): the latitude of the location.
                 * longitude (float): the longitude of the location.
         """
@@ -102,10 +102,10 @@ class BINGMap(BaseAction):
                       places: str = 'unknown',
                       latitude: float = 0.0,
                       longitude: float = 0.0,
-                      radius: int = 5000) -> dict:  #  radius in meters
+                      radius: int = 5000) -> dict:
         """Search for places nearby a location, within a given radius, and \
-return the results into a list. You can use either the places name or the \
-latitude and longitude.
+        return the results into a list. You can use either the places name or
+        the \\ latitude and longitude.
 
         Args:
             search_term (:class:`str`): the place name.

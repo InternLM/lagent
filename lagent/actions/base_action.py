@@ -28,60 +28,60 @@ def tool_api(func: Optional[Callable] = None,
              explode_return: bool = False,
              returns_named_value: bool = False,
              **kwargs):
-    """Turn functions into tools. It will parse typehints as well as docstrings 
-    to build the tool description and attach it to functions via an attribute 
+    """Turn functions into tools. It will parse typehints as well as docstrings
+    to build the tool description and attach it to functions via an attribute
     ``api_description``.
-    
+
     Examples:
-    
+
         .. code-block:: python
-            
+
             # typehints has higher priority than docstrings
             from typing import Annotated
-            
+
             @tool_api
             def add(a: Annotated[int, 'augend'], b: Annotated[int, 'addend'] = 1):
                 '''Add operation
-                
+
                 Args:
                     x (int): a
                     y (int): b
                 '''
                 return a + b
-            
+
             print(add.api_description)
-            
+
     Args:
         func (Optional[Callable]): function to decorate. Defaults to ``None``.
-        explode_return (bool): whether to flatten the dictionary or tuple return 
-            as the ``return_data`` field. When enabled, it is recommended to 
+        explode_return (bool): whether to flatten the dictionary or tuple return
+            as the ``return_data`` field. When enabled, it is recommended to
             annotate the member in docstrings. Defaults to ``False``.
-            
+
             .. code-block:: python
-                
+
                 @tool_api(explode_return=True)
                 def foo(a, b):
                     '''A simple function
-                    
+
                     Args:
                         a (int): a
                         b (int): b
-                    
+
                     Returns:
                         dict: information of inputs
                             * x: value of a
                             * y: value of b
                     '''
                     return {'x': a, 'y': b}
-                    
+
                 print(foo.api_description)
-            
-        returns_named_value (bool): whether to parse ``thing: Description`` in 
-            returns sections as a name and description, rather than a type and 
-            description. When true, type must be wrapped in parentheses: 
-            ``(int): Description``. When false, parentheses are optional but 
+
+        returns_named_value (bool): whether to parse ``thing: Description`` in
+            returns sections as a name and description, rather than a type and
+            description. When true, type must be wrapped in parentheses:
+            ``(int): Description``. When false, parentheses are optional but
             the items cannot be named: ``int: Description``. Defaults to ``False``.
-            
+
     Returns:
         Callable: wrapped function or partial decorator
 
@@ -208,7 +208,7 @@ def tool_api(func: Optional[Callable] = None,
 
 
 class ToolMeta(ABCMeta):
-    """Metaclass of tools"""
+    """Metaclass of tools."""
 
     def __new__(mcs, name, base, attrs):
         is_toolkit, tool_desc = True, dict(
@@ -260,21 +260,21 @@ class BaseAction(metaclass=AutoRegister(TOOL_REGISTRY, ToolMeta)):
             action's inputs and outputs. Defaults to :class:`JsonParser`.
         enable (:class:`bool`): Whether the action is enabled. Defaults to
             ``True``.
-            
+
     Examples:
 
         * simple tool
 
         .. code-block:: python
-        
+
             class Bold(BaseAction):
                 '''Make text bold'''
-            
+
                 def run(self, text: str):
                     '''
                     Args:
                         text (str): input text
-                        
+
                     Returns:
                         str: bold text
                     '''
@@ -285,31 +285,31 @@ class BaseAction(metaclass=AutoRegister(TOOL_REGISTRY, ToolMeta)):
         * toolkit with multiple APIs
 
         .. code-block:: python
-        
+
             class Calculator(BaseAction):
                 '''Calculator'''
-                
+
                 @tool_api
                 def add(self, a, b):
                     '''Add operation
-                    
+
                     Args:
                         a (int): augend
                         b (int): addend
-                    
+
                     Returns:
                         int: sum
                     '''
                     return a + b
-                
-                @tool_api 
+
+                @tool_api
                 def sub(self, a, b):
                     '''Subtraction operation
-                    
+
                     Args:
                         a (int): minuend
                         b (int): subtrahend
-                        
+
                     Returns:
                         int: difference
                     '''
@@ -376,7 +376,7 @@ class BaseAction(metaclass=AutoRegister(TOOL_REGISTRY, ToolMeta)):
 
     @property
     def description(self) -> dict:
-        """Description of the tool"""
+        """Description of the tool."""
         return self._description
 
     def __repr__(self):

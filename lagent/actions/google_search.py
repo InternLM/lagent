@@ -56,7 +56,7 @@ class GoogleSearch(BaseAction):
     @tool_api
     def run(self, query: str, k: int = 10) -> ActionReturn:
         """一个可以从谷歌搜索结果的API。当你需要对于一个特定问题找到简短明了的回答时，可以使用它。输入应该是一个搜索查询。
-        
+
         Args:
             query (str): the search content
             k (int): select first k results in the search results as response

@@ -16,7 +16,8 @@ THEME_MAPPING = {
 
 
 class PPT(BaseAction):
-    """Plugin to create ppt slides with text, paragraph, images in good looking styles"""
+    """Plugin to create ppt slides with text, paragraph, images in good looking
+    styles."""
 
     def __init__(self,
                  theme_mapping: Optional[Dict[str, dict]] = None,
@@ -30,7 +31,7 @@ class PPT(BaseAction):
 
     @tool_api(explode_return=True)
     def create_file(self, theme: str, abs_location: str) -> dict:
-        """Create a pptx file with specific themes
+        """Create a pptx file with specific themes.
 
         Args:
             theme (:class:`str`): the theme used
@@ -74,7 +75,7 @@ class PPT(BaseAction):
 
     @tool_api(explode_return=True)
     def add_text_page(self, title: str, bullet_items: str) -> dict:
-        """Add text page of ppt
+        """Add text page of ppt.
 
         Args:
             title (:class:`str`): the title of the page
@@ -105,7 +106,7 @@ class PPT(BaseAction):
     @tool_api(explode_return=True)
     def add_text_image_page(self, title: str, bullet_items: str,
                             image: str) -> dict:
-        """Add a text page with one image. Image should be a path
+        """Add a text page with one image. Image should be a path.
 
         Args:
             title (:class:`str`): the title of the page

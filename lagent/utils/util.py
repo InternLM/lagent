@@ -1,7 +1,8 @@
 from typing import List, Optional, Union
 
 
-def filter_suffix(response: Union[str, List[str]], suffixes: Optional[List[str]] = None) -> str:
+def filter_suffix(response: Union[str, List[str]],
+                  suffixes: Optional[List[str]] = None) -> str:
     """Filter response with suffixes.
 
     Args:

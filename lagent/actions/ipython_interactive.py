@@ -15,14 +15,14 @@ from .parser import BaseParser, JsonParser
 
 
 class Status(str, Enum):
-    """Execution status"""
+    """Execution status."""
     SUCCESS = 'success'
     FAILURE = 'failure'
 
 
 @dataclass
 class ExecutionResult:
-    """Execution result"""
+    """Execution result."""
     status: Status
     value: Optional[str] = None
     msg: Optional[str] = None
@@ -37,7 +37,7 @@ class IPythonInteractive(BaseAction):
         max_out_len (int): maximum output length. No truncation occurs if negative.
             Defaults to ``2048``.
         use_signals (bool): whether signals should be used for timing function out
-            or the multiprocessing. Set to ``False`` when not running in the main 
+            or the multiprocessing. Set to ``False`` when not running in the main
             thread, e.g. web applications. Defaults to ``True``
         description (dict): The description of the action. Defaults to ``None``.
         parser (Type[BaseParser]): The parser class to process the
@@ -62,7 +62,7 @@ class IPythonInteractive(BaseAction):
         self._use_signals = use_signals
 
     def reset(self):
-        """Clear the context"""
+        """Clear the context."""
         self._executor.reset()
 
     @tool_api
@@ -71,7 +71,7 @@ class IPythonInteractive(BaseAction):
 
         Args:
             command (:class:`str`): Python code snippet
-            timeout (:class:`Optional[int]`): timeout for execution. This 
+            timeout (:class:`Optional[int]`): timeout for execution. This
                 argument only works in the main thread. Defaults to ``None``.
         """
         tool_return = ActionReturn(args={'text': command}, type=self.name)
@@ -87,7 +87,7 @@ class IPythonInteractive(BaseAction):
         return tool_return
 
     def exec(self, code: str) -> ExecutionResult:
-        """Run Python scripts in IPython shell
+        """Run Python scripts in IPython shell.
 
         Args:
             code (:class:`str`): code block
@@ -110,9 +110,8 @@ class IPythonInteractive(BaseAction):
                 if 'TimeoutError' in out:
                     return ExecutionResult(
                         Status.FAILURE,
-                        msg=
-                        'The code interpreter encountered an unexpected error.'
-                    )
+                        msg=('The code interpreter encountered '
+                             'an unexpected error.'))
                 err_idx = i
                 break
         else:
@@ -125,7 +124,7 @@ class IPythonInteractive(BaseAction):
         )
 
     async def async_exec(self, code: str) -> ExecutionResult:
-        """Asynchronously run Python scripts in IPython shell
+        """Asynchronously run Python scripts in IPython shell.
 
         Args:
             code (:class:`str`): code block
@@ -149,9 +148,8 @@ class IPythonInteractive(BaseAction):
                 if 'TimeoutError' in out:
                     return ExecutionResult(
                         Status.FAILURE,
-                        msg=
-                        'The code interpreter encountered an unexpected error.'
-                    )
+                        msg=('The code interpreter encountered an '
+                             'unexpected error.'))
                 err_idx = i
                 break
         else:
@@ -165,7 +163,7 @@ class IPythonInteractive(BaseAction):
 
     @staticmethod
     def extract_code(text: str) -> str:
-        """Extract Python code from markup languages
+        """Extract Python code from markup languages.
 
         Args:
             text (:class:`str`): Markdown-formatted text

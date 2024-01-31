@@ -8,8 +8,8 @@
 
 有两种类型的工具：
 
-* 简单工具: 只提供一个API接口供调用。
-* 工具包: 实现多个API接口，承担不同的子任务。
+- 简单工具: 只提供一个API接口供调用。
+- 工具包: 实现多个API接口，承担不同的子任务。
 
 ### 工具描述
 
@@ -29,6 +29,7 @@ TOOL_DESCRIPTION = {
     'required': ['text'],  # 指定必需的参数名
 }
 ```
+
 在某些情况下，可能还包含 `return_data`，`parameter_description` 字段，分别描述返回内容及参数传递格式。
 
 ```{attention}
@@ -169,38 +170,39 @@ def list_args(a: str, b: int, c: float = 0.0) -> dict:
 
 `BaseAction(description=None, parser=JsonParser, enable=True)` 是所有动作应该继承的基类，它接收三个初始化参数：
 
-* **description**：一个工具描述的字典，用于设置实例属性 `description`。通常不需要显式地传递这个参数，因为 `BaseAction` 的元类将查找被 `tool_api` 装饰的方法，并组装它们的 `api_description` 构造一个类属性 `__tool_description__`，如果实例化时 `description` 为空，那么该实例属性将置为 `__tool_description__`。
-* **parser**：`BaseParser` 类，用于实例化一个动作解析器校验 `description` 所描述的工具的参数。例如，`JsonParser` 会要求模型在调用工具时传入一个 JSON 格式字符串或者 Python 字典，为了让 LLM 感知到该指令，它会在 `description` 中插入一个 `parameter_description` 字段。
+- **description**：一个工具描述的字典，用于设置实例属性 `description`。通常不需要显式地传递这个参数，因为 `BaseAction` 的元类将查找被 `tool_api` 装饰的方法，并组装它们的 `api_description` 构造一个类属性 `__tool_description__`，如果实例化时 `description` 为空，那么该实例属性将置为 `__tool_description__`。
 
-    ```python
-    from lagent import BaseAction
+- **parser**：`BaseParser` 类，用于实例化一个动作解析器校验 `description` 所描述的工具的参数。例如，`JsonParser` 会要求模型在调用工具时传入一个 JSON 格式字符串或者 Python 字典，为了让 LLM 感知到该指令，它会在 `description` 中插入一个 `parameter_description` 字段。
 
-    action = BaseAction(
-        {
-            'name': 'bold',
-            'description': 'a function used to make text bold',
-            'parameters': [
-                {
-                    'name': 'text', 'type': 'STRING', 'description': 'input content'
-                }
-            ],
-            'required': ['text']
-        }
-    )
-    action.description
-    ```
+  ```python
+  from lagent import BaseAction
 
-    ```python
-    {'name': 'bold',
-     'description': 'a function used to make text bold',
-     'parameters': [{'name': 'text',
-     'type': 'STRING',
-     'description': 'input content'}],
-     'required': ['text'],
-     'parameter_description': '如果调用该工具，你必须使用Json格式 {key: value} 传参，其中key为参数名称'}
-    ```
+  action = BaseAction(
+      {
+          'name': 'bold',
+          'description': 'a function used to make text bold',
+          'parameters': [
+              {
+                  'name': 'text', 'type': 'STRING', 'description': 'input content'
+              }
+          ],
+          'required': ['text']
+      }
+  )
+  action.description
+  ```
 
-* **enable**: 指明该动作是否生效。
+  ```python
+  {'name': 'bold',
+   'description': 'a function used to make text bold',
+   'parameters': [{'name': 'text',
+   'type': 'STRING',
+   'description': 'input content'}],
+   'required': ['text'],
+   'parameter_description': '如果调用该工具，你必须使用Json格式 {key: value} 传参，其中key为参数名称'}
+  ```
+
+- **enable**: 指明该动作是否生效。
 
 ### 自定义动作
 
@@ -212,7 +214,7 @@ def list_args(a: str, b: int, c: float = 0.0) -> dict:
 
 ```python
 class Bold(BaseAction):
-    
+
     def run(self, text: str):
         """make text bold
 
@@ -307,24 +309,23 @@ action.description
    'parameter_description': '如果调用该工具，你必须使用Json格式 {key: value} 传参，其中key为参数名称'}]}
 ```
 
-
 ## 工具调用
 
 ### 执行工具
 
 `Action` 的 `__call__` 方法需要传入两个参数
 
-* `inputs`: 其类型与动作绑定的 `BaseParser` 相关，通常是由大语言模型生成的字符串。
-  + `JsonParser`: 允许传入 JSON 格式字符串或 Python 字典。
-  + `TupleParser`: 允许传入字面量为元组的字符串或 Python 元组。
-* `name`: 调用哪个 API，默认为 `run`。
+- `inputs`: 其类型与动作绑定的 `BaseParser` 相关，通常是由大语言模型生成的字符串。
+  - `JsonParser`: 允许传入 JSON 格式字符串或 Python 字典。
+  - `TupleParser`: 允许传入字面量为元组的字符串或 Python 元组。
+- `name`: 调用哪个 API，默认为 `run`。
 
 工具会返回一个封装了调用细节的 `ActionReturn` 对象。
 
-* `args`: 一个字典，表示该动作的入参。
-* `type`: 动作名称。
-* `result`: 以字典为成员的列表，每个字典包含两个键——'type' 和 'content'，发生异常时该字段为 `None`。
-* `errmsg`: 错误信息，默认为 `None`。
+- `args`: 一个字典，表示该动作的入参。
+- `type`: 动作名称。
+- `result`: 以字典为成员的列表，每个字典包含两个键——'type' 和 'content'，发生异常时该字段为 `None`。
+- `errmsg`: 错误信息，默认为 `None`。
 
 以下是一个例子：
 

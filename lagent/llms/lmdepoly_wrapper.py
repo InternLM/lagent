@@ -130,8 +130,7 @@ class TritonClient(BaseModel):
             tuple(Status, str, int): status, text/chat completion,
             generated token number
         """
-        from lmdeploy.serve.turbomind.chatbot import (Session, StatusCode,
-                                                      get_logger)
+        from lmdeploy.serve.turbomind.chatbot import Session, StatusCode, get_logger
         assert isinstance(session_id, int), \
             f'INT session id is required, but got {type(session_id)}'
 

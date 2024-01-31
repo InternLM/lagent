@@ -22,7 +22,8 @@ English | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | [ह�
 
 <div align="center">
 
-  [![Alt text](https://img.youtube.com/vi/YAelRLi0Zak/0.jpg)](https://www.youtube.com/watch?v=YAelRLi0Zak)
+[![Alt text](https://img.youtube.com/vi/YAelRLi0Zak/0.jpg)](https://www.youtube.com/watch?v=YAelRLi0Zak)
+
 </div>
 
 ## Getting Started
@@ -69,7 +70,8 @@ Lagent is a lightweight open-source framework that allows users to efficiently b
   </a>
 
 ### All Thanks To Our Contributors:
-  <a href="https://github.com/InternLM/lagent/graphs/contributors">
+
+<a href="https://github.com/InternLM/lagent/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=InternLM/lagent" />
 </a>
 

@@ -65,20 +65,11 @@ class PythonInterpreter(BaseAction):
     @tool_api
     def run(self, command: str) -> ActionReturn:
         """用来执行Python代码。代码必须是一个函数，函数名必须得是 'solution'，代码对应你的思考过程。代码实例格式如下：
-        ```python
-        # import 依赖包
-        import xxx
-        def solution():
-            # 初始化一些变量
-            variable_names_with_real_meaning = xxx
-            # 步骤一
-            mid_variable = func(variable_names_with_real_meaning)
-            # 步骤 x
-            mid_variable = func(mid_variable)
-            # 最后结果
-            final_answer =  func(mid_variable)
-            return final_answer
-        ```
+        ```python # import 依赖包 import xxx def solution(): # 初始化一些变量
+        variable_names_with_real_meaning = xxx # 步骤一 mid_variable =
+        func(variable_names_with_real_meaning) # 步骤 x mid_variable =
+        func(mid_variable) # 最后结果 final_answer =  func(mid_variable) return
+        final_answer ```
 
         Args:
             command (:class:`str`): Python code snippet
