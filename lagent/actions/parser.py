@@ -82,7 +82,9 @@ class JsonParser(BaseParser):
         action (:class:`BaseAction`): action to validate
     """
 
-    PARAMETER_DESCRIPTION = '如果调用该工具，你必须使用Json格式 {key: value} 传参，其中key为参数名称'
+    PARAMETER_DESCRIPTION = (
+        'If you call this tool, you must pass arguments in '
+        'the JSON format {key: value}, where the key is the parameter name.')
 
     def parse_inputs(self,
                      inputs: Union[str, dict],
@@ -114,7 +116,9 @@ class TupleParser(BaseParser):
         action (:class:`BaseAction`): action to validate
     """
 
-    PARAMETER_DESCRIPTION = '如果调用该工具，你必须使用Tuple格式 (arg1, arg2, arg3) 传参，且参数是有序的'
+    PARAMETER_DESCRIPTION = (
+        'If you call this tool, you must pass arguments in the tuple format '
+        'like (arg1, arg2, arg3), and the arguments are ordered.')
 
     def parse_inputs(self,
                      inputs: Union[str, tuple],
