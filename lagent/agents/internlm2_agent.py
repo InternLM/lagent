@@ -342,9 +342,16 @@ class Internlm2Agent(BaseAgent):
                 action_return.thought = language
                 agent_return.actions.append(action_return)
             inner_history.append(dict(role='language', content=language))
-            if not name or action_return.type == executor.finish_action.name:
+            if not name:
                 agent_return.response = language
-                agent_return.state = AgentStatusCode.END
+                break
+            elif action_return.type == executor.finish_action.name:
+                try:
+                    response = action_return.args['text']['response']
+                except Exception:
+                    logging.info(msg='Unable to parse FinishAction.')
+                    response = ''
+                agent_return.response = response
                 break
             else:
                 inner_history.append(

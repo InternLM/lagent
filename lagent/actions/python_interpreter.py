@@ -123,7 +123,7 @@ class PythonInterpreter(BaseAction):
             tool_return.state = ActionStatusCode.API_ERROR
             return tool_return
         try:
-            tool_return.result = dict(text=str(res))
+            tool_return.result = [dict(type='text', content=str(res))]
             tool_return.state = ActionStatusCode.SUCCESS
         except Exception as e:
             tool_return.errmsg = repr(e)

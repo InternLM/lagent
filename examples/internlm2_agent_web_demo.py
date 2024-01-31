@@ -294,7 +294,8 @@ def main():
                     st.session_state['ui'].render_action_results(
                         agent_return.actions[-1])
             elif (agent_return.state == AgentStatusCode.STREAM_ING
-                  or agent_return.state == AgentStatusCode.CODING):
+                  or agent_return.state == AgentStatusCode.CODING
+                  or agent_return.state == AgentStatusCode.END):
                 # st.markdown(agent_return.response)
                 # 清除占位符的当前内容，并显示新内容
                 with st.container():
