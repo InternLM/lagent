@@ -117,7 +117,7 @@ class StreamlitUI:
         """Initialize the model based on the selected option."""
         model_url = f'http://{ip}'
         st.session_state['model_map'][option] = LMDeployClient(
-            path='internlm2-chat-20b',
+            model_name='internlm2-chat-20b',
             url=model_url,
             meta_template=META,
             top_p=0.8,
@@ -294,8 +294,7 @@ def main():
                     st.session_state['ui'].render_action_results(
                         agent_return.actions[-1])
             elif (agent_return.state == AgentStatusCode.STREAM_ING
-                  or agent_return.state == AgentStatusCode.CODING
-                  or agent_return.state == AgentStatusCode.END):
+                  or agent_return.state == AgentStatusCode.CODING):
                 # st.markdown(agent_return.response)
                 # 清除占位符的当前内容，并显示新内容
                 with st.container():
