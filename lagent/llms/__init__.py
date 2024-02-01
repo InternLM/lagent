@@ -1,10 +1,12 @@
-from lagent.utils import is_module_exist
 from .base_api import BaseAPIModel
 from .base_llm import BaseModel
+from .huggingface import HFTransformer, HFTransformerCasualLM
+from .lmdepoly_wrapper import LMDeployClient, LMDeployPipeline, LMDeployServer
+from .meta_template import INTERNLM2_META
 from .openai import GPTAPI
 
-__all__ = ['BaseModel', 'BaseAPIModel', 'GPTAPI']
-
-if is_module_exist('transformers'):
-    from .huggingface import HFTransformer, HFTransformerCasualLM  # noqa: F401
-    __all__.extend(['HFTransformer', 'HFTransformerCasualLM'])
+__all__ = [
+    'BaseModel', 'BaseAPIModel', 'GPTAPI', 'LMDeployClient',
+    'LMDeployPipeline', 'LMDeployServer', 'HFTransformer',
+    'HFTransformerCasualLM', 'INTERNLM2_META'
+]
