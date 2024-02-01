@@ -22,7 +22,7 @@ English | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | [ह�
 
 <div align="center">
 
-[![Alt text](https://img.youtube.com/vi/YAelRLi0Zak/0.jpg)](https://www.youtube.com/watch?v=YAelRLi0Zak)
+https://github.com/InternLM/lagent/assets/24622904/3242f9bf-32d2-4907-8815-e16a75a4ac0e
 
 </div>
 
