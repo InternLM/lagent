@@ -411,7 +411,6 @@ class LMDeployClient(LMDeployServer):
     """
 
     Args:
-        path (str): The path to the model.
         url (str): communicating address 'http://<ip>:<port>' of
             api_server
         model_name (str): needed when model_path is a pytorch model on
@@ -419,12 +418,8 @@ class LMDeployClient(LMDeployServer):
             "Qwen-7B-Chat ", "Baichuan2-7B-Chat" and so on.
     """
 
-    def __init__(self,
-                 path: str,
-                 url: str,
-                 model_name: Optional[str] = None,
-                 **kwargs):
-        BaseModel.__init__(self, path=path, **kwargs)
+    def __init__(self, url: str, model_name: str, **kwargs):
+        BaseModel.__init__(self, path=url, **kwargs)
         from lmdeploy.serve.openai.api_client import APIClient
         self.client = APIClient(url)
         self.model_name = model_name
