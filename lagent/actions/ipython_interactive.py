@@ -71,8 +71,8 @@ class IPythonInteractive(BaseAction):
 
         Args:
             command (:class:`str`): Python code snippet
-            timeout (:class:`Optional[int]`): timeout for execution. This
-                argument only works in the main thread. Defaults to ``None``.
+            timeout (:class:`Optional[int]`): timeout for execution.
+                This argument only works in the main thread. Defaults to ``None``.
         """
         tool_return = ActionReturn(args={'text': command}, type=self.name)
         ret = (

@@ -3,8 +3,8 @@ import logging
 from copy import deepcopy
 from typing import Dict, List, Optional, Union
 
-from lagent import BaseAgent
 from lagent.actions import ActionExecutor
+from lagent.agents.base_agent import BaseAgent
 from lagent.llms import BaseAPIModel, BaseModel
 from lagent.schema import ActionReturn, ActionStatusCode, AgentReturn, AgentStatusCode, ModelStatusCode  # noqa: E501
 
