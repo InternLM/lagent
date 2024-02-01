@@ -16,8 +16,7 @@ THEME_MAPPING = {
 
 
 class PPT(BaseAction):
-    """Plugin to create ppt slides with text, paragraph, images in good looking
-    styles."""
+    """Plugin to create ppt slides with text, paragraph, images in good looking styles."""
 
     def __init__(self,
                  theme_mapping: Optional[Dict[str, dict]] = None,

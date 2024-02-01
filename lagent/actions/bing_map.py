@@ -1,3 +1,4 @@
+# flake8: noqa: E501
 import json
 import os
 from typing import Optional, Type
@@ -103,9 +104,7 @@ class BINGMap(BaseAction):
                       latitude: float = 0.0,
                       longitude: float = 0.0,
                       radius: int = 5000) -> dict:
-        """Search for places nearby a location, within a given radius, and \
-        return the results into a list. You can use either the places name or
-        the \\ latitude and longitude.
+        """Search for places nearby a location, within a given radius, and return the results into a list. You can use either the places name or the latitude and longitude.
 
         Args:
             search_term (:class:`str`): the place name.
