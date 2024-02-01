@@ -236,23 +236,23 @@ class GoogleScholar(BaseAction):
         """The getAuthorId function is used to get the author's id by his or
         her name.
 
-                Args:
-                    mauthors (str): Defines the author you want to search for.
-                    hl (Optional[str]): Defines the language to use for the Google Scholar Profiles search. It's a two-letter \
-        language code. (e.g., 'en' for English, 'es' for Spanish, or 'fr' for French). Defaults to 'en'.
-                    after_author (Optional[str]): Defines the next page token. It is used for retrieving the next page \
-        results. The parameter has the precedence over before_author parameter. Defaults to None.
-                    before_author (Optional[str]): Defines the previous page token. It is used for retrieving the previous \
-        page results. Defaults to None.
-                    no_cache (Optional[bool]): Will force SerpApi to fetch the Google Scholar Profiles results even if a \
-        cached version is already present. Defaults to False.
-                    _async (Optional[bool]): Defines the way you want to submit your search to SerpApi. Defaults to False.
-                    output (Optional[str]): Defines the final output you want. It can be set to 'json' (default) to get a \
-        structured JSON of the results, or 'html' to get the raw html retrieved. Defaults to 'json'.
+        Args:
+            mauthors (str): Defines the author you want to search for.
+            hl (Optional[str]): Defines the language to use for the Google Scholar Profiles search. It's a two-letter \
+language code. (e.g., 'en' for English, 'es' for Spanish, or 'fr' for French). Defaults to 'en'.
+            after_author (Optional[str]): Defines the next page token. It is used for retrieving the next page \
+results. The parameter has the precedence over before_author parameter. Defaults to None.
+            before_author (Optional[str]): Defines the previous page token. It is used for retrieving the previous \
+page results. Defaults to None.
+            no_cache (Optional[bool]): Will force SerpApi to fetch the Google Scholar Profiles results even if a \
+cached version is already present. Defaults to False.
+            _async (Optional[bool]): Defines the way you want to submit your search to SerpApi. Defaults to False.
+            output (Optional[str]): Defines the final output you want. It can be set to 'json' (default) to get a \
+structured JSON of the results, or 'html' to get the raw html retrieved. Defaults to 'json'.
 
-                Returns:
-                    :class:`dict`: author id
-                        * author_id: the author_id of the author
+        Returns:
+            :class:`dict`: author id
+                * author_id: the author_id of the author
         """
         params = {
             'mauthors': mauthors,
