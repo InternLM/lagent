@@ -95,17 +95,17 @@ class TritonClient(BaseModel):
         for status, res, _ in self.chatbot._stream_infer(
                 self.chatbot._session, prompt, max_tokens, sequence_start,
                 sequence_end):
-            if status.value < 0:
-                break
-        if status.value == 0:
-            self.chatbot._session.histories = (
-                self.chatbot._session.histories +
-                self.chatbot._session.prompt + self.chatbot._session.response)
-            # remove stop_words
-            res = filter_suffix(res, self.gen_params.get('stop_words'))
-            return res
-        else:
-            return ''
+            status = self.state_map.get(status)
+            if status < ModelStatusCode.END:
+                return ''
+            elif status == ModelStatusCode.END:
+                self.chatbot._session.histories = (
+                    self.chatbot._session.histories +
+                    self.chatbot._session.prompt +
+                    self.chatbot._session.response)
+                # remove stop_words
+                res = filter_suffix(res, self.gen_params.get('stop_words'))
+                return res
 
     def stream_chat(self,
                     inputs: List[dict],
@@ -130,7 +130,7 @@ class TritonClient(BaseModel):
             tuple(Status, str, int): status, text/chat completion,
             generated token number
         """
-        from lmdeploy.serve.turbomind.chatbot import Session, StatusCode, get_logger
+        from lmdeploy.serve.turbomind.chatbot import Session, get_logger
         assert isinstance(session_id, int), \
             f'INT session id is required, but got {type(session_id)}'
 
@@ -158,19 +158,19 @@ class TritonClient(BaseModel):
         for status, res, _ in self.chatbot._stream_infer(
                 self.chatbot._session, prompt, max_tokens, sequence_start,
                 sequence_end):
-            if status == StatusCode.TRITON_STREAM_END:  # remove stop_words
+            status = self.state_map.get(status)
+            if status < ModelStatusCode.END:
+                return status, res, _
+            elif status == ModelStatusCode.END:  # remove stop_words
                 res = filter_suffix(res, self.gen_params.get('stop_words'))
-            if status.value < 0:
+                self.chatbot._session.histories = (
+                    self.chatbot._session.histories +
+                    self.chatbot._session.prompt +
+                    self.chatbot._session.response)
+                yield status, res, _
                 break
             else:
-                yield self.state_map.get(status), res, _
-        if status.value == 0:
-            self.chatbot._session.histories = (
-                self.chatbot._session.histories +
-                self.chatbot._session.prompt + self.chatbot._session.response)
-            yield self.state_map.get(status), res, _
-        else:
-            return self.state_map.get(status), res, _
+                yield status, res, _
 
     def _update_gen_params(self, **kwargs):
         import mmengine
