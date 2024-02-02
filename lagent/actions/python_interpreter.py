@@ -4,8 +4,6 @@ import io
 from contextlib import redirect_stdout
 from typing import Any, Optional, Type
 
-from func_timeout import FunctionTimedOut, func_set_timeout
-
 from lagent.actions.base_action import BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
 from lagent.schema import ActionReturn, ActionStatusCode
@@ -85,6 +83,7 @@ class PythonInterpreter(BaseAction):
         Args:
             command (:class:`str`): Python code snippet
         """
+        from func_timeout import FunctionTimedOut, func_set_timeout
         self.runtime = GenericRuntime()
         try:
             tool_return = func_set_timeout(self.timeout)(self._call)(command)

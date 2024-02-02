@@ -5,10 +5,6 @@ from enum import Enum
 from io import StringIO
 from typing import Optional, Type
 
-import json5
-from IPython import InteractiveShell
-from timeout_decorator import timeout as timer
-
 from ..schema import ActionReturn, ActionStatusCode
 from .base_action import BaseAction, tool_api
 from .parser import BaseParser, JsonParser
@@ -55,6 +51,7 @@ class IPythonInteractive(BaseAction):
         enable: bool = True,
     ):
         super().__init__(description, parser, enable)
+        from IPython import InteractiveShell
         self.timeout = timeout
         self._executor = InteractiveShell()
         self._highlighting = re.compile(r'\x1b\[\d{,3}(;\d{,3}){,3}m')
@@ -74,6 +71,7 @@ class IPythonInteractive(BaseAction):
             timeout (:class:`Optional[int]`): timeout for execution.
                 This argument only works in the main thread. Defaults to ``None``.
         """
+        from timeout_decorator import timeout as timer
         tool_return = ActionReturn(args={'text': command}, type=self.name)
         ret = (
             timer(timeout or self.timeout)(self.exec)(command)
@@ -171,6 +169,8 @@ class IPythonInteractive(BaseAction):
         Returns:
             :class:`str`: Python code
         """
+        import json5
+
         # Match triple backtick blocks first
         triple_match = re.search(r'```[^\n]*\n(.+?)```', text, re.DOTALL)
         # Match single backtick blocks second
