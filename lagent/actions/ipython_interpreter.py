@@ -11,10 +11,6 @@ import traceback
 import uuid
 from typing import Optional, Tuple, Type
 
-import json5
-import PIL.Image
-from jupyter_client import KernelManager
-
 from lagent.actions.base_action import BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
 from lagent.schema import ActionReturn, ActionStatusCode
@@ -75,6 +71,8 @@ class IPythonInterpreter(BaseAction):
 
     @staticmethod
     def start_kernel():
+        from jupyter_client import KernelManager
+
         # start the kernel and manager
         km = KernelManager()
         km.start_kernel()
@@ -235,6 +233,8 @@ class IPythonInterpreter(BaseAction):
 
 
 def extract_code(text):
+    import json5
+
     # Match triple backtick blocks first
     triple_match = re.search(r'```[^\n]*\n(.+?)```', text, re.DOTALL)
     # Match single backtick blocks second
@@ -258,6 +258,7 @@ def escape_ansi(line):
 
 
 def publish_image_to_local(image_base64: str, work_dir='./work_dir/tmp_dir'):
+    import PIL.Image
     image_file = str(uuid.uuid4()) + '.png'
     local_image_file = os.path.join(work_dir, image_file)
 

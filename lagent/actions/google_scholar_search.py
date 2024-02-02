@@ -2,8 +2,6 @@
 import os
 from typing import Optional, Type
 
-from serpapi import GoogleSearch
-
 from lagent.actions.base_action import BaseAction, tool_api
 from lagent.schema import ActionReturn, ActionStatusCode
 from .parser import BaseParser, JsonParser
@@ -78,6 +76,7 @@ class GoogleScholar(BaseAction):
                 - organic_id: a list of the organic results' ids of the three selected papers
                 - pub_info: publication information of selected papers
         """
+        from serpapi import GoogleSearch
         params = {
             'q': query,
             'engine': 'google_scholar',
@@ -154,6 +153,7 @@ class GoogleScholar(BaseAction):
                 * articles: at most 3 articles by the author
                 * website: the author's homepage url
         """
+        from serpapi import GoogleSearch
         params = {
             'engine': 'google_scholar_author',
             'author_id': author_id,
@@ -204,6 +204,7 @@ class GoogleScholar(BaseAction):
                 * authors: the authors of the article
                 * citation: the citation format of the article
         """
+        from serpapi import GoogleSearch
         params = {
             'q': q,
             'engine': 'google_scholar_cite',
@@ -246,6 +247,7 @@ class GoogleScholar(BaseAction):
             :class:`dict`: author id
                 * author_id: the author_id of the author
         """
+        from serpapi import GoogleSearch
         params = {
             'mauthors': mauthors,
             'engine': 'google_scholar_profiles',

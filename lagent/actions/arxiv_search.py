@@ -1,7 +1,5 @@
 from typing import Optional, Type
 
-import arxiv
-
 from lagent.actions.base_action import BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
 from lagent.schema import ActionReturn, ActionStatusCode
@@ -37,6 +35,8 @@ Electrical Engineering, and Economics from scientific articles on arxiv.org.
             :class:`dict`: article information
                 * content (str): a list of 3 arxiv search papers
         """
+        import arxiv
+
         try:
             results = arxiv.Search(  # type: ignore
                 query[:self.max_query_len],

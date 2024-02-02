@@ -1,16 +1,13 @@
 arxiv
 distro
 func_timeout
-google-search-results
 griffe
 json5
 jsonschema
 jupyter
 jupyter_client
 phx-class-registry
-pillow
-python-pptx
 requests
+streamlit
 tiktoken
-timeout_decorator
 typing-extensions

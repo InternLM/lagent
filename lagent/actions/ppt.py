@@ -1,7 +1,5 @@
 from typing import Dict, Optional, Type
 
-from pptx import Presentation
-
 from lagent.actions.base_action import BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
 
@@ -40,6 +38,7 @@ class PPT(BaseAction):
             :class:`dict`: operation status
                 * status: the result of the execution
         """
+        from pptx import Presentation
         self.location = abs_location
         try:
             self.pointer = Presentation(self.theme_mapping[theme]['template'])

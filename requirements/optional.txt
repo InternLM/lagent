@@ -1,4 +1,7 @@
+google-search-results
 lmdeploy>=0.2.2
-streamlit
+pillow
+python-pptx
+timeout_decorator
 torch
 transformers>=4.34
