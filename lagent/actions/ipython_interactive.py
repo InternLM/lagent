@@ -3,7 +3,7 @@ from contextlib import redirect_stdout
 from dataclasses import dataclass
 from enum import Enum
 from io import StringIO
-from typing import Optional
+from typing import Optional, Type
 
 import json5
 from IPython import InteractiveShell
@@ -51,7 +51,7 @@ class IPythonInteractive(BaseAction):
         max_out_len: int = 2048,
         use_signals: bool = True,
         description: Optional[dict] = None,
-        parser: type[BaseParser] = JsonParser,
+        parser: Type[BaseParser] = JsonParser,
         enable: bool = True,
     ):
         super().__init__(description, parser, enable)
