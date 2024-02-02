@@ -170,7 +170,7 @@ class Internlm2Protocol:
             return 'interpreter', message, dict(
                 name=interpreter_executor.action_names()[0],
                 parameters=dict(command=code))
-        return None, message, None
+        return None, message.split(self.tool['start_token'])[0], None
 
     def format_response(self, action_return, name) -> dict:
         if action_return.state == ActionStatusCode.SUCCESS:
