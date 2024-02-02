@@ -49,6 +49,7 @@ class TritonClient(BaseModel):
                  max_tokens: int = 512,
                  sequence_start: bool = True,
                  sequence_end: bool = True,
+                 skip_special_tokens: bool = False,
                  **kwargs):
         """Start a new round conversation of a session. Return the chat
         completions in non-stream mode.
@@ -60,7 +61,8 @@ class TritonClient(BaseModel):
             max_tokens (int): the expected generated token numbers
             sequence_start (bool): start flag of a session
             sequence_end (bool): end flag of a session
-
+            skip_special_tokens (bool): Whether or not to remove special tokens
+                in the decoding. Default to be False.
         Returns:
             (a list of/batched) text/chat completion
         """
@@ -93,8 +95,12 @@ class TritonClient(BaseModel):
 
         status, res, _ = None, '', 0
         for status, res, _ in self.chatbot._stream_infer(
-                self.chatbot._session, prompt, max_tokens, sequence_start,
-                sequence_end):
+                self.chatbot._session,
+                prompt,
+                max_tokens,
+                sequence_start,
+                sequence_end,
+                skip_special_tokens=skip_special_tokens):
             status = self.state_map.get(status)
             if status < ModelStatusCode.END:
                 return ''
@@ -114,6 +120,7 @@ class TritonClient(BaseModel):
                     max_tokens: int = 512,
                     sequence_start: bool = True,
                     sequence_end: bool = True,
+                    skip_special_tokens: bool = False,
                     **kwargs):
         """Start a new round conversation of a session. Return the chat
         completions in stream mode.
@@ -125,7 +132,8 @@ class TritonClient(BaseModel):
             max_tokens (int): the expected generated token numbers
             sequence_start (bool): start flag of a session
             sequence_end (bool): end flag of a session
-
+            skip_special_tokens (bool): Whether or not to remove special tokens
+                in the decoding. Default to be False.
         Returns:
             tuple(Status, str, int): status, text/chat completion,
             generated token number
@@ -156,8 +164,12 @@ class TritonClient(BaseModel):
 
         status, res, _ = None, '', 0
         for status, res, _ in self.chatbot._stream_infer(
-                self.chatbot._session, prompt, max_tokens, sequence_start,
-                sequence_end):
+                self.chatbot._session,
+                prompt,
+                max_tokens,
+                sequence_start,
+                sequence_end,
+                skip_special_tokens=skip_special_tokens):
             status = self.state_map.get(status)
             if status < ModelStatusCode.END:
                 return status, res, _
@@ -226,6 +238,7 @@ class LMDeployPipeline(BaseModel):
     def generate(self,
                  inputs: Union[str, List[str]],
                  do_preprocess: bool = None,
+                 skip_special_tokens: bool = False,
                  **kwargs):
         """Return the chat completions in non-stream mode.
 
@@ -233,7 +246,8 @@ class LMDeployPipeline(BaseModel):
             inputs (Union[str, List[str]]): input texts to be completed.
             do_preprocess (bool): whether pre-process the messages. Default to
                 True, which means chat_template will be applied.
-
+            skip_special_tokens (bool): Whether or not to remove special tokens
+                in the decoding. Default to be False.
         Returns:
             (a list of/batched) text/chat completion
         """
@@ -244,7 +258,10 @@ class LMDeployPipeline(BaseModel):
         prompt = inputs
         gen_params = self.update_gen_params(**kwargs)
         response = self.model.batch_infer(
-            prompt, do_preprocess=do_preprocess, **gen_params)
+            prompt,
+            do_preprocess=do_preprocess,
+            skip_special_tokens=skip_special_tokens,
+            **gen_params)
         response = [resp.text for resp in response]
         # remove stop_words
         response = filter_suffix(response, self.gen_params.get('stop_words'))
@@ -308,6 +325,7 @@ class LMDeployServer(BaseModel):
                  sequence_start: bool = True,
                  sequence_end: bool = True,
                  ignore_eos: bool = False,
+                 skip_special_tokens: Optional[bool] = False,
                  timeout: int = 30,
                  **kwargs) -> List[str]:
         """Start a new round conversation of a session. Return the chat
@@ -319,6 +337,8 @@ class LMDeployServer(BaseModel):
             sequence_start (bool): start flag of a session
             sequence_end (bool): end flag of a session
             ignore_eos (bool): indicator for ignoring eos
+            skip_special_tokens (bool): Whether or not to remove special tokens
+                in the decoding. Default to be False.
             timeout (int): max time to wait for response
         Returns:
             (a list of/batched) text/chat completion
@@ -340,6 +360,7 @@ class LMDeployServer(BaseModel):
                 sequence_end=sequence_end,
                 stream=False,
                 ignore_eos=ignore_eos,
+                skip_special_tokens=skip_special_tokens,
                 timeout=timeout,
                 **gen_params):
             resp = [
@@ -359,6 +380,7 @@ class LMDeployServer(BaseModel):
                     sequence_end: bool = True,
                     stream: bool = True,
                     ignore_eos: bool = False,
+                    skip_special_tokens: Optional[bool] = False,
                     timeout: int = 30,
                     **kwargs):
         """Start a new round conversation of a session. Return the chat
@@ -371,6 +393,8 @@ class LMDeployServer(BaseModel):
             sequence_end (bool): end flag of a session
             stream (bool): return in a streaming format if enabled
             ignore_eos (bool): indicator for ignoring eos
+            skip_special_tokens (bool): Whether or not to remove special tokens
+                in the decoding. Default to be False.
             timeout (int): max time to wait for response
         Returns:
             tuple(Status, str, int): status, text/chat completion,
@@ -390,6 +414,7 @@ class LMDeployServer(BaseModel):
                 sequence_end=sequence_end,
                 stream=stream,
                 ignore_eos=ignore_eos,
+                skip_special_tokens=skip_special_tokens,
                 timeout=timeout,
                 **gen_params):
             resp += text['choices'][0]['text']
