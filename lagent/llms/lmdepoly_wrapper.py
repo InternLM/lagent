@@ -74,7 +74,7 @@ class TritonClient(BaseModel):
         assert isinstance(session_id, int), \
             f'INT session id is required, but got {type(session_id)}'
 
-        logger = get_logger(log_level=self.chatbot.log_level)
+        logger = get_logger('service.ft', log_level=self.chatbot.log_level)
         logger.info(f'session {session_id}, request_id {request_id}, '
                     f'max_out_len {max_tokens}')
 
@@ -142,7 +142,7 @@ class TritonClient(BaseModel):
         assert isinstance(session_id, int), \
             f'INT session id is required, but got {type(session_id)}'
 
-        logger = get_logger(log_level=self.chatbot.log_level)
+        logger = get_logger('service.ft', log_level=self.chatbot.log_level)
         logger.info(f'session {session_id}, request_id {request_id}, '
                     f'max_out_len {max_tokens}')
 
