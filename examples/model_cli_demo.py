@@ -26,6 +26,7 @@ def main():
     model = HFTransformer(
         path=args.path,
         meta_template=META,
+        max_tokens=512,
         top_p=0.8,
         top_k=None,
         temperature=0.1,
@@ -51,8 +52,7 @@ def main():
             history = [dict(role='user', content=prompt)]
         print('\nInternLm2：', end='')
         current_length = 0
-        for status, response, _ in model.stream_chat(
-                history, max_new_tokens=512):
+        for status, response, _ in model.stream_chat(history):
             print(response[current_length:], end='', flush=True)
             current_length = len(response)
         history.append(dict(role='assistant', content=response))
