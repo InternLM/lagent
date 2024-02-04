@@ -159,10 +159,11 @@ class TritonClient(BaseModel):
                 self.chatbot._session, prompt, max_tokens, sequence_start,
                 sequence_end):
             status = self.state_map.get(status)
+            # The stop symbol also appears in the output of the last STREAM_ING state.
+            res = filter_suffix(res, self.gen_params.get('stop_words'))
             if status < ModelStatusCode.END:
                 return status, res, _
             elif status == ModelStatusCode.END:  # remove stop_words
-                res = filter_suffix(res, self.gen_params.get('stop_words'))
                 self.chatbot._session.histories = (
                     self.chatbot._session.histories +
                     self.chatbot._session.prompt +
