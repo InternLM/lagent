@@ -18,8 +18,6 @@ class HFTransformer(BaseModel):
 
     Args:
         path (str): The name or path to HuggingFace's model.
-        max_seq_len (int): The maximum length of the input sequence. Defaults
-            to 2048.
         tokenizer_path (str): The path to the tokenizer. Defaults to None.
         tokenizer_kwargs (dict): Keyword arguments for the tokenizer.
             Defaults to {}.
@@ -144,8 +142,6 @@ class HFTransformer(BaseModel):
             new_gen_params = self.update_gen_params(**kwargs)
             generation_config.update(**new_gen_params)
             generation_config.update(**kwargs)
-            generation_config.max_new_tokens = new_gen_params.get(
-                'max_tokens', 512)
             model_kwargs = generation_config.to_dict()
             model_kwargs['attention_mask'] = attention_mask
             _, eos_token_id = (  # noqa: F841  # pylint: disable=W0612
