@@ -152,7 +152,7 @@ class BaseAPIModel(BaseModel):
                  template_parser: 'APITemplateParser' = APITemplateParser,
                  meta_template: Optional[Dict] = None,
                  *,
-                 max_tokens: int = 512,
+                 max_new_tokens: int = 512,
                  top_p: float = 0.8,
                  top_k: float = None,
                  temperature: float = 0.8,
@@ -169,7 +169,7 @@ class BaseAPIModel(BaseModel):
         if isinstance(stop_words, str):
             stop_words = [stop_words]
         self.gen_params = dict(
-            max_tokens=max_tokens,
+            max_new_tokens=max_new_tokens,
             top_p=top_p,
             top_k=top_k,
             temperature=temperature,
