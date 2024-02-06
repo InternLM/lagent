@@ -120,6 +120,7 @@ class StreamlitUI:
             model_name='internlm2-chat-20b',
             url=model_url,
             meta_template=META,
+            max_new_tokens=1024,
             top_p=0.8,
             top_k=100,
             temperature=0,
