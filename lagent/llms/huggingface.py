@@ -1,6 +1,5 @@
 import copy
 import logging
-import warnings
 from typing import Dict, List, Optional, Union
 
 from lagent.schema import ModelStatusCode
@@ -19,8 +18,6 @@ class HFTransformer(BaseModel):
 
     Args:
         path (str): The name or path to HuggingFace's model.
-        max_seq_len (int): The maximum length of the input sequence. Defaults
-            to 2048.
         tokenizer_path (str): The path to the tokenizer. Defaults to None.
         tokenizer_kwargs (dict): Keyword arguments for the tokenizer.
             Defaults to {}.
@@ -157,49 +154,9 @@ class HFTransformer(BaseModel):
                 eos_token_id.extend(self.additional_eos_token_id)
             eos_token_id_tensor = torch.tensor(eos_token_id).to(
                 input_ids.device) if eos_token_id is not None else None
-            has_default_max_length = (
-                kwargs.get('max_length') is None
-                and generation_config.max_length is not None)
-            if (has_default_max_length
-                    and generation_config.max_new_tokens is None):
-                warnings.warn(
-                    "Using `max_length`'s default"
-                    f'({generation_config.max_length})'
-                    'to control the generation length. '
-                    'This behaviour is deprecated and will be removed'
-                    ' from the config in v5 of Transformers -- we'
-                    ' recommend using `max_new_tokens` to control the'
-                    ' maximum length of the generation.',
-                    UserWarning,
-                )
-            elif generation_config.max_new_tokens is not None:
-                generation_config.max_length = (
-                    generation_config.max_new_tokens + input_ids_seq_length)
-                if not has_default_max_length:
-                    logger.warn(  # pylint: disable=W4902
-                        'Both `max_new_tokens`'
-                        f'(={generation_config.max_new_tokens})'
-                        'and `max_length`'
-                        f'(={generation_config.max_length})'
-                        ' seem to have been set.`max_new_tokens`'
-                        ' will take precedence. Please refer to'
-                        ' the documentation for more information. '
-                        '(https://huggingface.co/docs/transformers/main/en'
-                        '/main_classes/text_generation)',
-                        UserWarning,
-                    )
-
-            if input_ids_seq_length >= generation_config.max_length:
-                input_ids_string = 'input_ids'
-                logger.warning(
-                    f'Input length of {input_ids_string}'
-                    f' is {input_ids_seq_length},'
-                    ' but `max_length` is set to'
-                    f' {generation_config.max_length}.'
-                    'This can lead to unexpected behavior.'
-                    ' You should consider increasing `max_new_tokens`.')
-
-            # 2. Set generation parameters if not already defined
+            generation_config.max_length = (
+                generation_config.max_new_tokens + input_ids_seq_length)
+            # Set generation parameters if not already defined
             logits_processor = self.logits_processor
             stopping_criteria = self.stopping_criteria
 

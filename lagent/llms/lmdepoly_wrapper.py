@@ -46,7 +46,6 @@ class TritonClient(BaseModel):
                  inputs: Union[str, List[str]],
                  session_id: int = 2967,
                  request_id: str = '',
-                 max_tokens: int = 512,
                  sequence_start: bool = True,
                  sequence_end: bool = True,
                  skip_special_tokens: bool = False,
@@ -58,7 +57,6 @@ class TritonClient(BaseModel):
             inputs (str, List[str]): user's prompt(s) in this round
             session_id (int): the identical id of a session
             request_id (str): the identical id of this round conversation
-            max_tokens (int): the expected generated token numbers
             sequence_start (bool): start flag of a session
             sequence_end (bool): end flag of a session
             skip_special_tokens (bool): Whether or not to remove special tokens
@@ -74,9 +72,12 @@ class TritonClient(BaseModel):
         assert isinstance(session_id, int), \
             f'INT session id is required, but got {type(session_id)}'
 
+        self.chatbot.cfg = self._update_gen_params(**kwargs)
+        max_new_tokens = self.chatbot.cfg.max_new_tokens
+
         logger = get_logger('service.ft', log_level=self.chatbot.log_level)
         logger.info(f'session {session_id}, request_id {request_id}, '
-                    f'max_out_len {max_tokens}')
+                    f'max_out_len {max_new_tokens}')
 
         if self.chatbot._session is None:
             sequence_start = True
@@ -90,14 +91,11 @@ class TritonClient(BaseModel):
         self.chatbot._session.request_id = request_id
         self.chatbot._session.response = ''
 
-        self.chatbot.cfg = self._update_gen_params(
-            max_tokens=max_tokens, **kwargs)
-
         status, res, _ = None, '', 0
         for status, res, _ in self.chatbot._stream_infer(
                 self.chatbot._session,
                 prompt,
-                max_tokens,
+                max_new_tokens,
                 sequence_start,
                 sequence_end,
                 skip_special_tokens=skip_special_tokens):
@@ -117,7 +115,6 @@ class TritonClient(BaseModel):
                     inputs: List[dict],
                     session_id: int = 2967,
                     request_id: str = '',
-                    max_tokens: int = 512,
                     sequence_start: bool = True,
                     sequence_end: bool = True,
                     skip_special_tokens: bool = False,
@@ -129,7 +126,6 @@ class TritonClient(BaseModel):
             session_id (int): the identical id of a session
             inputs (List[dict]): user's inputs in this round conversation
             request_id (str): the identical id of this round conversation
-            max_tokens (int): the expected generated token numbers
             sequence_start (bool): start flag of a session
             sequence_end (bool): end flag of a session
             skip_special_tokens (bool): Whether or not to remove special tokens
@@ -142,9 +138,12 @@ class TritonClient(BaseModel):
         assert isinstance(session_id, int), \
             f'INT session id is required, but got {type(session_id)}'
 
+        self.chatbot.cfg = self._update_gen_params(**kwargs)
+        max_new_tokens = self.chatbot.cfg.max_new_tokens
+
         logger = get_logger('service.ft', log_level=self.chatbot.log_level)
         logger.info(f'session {session_id}, request_id {request_id}, '
-                    f'max_out_len {max_tokens}')
+                    f'max_out_len {max_new_tokens}')
 
         if self.chatbot._session is None:
             sequence_start = True
@@ -158,25 +157,21 @@ class TritonClient(BaseModel):
         self.chatbot._session.request_id = request_id
         self.chatbot._session.response = ''
 
-        self.chatbot.cfg = self._update_gen_params(
-            max_tokens=max_tokens, **kwargs)
         prompt = self.template_parser(inputs)
-
         status, res, _ = None, '', 0
         for status, res, _ in self.chatbot._stream_infer(
                 self.chatbot._session,
                 prompt,
-                max_tokens,
+                max_new_tokens,
                 sequence_start,
                 sequence_end,
                 skip_special_tokens=skip_special_tokens):
             status = self.state_map.get(status)
-            # remove stop_words
             # The stop symbol also appears in the output of the last STREAM_ING state.
             res = filter_suffix(res, self.gen_params.get('stop_words'))
             if status < ModelStatusCode.END:
                 return status, res, _
-            elif status == ModelStatusCode.END:
+            elif status == ModelStatusCode.END:  # remove stop_words
                 self.chatbot._session.histories = (
                     self.chatbot._session.histories +
                     self.chatbot._session.prompt +
@@ -261,10 +256,8 @@ class LMDeployPipeline(BaseModel):
             batched = False
         prompt = inputs
         gen_params = self.update_gen_params(**kwargs)
-        max_tokens = gen_params.pop('max_tokens')
         gen_config = GenerationConfig(
             skip_special_tokens=skip_special_tokens, **gen_params)
-        gen_config.max_new_tokens = max_tokens
         response = self.model.batch_infer(
             prompt, gen_config=gen_config, do_preprocess=do_preprocess)
         response = [resp.text for resp in response]
@@ -355,6 +348,8 @@ class LMDeployServer(BaseModel):
             batched = False
 
         gen_params = self.update_gen_params(**kwargs)
+        max_new_tokens = gen_params.pop('max_new_tokens')
+        gen_params.update(max_tokens=max_new_tokens)
 
         resp = [''] * len(inputs)
         for text in self.client.completions_v1(
@@ -406,6 +401,8 @@ class LMDeployServer(BaseModel):
             generated token number
         """
         gen_params = self.update_gen_params(**kwargs)
+        max_new_tokens = gen_params.pop('max_new_tokens')
+        gen_params.update(max_tokens=max_new_tokens)
         prompt = self.template_parser(inputs)
 
         resp = ''

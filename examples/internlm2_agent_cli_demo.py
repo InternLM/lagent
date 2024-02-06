@@ -24,6 +24,7 @@ def main():
     model = HFTransformer(
         path=args.path,
         meta_template=META,
+        max_new_tokens=1024,
         top_p=0.8,
         top_k=None,
         temperature=0.1,
@@ -69,7 +70,7 @@ def main():
         print('\nInternLm2：', end='')
         current_length = 0
         last_status = None
-        for agent_return in chatbot.stream_chat(history, max_new_tokens=512):
+        for agent_return in chatbot.stream_chat(history):
             status = agent_return.state
             if status not in [
                     AgentStatusCode.STREAM_ING, AgentStatusCode.CODING,

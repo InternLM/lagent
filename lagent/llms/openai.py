@@ -108,6 +108,8 @@ class GPTAPI(BaseAPIModel):
         assert isinstance(inputs, list)
         if isinstance(inputs[0], dict):
             inputs = [inputs]
+        if 'max_tokens' in gen_params:
+            raise NotImplementedError('unsupported parameter: max_tokens')
         gen_params = {**self.gen_params, **gen_params}
         with ThreadPoolExecutor(max_workers=20) as executor:
             tasks = [
@@ -133,7 +135,7 @@ class GPTAPI(BaseAPIModel):
 
         # Hold out 100 tokens due to potential errors in tiktoken calculation
         max_tokens = min(
-            gen_params.pop('max_tokens'),
+            gen_params.pop('max_new_tokens'),
             self.context_window - len(self.tokenize(str(input))) - 100)
         if max_tokens <= 0:
             return ''
