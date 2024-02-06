@@ -26,7 +26,7 @@ def main():
     model = HFTransformer(
         path=args.path,
         meta_template=META,
-        max_new_tokens=512,
+        max_new_tokens=1024,
         top_p=0.8,
         top_k=None,
         temperature=0.1,
