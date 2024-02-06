@@ -2,6 +2,8 @@
 
 ## Class TritonClient
 
+Chatbot for LLaMA series models with turbomind as inference engine.
+
 Here's an example:
 
 ```python
@@ -170,6 +172,8 @@ response = chatbot.generate(
 
 ## Class LMDeployServer
 
+This will run the api server in a subprocess.
+
 Here's an example:
 
 ```python
@@ -253,6 +257,8 @@ for status, res, _ in chatbot.stream_chat(
 ```
 
 ## Class LMDeployClient
+
+Chatbot for LLaMA series models with turbomind as inference engine.
 
 Here's an example:
 
