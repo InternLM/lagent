@@ -3,6 +3,7 @@ import logging
 from typing import Dict, List, Optional, Union
 
 from lagent.schema import ModelStatusCode
+from .base_api import APITemplateParser
 from .base_llm import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,9 @@ class HFTransformer(BaseModel):
         self.prefix_allowed_tokens_fn = None
 
         stop_words_id = []
-        if self.gen_params.get('stop_words'):
+        if self.gen_params.get('stop_words_id'):
+            stop_words_id = self.gen_params.get('stop_words_id')
+        elif self.gen_params.get('stop_words'):
             for sw in self.gen_params.get('stop_words'):
                 stop_words_id.append(self.tokenizer(sw)['input_ids'][-1])
         self.additional_eos_token_id = stop_words_id
@@ -69,9 +72,28 @@ class HFTransformer(BaseModel):
             tokenizer_path if tokenizer_path else path,
             trust_remote_code=True,
             **tokenizer_kwargs)
+            
         if self.tokenizer.pad_token_id is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
+            if self.tokenizer.eos_token is not None:
+                logger.warning(
+                    f'Using eos_token_id {self.tokenizer.eos_token} '
+                    'as pad_token_id.')
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+            else:
+                from transformers.generation import GenerationConfig
+                self.gcfg = GenerationConfig.from_pretrained(path)
 
+                if self.gcfg.pad_token_id is not None:
+                    logger.warning(
+                        f'Using pad_token_id {self.gcfg.pad_token_id} '
+                        'as pad_token_id.')
+                    self.tokenizer.pad_token_id = self.gcfg.pad_token_id
+                else:
+                    raise ValueError(
+                        'pad_token_id is not set for this tokenizer. Try to '
+                        'set pad_token_id via passing '
+                        '`pad_token_id={PAD_TOKEN_ID}` in model_cfg.')
+            
     def _load_model(self, path: str, model_kwargs: dict):
         import torch
         from transformers import AutoModel
@@ -127,7 +149,6 @@ class HFTransformer(BaseModel):
             if isinstance(inputs, str):
                 inputs = [inputs]
                 batched = False
-            # import pdb; pdb.set_trace()
             inputs = self.tokenizer(
                 inputs, padding=True, return_tensors='pt', return_length=True)
             input_length = inputs['length']
@@ -148,6 +169,11 @@ class HFTransformer(BaseModel):
                 generation_config.bos_token_id,
                 generation_config.eos_token_id,
             )
+            if eos_token_id is None:
+                if self.gcfg.eos_token_id is not None:
+                    eos_token_id = self.gcfg.eos_token_id
+                else:
+                    eos_token_id = []
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
             if self.additional_eos_token_id is not None:
@@ -267,3 +293,30 @@ class HFTransformerCasualLM(HFTransformer):
         self.model = AutoModelForCausalLM.from_pretrained(
             path, trust_remote_code=True, **model_kwargs)
         self.model.eval()
+
+class HFTransformerChat(HFTransformerCasualLM):
+    def __init__(self, 
+                 template_parser=APITemplateParser,
+                 **kwargs):
+        super().__init__(template_parser=template_parser, **kwargs)
+
+    def chat(self, inputs: List[dict], do_sample: bool = True, **kwargs):
+        """Return the chat completions in stream mode.
+
+        Args:
+            inputs (List[dict]): input messages to be completed.
+            do_sample (bool): do sampling if enabled
+        Returns:
+            the text/chat completion
+        """
+        prompt = self.template_parser(inputs)
+        query = prompt[-1]['content']
+        history = prompt[:-1]
+        try:
+            response, history = self.model.chat(self.tokenizer,
+                                                    query,
+                                                    history=history)
+        except:
+            response = ""
+        return response
+
