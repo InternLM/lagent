@@ -304,7 +304,7 @@ class HFTransformerChat(HFTransformerCasualLM):
                  **kwargs):
         super().__init__(template_parser=template_parser, **kwargs)
 
-    def chat(self, inputs: List[dict], do_sample: bool = True, **kwargs):
+    def chat(self, inputs: Union[List[dict], List[List[dict]]], do_sample: bool = True, **kwargs):
         """Return the chat completions in stream mode.
 
         Args:
@@ -313,6 +313,12 @@ class HFTransformerChat(HFTransformerCasualLM):
         Returns:
             the text/chat completion
         """
+        # handle batch inference with vanilla for loop
+        if isinstance(inputs[0], list):
+            resps = []
+            for input in inputs:
+                resps.append(self.chat(input, do_sample, **kwargs))
+            return resps
         prompt = self.template_parser(inputs)
         query = prompt[-1]['content']
         history = prompt[:-1]
