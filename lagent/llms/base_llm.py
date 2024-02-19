@@ -121,8 +121,7 @@ class BaseModel:
                  top_k: float = None,
                  temperature: float = 0.8,
                  repetition_penalty: float = 1.0,
-                 stop_words: Union[List[str], str] = None,
-                 stop_words_id: Union[List[int], int] = None):
+                 stop_words: Union[List[str], str] = None):
         self.path = path
         self.tokenizer_only = tokenizer_only
         # meta template
@@ -133,16 +132,13 @@ class BaseModel:
 
         if isinstance(stop_words, str):
             stop_words = [stop_words]
-        if isinstance(stop_words_id, int):
-            stop_words_id = [stop_words_id]
         self.gen_params = dict(
             max_new_tokens=max_new_tokens,
             top_p=top_p,
             top_k=top_k,
             temperature=temperature,
             repetition_penalty=repetition_penalty,
-            stop_words=stop_words,
-            stop_words_id=stop_words_id)
+            stop_words=stop_words)
 
     def generate(self, inputs: Union[str, List[str]], **gen_params) -> str:
         """Generate results given a str (or list of) inputs.

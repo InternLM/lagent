@@ -118,7 +118,6 @@ class APITemplateParser:
         return res
 
     def _role2api_role(self, role_prompt: Dict) -> Tuple[str, bool]:
-        # merged_prompt = self.roles[self.roles[role_prompt['role']]]
         merged_prompt = self.roles[role_prompt['role']]
         if merged_prompt.get('fallback_role'):
             merged_prompt = self.roles[self.roles[

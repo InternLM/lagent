@@ -38,12 +38,16 @@ class HFTransformer(BaseModel):
                  tokenizer_only: bool = False,
                  model_kwargs: dict = dict(device_map='auto'),
                  meta_template: Optional[Dict] = None,
+                 stop_words_id: Union[List[int], int] = None,
                  **kwargs):
         super().__init__(
             path=path,
             tokenizer_only=tokenizer_only,
             meta_template=meta_template,
             **kwargs)
+        if isinstance(stop_words_id, int):
+            stop_words_id = [stop_words_id]
+        self.gen_params.update(stop_words_id=stop_words_id)
 
         self._load_tokenizer(
             path=path,
@@ -316,7 +320,8 @@ class HFTransformerChat(HFTransformerCasualLM):
             response, history = self.model.chat(self.tokenizer,
                                                     query,
                                                     history=history)
-        except:
+        except Exception as e:
+            # handle over-length input error
             response = ""
         return response
 
