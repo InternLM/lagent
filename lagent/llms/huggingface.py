@@ -48,6 +48,10 @@ class HFTransformer(BaseModel):
         if isinstance(stop_words_id, int):
             stop_words_id = [stop_words_id]
         self.gen_params.update(stop_words_id=stop_words_id)
+        if self.gen_params['stop_words'] is not None and \
+                self.gen_params['stop_words_id'] is not None:
+            logger.warning("Both stop_words and stop_words_id are specified,"
+                           "only stop_words_id will be used.")
 
         self._load_tokenizer(
             path=path,
@@ -308,7 +312,7 @@ class HFTransformerChat(HFTransformerCasualLM):
         """Return the chat completions in stream mode.
 
         Args:
-            inputs (List[dict]): input messages to be completed.
+            inputs (Union[List[dict], List[List[dict]]]): input messages to be completed.
             do_sample (bool): do sampling if enabled
         Returns:
             the text/chat completion
@@ -328,6 +332,7 @@ class HFTransformerChat(HFTransformerCasualLM):
                                                     history=history)
         except Exception as e:
             # handle over-length input error
+            logger.warning(str(e))
             response = ""
         return response
 
