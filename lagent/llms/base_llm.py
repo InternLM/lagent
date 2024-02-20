@@ -183,12 +183,12 @@ class BaseModel:
         Returns:
         """
         if isinstance(inputs[0], list):
-            inputs = list()
+            _inputs = list()
             for msg in inputs:
-                inputs.append(self.template_parser(msg))
+                _inputs.append(self.template_parser(msg))
         else:
-            inputs = self.template_parser(inputs)
-        return self.generate(inputs, **gen_params)
+            _inputs = self.template_parser(inputs)
+        return self.generate(_inputs, **gen_params)
 
     def generate_from_template(self, inputs: Union[List[dict],
                                                    List[List[dict]]],
