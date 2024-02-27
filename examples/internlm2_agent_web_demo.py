@@ -27,6 +27,7 @@ class SessionState:
             # ArxivSearch(),
             AgentLegoToolkit(type='ImageDescription', url='http://127.0.0.1:16180/openapi.json'),
             AgentLegoToolkit(type='Calculator', url='http://127.0.0.1:16181/openapi.json')
+            # AgentLegoToolkit(type='PluginMarket', url='http://127.0.0.1:16182/openapi.json')
         ]
         st.session_state['plugin_map'] = {
             action.name: action
