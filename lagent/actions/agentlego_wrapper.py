@@ -1,14 +1,14 @@
-from typing import List, Optional
-import types
-from copy import deepcopy
+from typing import Optional
+
+# from agentlego.parsers import DefaultParser
+from agentlego.tools.remote import RemoteTool
+
 from lagent import BaseAction
 from lagent.actions.parser import JsonParser
 
-from agentlego.tools.remote import RemoteTool
-from agentlego.parsers import DefaultParser
-
 
 class AgentLegoToolkit(BaseAction):
+
     def __init__(self,
                  type: str,
                  url: Optional[str] = None,
@@ -25,29 +25,25 @@ class AgentLegoToolkit(BaseAction):
             assert spec_dict is not None
             spec = dict(spec_dict=spec_dict)
         if url is not None and not url.endswith('.json'):
-            api_list = [RemoteTool(url)]
+            api_list = [RemoteTool.from_url(url).to_lagent()]
         else:
-            api_list = [api for api in RemoteTool.from_openapi(**spec)]
+            api_list = [
+                api.to_lagent() for api in RemoteTool.from_openapi(**spec)
+            ]
         api_desc = []
         for api in api_list:
-            api.set_parser(DefaultParser)
-            desc = deepcopy(api.toolmeta.__dict__)
-            description_normalization(desc)
-            api_desc.append(desc)
+            # api.set_parser(DefaultParser)
+            # desc = deepcopy(api.toolmeta.__dict__)
+            # description_normalization(desc)
+            api_desc.append(api.description)
         if len(api_list) > 1:
-            tool_description = dict(
-                name=type,
-                api_list=api_desc
-            )
+            tool_description = dict(name=type, api_list=api_desc)
             self.add_method(api_list)
         else:
             tool_description = api_desc[0]
             setattr(self, 'run', api_list[0])
         super().__init__(
-            description=tool_description,
-            parser=parser,
-            enable=enable
-        )
+            description=tool_description, parser=parser, enable=enable)
 
     @property
     def is_toolkit(self):
