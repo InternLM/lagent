@@ -8,7 +8,7 @@ THEME_MAPPING = {
         'template': None,
         'title': 'Title Slide',
         'single': 'Title and Content',
-        'two': 'Tow content',
+        'two': 'Two Content',
     }
 }
 
@@ -31,7 +31,7 @@ class PPT(BaseAction):
         """Create a pptx file with specific themes.
 
         Args:
-            theme (:class:`str`): the theme used
+            theme (:class:`str`): the theme used. The value should be one of ['Default'].
             abs_location (:class:`str`): the ppt file's absolute location
 
         Returns:
@@ -122,6 +122,7 @@ class PPT(BaseAction):
         ph_title, ph_body1, ph_body2 = slide.placeholders
         ph_title.text = title
         ph = ph_body2
+        # TODO load image
         image_pil = image.to_pil()
         left = ph.left
         width = ph.width
