@@ -32,16 +32,13 @@ class AgentLegoToolkit(BaseAction):
             ]
         api_desc = []
         for api in api_list:
-            # api.set_parser(DefaultParser)
-            # desc = deepcopy(api.toolmeta.__dict__)
-            # description_normalization(desc)
             api_desc.append(api.description)
         if len(api_list) > 1:
             tool_description = dict(name=type, api_list=api_desc)
             self.add_method(api_list)
         else:
             tool_description = api_desc[0]
-            setattr(self, 'run', api_list[0])
+            setattr(self, 'run', api_list[0].run)
         super().__init__(
             description=tool_description, parser=parser, enable=enable)
 
@@ -51,23 +48,4 @@ class AgentLegoToolkit(BaseAction):
 
     def add_method(self, funcs):
         for func in funcs:
-            setattr(self, func.name, func)
-
-
-def description_normalization(desc: dict):
-    if not desc.get('parameters') and desc.get('inputs'):
-        parameters = [vars(param) for param in desc['inputs']]
-        for param in parameters:
-            if 'type' in param and isinstance(param['type'], object):
-                param['type'] = param['type'].__name__
-        desc['parameters'] = parameters
-        desc.pop('inputs')
-    if not desc.get('return_data') and desc.get('outputs'):
-        return_data = [vars(param) for param in desc['outputs']]
-        for param in return_data:
-            if 'type' in param and isinstance(param['type'], object):
-                param['type'] = param['type'].__name__
-        desc['return_data'] = return_data
-        desc.pop('outputs')
-    if not desc.get('required'):
-        desc['required'] = [param['name'] for param in desc['parameters']]
+            setattr(self, func.name, func.run)
