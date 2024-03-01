@@ -115,6 +115,7 @@ class PPT(BaseAction):
             :class:`dict`: operation status
                 * status: the result of the execution
         """
+        from PIL import Image
         layout_name = self.theme_mapping[self.pointer.slide_master.name]['two']
         layout = next(i for i in self.pointer.slide_master.slide_layouts
                       if i.name == layout_name)
@@ -122,7 +123,7 @@ class PPT(BaseAction):
         ph_title, ph_body1, ph_body2 = slide.placeholders
         ph_title.text = title
         ph = ph_body2
-        # TODO load image
+        image = Image.open(image)
         image_pil = image.to_pil()
         left = ph.left
         width = ph.width
