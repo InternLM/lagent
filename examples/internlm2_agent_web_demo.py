@@ -6,7 +6,7 @@ import os
 import streamlit as st
 
 from lagent.actions import ActionExecutor, ArxivSearch, IPythonInterpreter
-from lagent.actions.agentlego_wrapper import AgentLegoToolkit
+# from lagent.actions.agentlego_wrapper import AgentLegoToolkit
 from lagent.agents.internlm2_agent import INTERPRETER_CN, META_CN, PLUGIN_CN, Internlm2Agent, Internlm2Protocol
 from lagent.llms.lmdepoly_wrapper import LMDeployClient
 from lagent.llms.meta_template import INTERNLM2_META as META
@@ -22,16 +22,7 @@ class SessionState:
         st.session_state['assistant'] = []
         st.session_state['user'] = []
 
-        action_list = [
-            ArxivSearch(),
-            AgentLegoToolkit(
-                type='ImageDescription',
-                url='http://127.0.0.1:16180/openapi.json'),
-            AgentLegoToolkit(
-                type='Calculator', url='http://127.0.0.1:16181/openapi.json'),
-            AgentLegoToolkit(
-                type='PluginMarket', url='http://127.0.0.1:16182/openapi.json')
-        ]
+        action_list = [ArxivSearch()]
         st.session_state['plugin_map'] = {
             action.name: action
             for action in action_list

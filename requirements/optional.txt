@@ -1,3 +1,4 @@
+agentlego
 google-search-results
 lmdeploy>=0.2.3
 pillow

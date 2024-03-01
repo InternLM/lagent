@@ -35,7 +35,8 @@ class AgentLegoToolkit(BaseAction):
             api_desc.append(api.description)
         if len(api_list) > 1:
             tool_description = dict(name=type, api_list=api_desc)
-            self.add_method(api_list)
+            for func in api_list:
+                setattr(self, func.name, func.run)
         else:
             tool_description = api_desc[0]
             setattr(self, 'run', api_list[0].run)
@@ -45,7 +46,3 @@ class AgentLegoToolkit(BaseAction):
     @property
     def is_toolkit(self):
         return 'api_list' in self.description
-
-    def add_method(self, funcs):
-        for func in funcs:
-            setattr(self, func.name, func.run)
