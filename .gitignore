@@ -160,3 +160,4 @@ cython_debug/
 #.idea/
 .vscode/
 docs/*/_build/
+tmp_dir/

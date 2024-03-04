@@ -50,8 +50,8 @@ class HFTransformer(BaseModel):
         self.gen_params.update(stop_words_id=stop_words_id)
         if self.gen_params['stop_words'] is not None and \
                 self.gen_params['stop_words_id'] is not None:
-            logger.warning("Both stop_words and stop_words_id are specified,"
-                           "only stop_words_id will be used.")
+            logger.warning('Both stop_words and stop_words_id are specified,'
+                           'only stop_words_id will be used.')
 
         self._load_tokenizer(
             path=path,
@@ -80,7 +80,7 @@ class HFTransformer(BaseModel):
             tokenizer_path if tokenizer_path else path,
             trust_remote_code=True,
             **tokenizer_kwargs)
-            
+
         if self.tokenizer.pad_token_id is None:
             if self.tokenizer.eos_token is not None:
                 logger.warning(
@@ -101,7 +101,7 @@ class HFTransformer(BaseModel):
                         'pad_token_id is not set for this tokenizer. Try to '
                         'set pad_token_id via passing '
                         '`pad_token_id={PAD_TOKEN_ID}` in model_cfg.')
-            
+
     def _load_model(self, path: str, model_kwargs: dict):
         import torch
         from transformers import AutoModel
@@ -302,13 +302,16 @@ class HFTransformerCasualLM(HFTransformer):
             path, trust_remote_code=True, **model_kwargs)
         self.model.eval()
 
+
 class HFTransformerChat(HFTransformerCasualLM):
-    def __init__(self, 
-                 template_parser=APITemplateParser,
-                 **kwargs):
+
+    def __init__(self, template_parser=APITemplateParser, **kwargs):
         super().__init__(template_parser=template_parser, **kwargs)
 
-    def chat(self, inputs: Union[List[dict], List[List[dict]]], do_sample: bool = True, **kwargs):
+    def chat(self,
+             inputs: Union[List[dict], List[List[dict]]],
+             do_sample: bool = True,
+             **kwargs):
         """Return the chat completions in stream mode.
 
         Args:
@@ -327,12 +330,10 @@ class HFTransformerChat(HFTransformerCasualLM):
         query = prompt[-1]['content']
         history = prompt[:-1]
         try:
-            response, history = self.model.chat(self.tokenizer,
-                                                    query,
-                                                    history=history)
+            response, history = self.model.chat(
+                self.tokenizer, query, history=history)
         except Exception as e:
             # handle over-length input error
             logger.warning(str(e))
-            response = ""
+            response = ''
         return response
-
