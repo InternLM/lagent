@@ -150,7 +150,7 @@ class StreamlitUI:
                     belong='assistant',
                     end='<|action_end|>\n',
                 ), ),
-        )
+            max_turn=7)
 
     def render_user(self, prompt: str):
         with st.chat_message('user'):

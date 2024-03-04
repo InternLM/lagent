@@ -141,6 +141,12 @@ class Internlm2Protocol:
                     tool_name = api_info['name'].split('.')[0]
                     plugin['description'] = API_PREFIX.format(
                         tool_name=tool_name, description=plugin['description'])
+                    # only keep required parameters
+                    required_parameters = [
+                        param for param in plugin['parameters']
+                        if param['name'] in plugin['required']
+                    ]
+                    plugin['parameters'] = required_parameters
                 plugin_descriptions.append(plugin)
             plugin_prompt = self.plugin_prompt.format(
                 prompt=json.dumps(

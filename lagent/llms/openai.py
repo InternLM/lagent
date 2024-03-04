@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor
 from logging import getLogger
 from threading import Lock
 from typing import Dict, List, Optional, Union
@@ -106,17 +106,15 @@ class GPTAPI(BaseAPIModel):
             Union[str, List[str]]: generated string(s)
         """
         assert isinstance(inputs, list)
-        if isinstance(inputs[0], dict):
-            inputs = [inputs]
         if 'max_tokens' in gen_params:
             raise NotImplementedError('unsupported parameter: max_tokens')
         gen_params = {**self.gen_params, **gen_params}
         with ThreadPoolExecutor(max_workers=20) as executor:
             tasks = [
                 executor.submit(self._chat, messages, **gen_params)
-                for messages in inputs
+                for messages in (
+                    [inputs] if isinstance(inputs[0], dict) else inputs)
             ]
-        wait(tasks)
         ret = [task.result() for task in tasks]
         return ret[0] if isinstance(inputs[0], dict) else ret
 
