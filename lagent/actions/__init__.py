@@ -12,13 +12,14 @@ from .ipython_interpreter import IPythonInterpreter
 from .parser import BaseParser, JsonParser, TupleParser
 from .ppt import PPT
 from .python_interpreter import PythonInterpreter
+from .web_browser import WebBrowser
 
 __all__ = [
     'BaseAction', 'ActionExecutor', 'InvalidAction', 'FinishAction',
     'NoAction', 'BINGMap', 'ArxivSearch', 'FinishAction', 'GoogleSearch',
     'GoogleScholar', 'IPythonInterpreter', 'IPythonInteractive',
     'PythonInterpreter', 'PPT', 'BaseParser', 'JsonParser', 'TupleParser',
-    'tool_api', 'list_tools', 'get_tool_cls', 'get_tool'
+    'tool_api', 'list_tools', 'get_tool_cls', 'get_tool', 'WebBrowser'
 ]
 
 

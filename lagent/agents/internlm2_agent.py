@@ -182,7 +182,7 @@ class Internlm2Protocol:
         if action_return.state == ActionStatusCode.SUCCESS:
             response = action_return.format_result()
         else:
-            response = action_return.errmsg
+            response = f'{action_return.type} error msg is: {action_return.errmsg}'
         content = self.execute['begin'] + response + self.execute['end']
         if self.execute.get('fallback_role'):
             return dict(
