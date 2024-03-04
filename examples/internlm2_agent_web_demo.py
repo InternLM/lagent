@@ -26,12 +26,10 @@ class SessionState:
             ArxivSearch(),
             PPT(),
             BINGMap(
-                key=
-                'qaTBEmz3VIVotIKfVFLO~B_F0RIwD8ZEljsKEgQopdQ~AmFcljtooPxkBsCRVVQMtIBNS9S-oSmS1MaAsPiBUVN1eds4UeNum4M3a6cYX-kg'
+                key='qaTBEmz3VIVotIKfVFLO~B_F0RIwD8ZEljsKEgQopdQ~AmFcljtooPxkBsCRVVQMtIBNS9S-oSmS1MaAsPiBUVN1eds4UeNum4M3a6cYX-kg'
             ),
             GoogleScholar(
-                api_key=
-                'a558de7dee10146326ca86fbaa0736bdd947c9e646cd3f14da5aff177d6b2ff0'
+                api_key='a558de7dee10146326ca86fbaa0736bdd947c9e646cd3f14da5aff177d6b2ff0'
             )
         ]
         st.session_state['plugin_map'] = {
