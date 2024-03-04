@@ -10,7 +10,7 @@ from lagent.actions.parser import JsonParser
 class AgentLegoToolkit(BaseAction):
 
     def __init__(self,
-                 type: str,
+                 name: str,
                  url: Optional[str] = None,
                  text: Optional[str] = None,
                  spec_dict: Optional[dict] = None,
@@ -34,7 +34,7 @@ class AgentLegoToolkit(BaseAction):
         for api in api_list:
             api_desc.append(api.description)
         if len(api_list) > 1:
-            tool_description = dict(name=type, api_list=api_desc)
+            tool_description = dict(name=name, api_list=api_desc)
             for func in api_list:
                 setattr(self, func.name, func.run)
         else:
