@@ -121,7 +121,8 @@ class BaseModel:
                  top_k: float = None,
                  temperature: float = 0.8,
                  repetition_penalty: float = 1.0,
-                 stop_words: Union[List[str], str] = None):
+                 stop_words: Union[List[str], str] = None,
+                **kwargs):
         self.path = path
         self.tokenizer_only = tokenizer_only
         # meta template
