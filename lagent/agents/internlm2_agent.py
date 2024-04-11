@@ -175,7 +175,8 @@ class Internlm2Protocol:
             code = code.split(self.tool['end'].strip())[0].strip()
             return 'interpreter', message, dict(
                 name=interpreter_executor.action_names()[0],
-                parameters=dict(command=code))
+                parameters=dict(
+                    command=code)) if interpreter_executor else None
         return None, message.split(self.tool['start_token'])[0], None
 
     def format_response(self, action_return, name) -> dict:
