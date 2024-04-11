@@ -25,12 +25,10 @@ class SessionState:
         action_list = [
             ArxivSearch(),
             PPT(),
-            BINGMap(
-                key='qaTBEmz3VIVotIKfVFLO~B_F0RIwD8ZEljsKEgQopdQ~AmFcljtooPxkBsCRVVQMtIBNS9S-oSmS1MaAsPiBUVN1eds4UeNum4M3a6cYX-kg'
-            ),
-            GoogleScholar(
-                api_key='a558de7dee10146326ca86fbaa0736bdd947c9e646cd3f14da5aff177d6b2ff0'
-            )
+            BINGMap(key='Your api key'  # noqa
+                    ),
+            GoogleScholar(api_key='Your api key'  # noqa
+                          )
         ]
         st.session_state['plugin_map'] = {
             action.name: action
@@ -112,7 +110,7 @@ class StreamlitUI:
                         actions=[IPythonInterpreter()])
             else:
                 st.session_state['chatbot']._interpreter_executor = None
-            st.session_state['chatbot']._protocol._meta_template = meta_prompt
+            st.session_state['chatbot']._protocol.meta_prompt = meta_prompt
             st.session_state['chatbot']._protocol.plugin_prompt = plugin_prompt
             st.session_state[
                 'chatbot']._protocol.interpreter_prompt = da_prompt
@@ -149,8 +147,8 @@ class StreamlitUI:
                         plugin='<|plugin|>', interpreter='<|interpreter|>'),
                     belong='assistant',
                     end='<|action_end|>\n',
-                ), ),
-            max_turn=7)
+                )),
+            max_turn=15)
 
     def render_user(self, prompt: str):
         with st.chat_message('user'):
