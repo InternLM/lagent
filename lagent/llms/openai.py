@@ -1,6 +1,7 @@
 import json
 import os
 import time
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from logging import getLogger
 from threading import Lock
@@ -9,6 +10,8 @@ from typing import Dict, List, Optional, Union
 import requests
 
 from .base_api import BaseAPIModel
+
+warnings.simplefilter('default')
 
 OPENAI_API_BASE = 'https://api.openai.com/v1/chat/completions'
 
@@ -54,6 +57,10 @@ class GPTAPI(BaseAPIModel):
                  ],
                  openai_api_base: str = OPENAI_API_BASE,
                  **gen_params):
+        if 'top_k' in gen_params:
+            warnings.warn('`top_k` parameter is deprecated in OpenAI APIs.',
+                          DeprecationWarning)
+            gen_params.pop('top_k')
         super().__init__(
             model_type=model_type,
             meta_template=meta_template,

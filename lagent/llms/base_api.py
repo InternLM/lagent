@@ -154,6 +154,7 @@ class BaseAPIModel(BaseModel):
                  *,
                  max_new_tokens: int = 512,
                  top_p: float = 0.8,
+                 top_k: int = 40,
                  temperature: float = 0.8,
                  repetition_penalty: float = 0.0,
                  stop_words: Union[List[str], str] = None):
@@ -170,6 +171,7 @@ class BaseAPIModel(BaseModel):
         self.gen_params = dict(
             max_new_tokens=max_new_tokens,
             top_p=top_p,
+            top_k=top_k,
             temperature=temperature,
             repetition_penalty=repetition_penalty,
             stop_words=stop_words)
