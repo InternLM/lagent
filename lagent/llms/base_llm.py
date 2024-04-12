@@ -118,7 +118,7 @@ class BaseModel:
                  *,
                  max_new_tokens: int = 512,
                  top_p: float = 0.8,
-                 top_k: float = None,
+                 top_k: float = 40,
                  temperature: float = 0.8,
                  repetition_penalty: float = 1.0,
                  stop_words: Union[List[str], str] = None):

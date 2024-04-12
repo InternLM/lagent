@@ -154,7 +154,7 @@ class BaseAPIModel(BaseModel):
                  *,
                  max_new_tokens: int = 512,
                  top_p: float = 0.8,
-                 top_k: float = None,
+                 top_k: int = 40,
                  temperature: float = 0.8,
                  repetition_penalty: float = 0.0,
                  stop_words: Union[List[str], str] = None):
