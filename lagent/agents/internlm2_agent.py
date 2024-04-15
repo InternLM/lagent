@@ -1,5 +1,6 @@
 import json
 import logging
+from collections import defaultdict
 from copy import deepcopy
 from typing import Dict, List, Optional, Union
 
@@ -367,35 +368,37 @@ class Internlm2Agent(BaseAgent):
         agent_return.state = AgentStatusCode.END
         yield agent_return
 
-    def batch_chat(self, batch_messages: List[str], **kwargs) -> AgentReturn:
+    def batch_chat(self, batch_messages: List[Union[List[dict], dict, str]],
+                   **kwargs) -> List[AgentReturn]:
         assert isinstance(batch_messages, list)
-        agent_return = [AgentReturn() for _ in range(len(batch_messages))]
-        inner_history = []
+        agent_returns = [AgentReturn() for _ in range(len(batch_messages))]
+        inner_histories = []
         for message in batch_messages:
             if isinstance(message, str):
                 message = dict(role='user', content=message)
             if isinstance(message, dict):
                 message = [message]
-            inner_history.append(message)
-        offset = [len(inner) for inner in inner_history]
-        finish_list = [False for _ in range(len(batch_messages))]
+            inner_histories.append(message)
+        offsets = [len(inner) for inner in inner_histories]
+        finish_flags = [False for _ in range(len(batch_messages))]
         for _ in range(self.max_turn):
-            batch_prompt = ['' for _ in range(len(batch_messages))]
-            finish_index = [
-                index for index, is_finish in enumerate(finish_list)
+            unfinished = [
+                index for index, is_finish in enumerate(finish_flags)
                 if not is_finish
             ]
-            # list of dict
+            if not unfinished:
+                break
             batch_prompt = []
-            for index in enumerate(finish_index):
+            for index in unfinished:
                 batch_prompt.append(
                     self._protocol.format(
-                        inner_step=inner_history[index],
+                        inner_step=inner_histories[index],
                         plugin_executor=self._action_executor,
                         interpreter_executor=self._interpreter_executor,
                     ))
             batch_response = self._llm.chat(batch_prompt, **kwargs)
-            for response, index in zip(batch_response, finish_index):
+            executor2action_args = defaultdict(lambda: defaultdict(list))
+            for response, index in zip(batch_response, unfinished):
                 name, language, action = self._protocol.parse(
                     message=response,
                     plugin_executor=self._action_executor,
@@ -425,20 +428,37 @@ class Internlm2Agent(BaseAgent):
                             (f"Invalid name '{name}'. Currently only 'plugin' "
                              "and 'interpreter' are supported."))
                         continue
-                    action_return: ActionReturn = executor(
-                        action['name'], action['parameters'])
-                    action_return.thought = language
-                    agent_return.actions.append(action_return)
-                inner_history.append(dict(role='language', content=language))
-                if not name or action_return.type == executor.finish_action.name:
-                    agent_return.response = language
-                    agent_return.state = AgentStatusCode.END
-                    break
+                    executor2action_args[executor][action['name']].append(
+                        (index, name, action, language))
                 else:
-                    inner_history.append(
-                        dict(role='tool', content=action, name=name))
-                    inner_history.append(
-                        self._protocol.format_response(
-                            action_return, name=name))
-        agent_return.inner_steps = inner_history[offset:]
-        return agent_return
+                    inner_histories[index].append(
+                        dict(role='language', content=language))
+                    agent_returns[index].response = language
+                    agent_returns[index].state = AgentStatusCode.END
+                    finish_flags[index] = True
+
+            for executor, action_args in executor2action_args.items():
+                for action_name, args in action_args.items():
+                    indexes, names, actions, languages = list(zip(*args))
+                    action_returns = executor.actions[action_name]([
+                        action['parameters']['command'] for action in actions
+                    ], list(indexes))
+                    for (index, name, action,
+                         language), action_return in zip(args, action_returns):
+                        action_return.thought = language
+                        inner_histories[index].append(
+                            dict(role='language', content=language))
+                        if action_return.type == executor.finish_action.name:
+                            agent_returns[index].response = language
+                            agent_returns[index].state = AgentStatusCode.END
+                            finish_flags[index] = True
+                        else:
+                            inner_histories[index].append(
+                                dict(role='tool', content=action, name=name))
+                            inner_histories[index].append(
+                                self._protocol.format_response(
+                                    action_return, name=name))
+        for agent_return, offset, inner_history in zip(agent_returns, offsets,
+                                                       inner_histories):
+            agent_return.inner_steps = inner_history[offset:]
+        return agent_returns
