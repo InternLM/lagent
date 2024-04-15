@@ -3,7 +3,7 @@ from contextlib import redirect_stdout
 from dataclasses import dataclass
 from enum import Enum
 from io import StringIO
-from typing import Optional, Type
+from typing import Any, Dict, Optional, Type
 
 from ..schema import ActionReturn, ActionStatusCode
 from .base_action import BaseAction, tool_api
@@ -186,3 +186,40 @@ class IPythonInteractive(BaseAction):
                 pass
         # If no code blocks found, return original text
         return text
+
+
+class BatchIPythonInteractive(BaseAction):
+
+    def __init__(self, python_interpreter: Dict[str, Any]):
+        self.is_initialized = False
+        self.python_interpreter = python_interpreter
+
+    def __call__(self, command: str, index: int = 0):
+        if isinstance(command, list):
+            batch_size = len(command)
+            is_batch = True
+        else:
+            batch_size = 1
+            command = [command]
+            is_batch = False
+        results = []
+        if not self.is_initialized or len(
+                self.python_interpreter) != batch_size:
+            self.python_interpreter = [
+                IPythonInteractive(**self.python_interpreter)
+                for _ in range(batch_size)
+            ]
+            self.is_initialized = True
+        import multiprocessing as mp
+        with mp.Pool(batch_size) as pool:
+            results = pool.starmap(self.python_interpreter[index].run,
+                                   [(c, ) for c in command])
+        if is_batch:
+            return results
+        else:
+            return results[0]
+
+    def reset(self):
+        self.is_initialized = False
+        for interpreter in self.python_interpreter:
+            interpreter.reset()

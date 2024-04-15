@@ -366,3 +366,79 @@ class Internlm2Agent(BaseAgent):
         agent_return.inner_steps = deepcopy(inner_history[offset:])
         agent_return.state = AgentStatusCode.END
         yield agent_return
+
+    def batch_chat(self, batch_messages: List[str], **kwargs) -> AgentReturn:
+        assert isinstance(batch_messages, list)
+        agent_return = [AgentReturn() for _ in range(len(batch_messages))]
+        inner_history = []
+        for message in batch_messages:
+            if isinstance(message, str):
+                message = dict(role='user', content=message)
+            if isinstance(message, dict):
+                message = [message]
+            inner_history.append(message)
+        offset = [len(inner) for inner in inner_history]
+        finish_list = [False for _ in range(len(batch_messages))]
+        for _ in range(self.max_turn):
+            batch_prompt = ['' for _ in range(len(batch_messages))]
+            finish_index = [
+                index for index, is_finish in enumerate(finish_list)
+                if not is_finish
+            ]
+            # list of dict
+            batch_prompt = []
+            for index in enumerate(finish_index):
+                batch_prompt.append(
+                    self._protocol.format(
+                        inner_step=inner_history[index],
+                        plugin_executor=self._action_executor,
+                        interpreter_executor=self._interpreter_executor,
+                    ))
+            batch_response = self._llm.chat(batch_prompt, **kwargs)
+            for response, index in zip(batch_response, finish_index):
+                name, language, action = self._protocol.parse(
+                    message=response,
+                    plugin_executor=self._action_executor,
+                    interpreter_executor=self._interpreter_executor,
+                )
+                if name:
+                    if name == 'plugin':
+                        if self._action_executor:
+                            executor = self._action_executor
+                        else:
+                            logging.info(msg='No plugin is instantiated!')
+                            continue
+                        try:
+                            action = json.loads(action)
+                        except Exception as e:
+                            logging.info(msg=f'Invaild action {e}')
+                            continue
+                    elif name == 'interpreter':
+                        if self._interpreter_executor:
+                            executor = self._interpreter_executor
+                        else:
+                            logging.info(msg='No interpreter is instantiated!')
+                            continue
+                    else:
+                        logging.info(
+                            msg=  # noqa
+                            (f"Invalid name '{name}'. Currently only 'plugin' "
+                             "and 'interpreter' are supported."))
+                        continue
+                    action_return: ActionReturn = executor(
+                        action['name'], action['parameters'])
+                    action_return.thought = language
+                    agent_return.actions.append(action_return)
+                inner_history.append(dict(role='language', content=language))
+                if not name or action_return.type == executor.finish_action.name:
+                    agent_return.response = language
+                    agent_return.state = AgentStatusCode.END
+                    break
+                else:
+                    inner_history.append(
+                        dict(role='tool', content=action, name=name))
+                    inner_history.append(
+                        self._protocol.format_response(
+                            action_return, name=name))
+        agent_return.inner_steps = inner_history[offset:]
+        return agent_return
