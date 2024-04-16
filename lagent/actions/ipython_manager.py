@@ -1,10 +1,12 @@
 import re
 import sys
 from collections import defaultdict
+from contextlib import nullcontext
 from io import StringIO
 from multiprocessing import Process, Queue
 from typing import List, Optional, Type, Union
 
+from filelock import FileLock
 from IPython import InteractiveShell
 from timeout_decorator import timeout as tm
 
@@ -16,36 +18,44 @@ from .parser import BaseParser, JsonParser
 class IPythonProcess(Process):
 
     def __init__(self,
-                 session_id: Union[str, int],
                  in_q: Queue,
                  out_q: Queue,
                  timeout: int = 30,
+                 ci_lock: str = None,
                  daemon: bool = True):
         super().__init__(daemon=daemon)
-        self.session_id = session_id
         self.in_q = in_q
         self.out_q = out_q
         self.timeout = timeout
-        self.shell = InteractiveShell()
+        self.session_id2shell = defaultdict(InteractiveShell)
+        self.ci_lock = FileLock(
+            ci_lock) if ci_lock else nullcontext()  # avoid core corruption
         self._highlighting = re.compile(r'\x1b\[\d{,3}(;\d{,3}){,3}m')
 
     def run(self):
         while True:
             msg = self.in_q.get()
             if msg == 'reset':
-                self.shell.reset()
+                with self.ci_lock:
+                    for session_id, shell in self.session_id2shell.items():
+                        try:
+                            shell.reset(new_session=False)
+                        except Exception:
+                            self.session_id2shell[
+                                session_id] = InteractiveShell()
                 self.out_q.put('ok')
-            elif isinstance(msg, tuple) and len(msg) == 2:
-                i, code = msg
-                res = tm(self.timeout)(self.exec)(code)
-                self.out_q.put((i, self.session_id, res))
+            elif isinstance(msg, tuple) and len(msg) == 3:
+                i, session_id, code = msg
+                res = tm(self.timeout)(self.exec)(session_id, code)
+                self.out_q.put((i, session_id, res))
 
-    def exec(self, code: str):
+    def exec(self, session_id, code):
         try:
             with StringIO() as io:
                 old_stdout = sys.stdout
                 sys.stdout = io
-                self.shell.run_cell(self.extract_code(code))
+                self.session_id2shell[session_id].run_cell(
+                    self.extract_code(code))
                 sys.stdout = old_stdout
                 output = self._highlighting.sub('', io.getvalue().strip())
                 output = re.sub(r'^Out\[\d+\]: ', '', output)
@@ -91,13 +101,17 @@ class IPythonInteractiveManager(BaseAction):
 
     def __init__(
         self,
+        max_workers: int = 50,
         timeout: int = 30,
+        ci_lock: str = None,
         description: Optional[dict] = None,
         parser: Type[BaseParser] = JsonParser,
         enable: bool = True,
     ):
         super().__init__(description, parser, enable)
+        self.max_workers = max_workers
         self.timeout = timeout
+        self.ci_lock = ci_lock
         self.id2queue = defaultdict(Queue)
         self.id2process = {}
         self.out_queue = Queue()
@@ -120,10 +134,14 @@ class IPythonInteractiveManager(BaseAction):
                 set(session_ids)):
             raise ValueError(
                 'the size of `session_ids` must equal that of `commands`')
-        exec_ret = self.run_code_blocks([
-            (session_id, command)
-            for session_id, command in zip(session_ids, commands)
-        ])
+        try:
+            exec_ret = self.run_code_blocks([
+                (session_id, command)
+                for session_id, command in zip(session_ids, commands)
+            ])
+        except KeyboardInterrupt:
+            self.clear()
+            exit(0)
         action_results = []
         for result, code in zip(exec_ret, commands):
             if result['status'] == 'SUCCESS':
@@ -148,18 +166,19 @@ class IPythonInteractiveManager(BaseAction):
         return action_results
 
     def process_code(self, index, session_id, code):
-        input_queue = self.id2queue[session_id]
+        ipy_id = session_id % self.max_workers
+        input_queue = self.id2queue[ipy_id]
         proc = self.id2process.setdefault(
-            session_id,
+            ipy_id,
             IPythonProcess(
-                session_id,
                 input_queue,
                 self.out_queue,
                 self.timeout,
+                self.ci_lock,
                 daemon=True))
         if not proc.is_alive():
             proc.start()
-        input_queue.put((index, code))
+        input_queue.put((index, session_id, code))
 
     def run_code_blocks(self, session_code_pairs):
         size = len(session_code_pairs)
