@@ -16,11 +16,13 @@ class IPythonInteractiveEmbed(BaseAction):
 
     def __init__(
         self,
+        timeout: int = 30,
         description: Optional[dict] = None,
         parser: Type[BaseParser] = JsonParser,
         enable: bool = True,
     ):
         super().__init__(description, parser, enable)
+        self.timeout = timeout
         self.sessions = defaultdict(InteractiveShellEmbed)
         self._highlighting = re.compile(r'\x1b\[\d{,3}(;\d{,3}){,3}m')
 
@@ -58,22 +60,33 @@ class IPythonInteractiveEmbed(BaseAction):
                 await shell.run_cell_async(code)
                 sys.stdout = old_stdout
                 output = self._highlighting.sub('', io.getvalue().strip())
+                output = re.sub(r'^Out\[\d+\]: ', '', output)
             if 'Error' in output or 'Traceback' in output:
+                output = output.lstrip('-').strip()
                 return {'status': 'FAILURE', 'msg': output}
             return {'status': 'SUCCESS', 'value': output}
         except Exception as e:
             return {'status': 'FAILURE', 'msg': str(e)}
 
-    async def process_code(self, index_code_pairs):
+    async def exec_code_with_timeout(self, index, code, timeout=None):
+        try:
+            ret = await asyncio.wait_for(
+                self.exec_code(index, code), timeout or self.timeout)
+        except asyncio.TimeoutError:
+            ret = {
+                'status': 'FAILURE',
+                'msg': 'The code interpreter encountered a timeout error.'
+            }
+        return ret
+
+    async def process_code(self, index_code_pairs, timeout=None):
         """处理一系列索引和代码对."""
         tasks = []
         for index, code in index_code_pairs:
             code = self.extract_code(code)
-            task = self.exec_code(index, code)
+            task = self.exec_code_with_timeout(index, code, timeout)
             tasks.append(task)
         results = await asyncio.gather(*tasks)
-        # for result in results:
-        #     print(result)
         return results
 
     def run_code_blocks(self, index_code_pairs):
@@ -127,3 +140,7 @@ class IPythonInteractiveEmbed(BaseAction):
                 pass
         # If no code blocks found, return original text
         return text
+
+    def reset(self):
+        for interpreter in self.sessions.values():
+            interpreter.reset()

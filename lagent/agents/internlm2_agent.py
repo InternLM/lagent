@@ -378,7 +378,7 @@ class Internlm2Agent(BaseAgent):
                 message = dict(role='user', content=message)
             if isinstance(message, dict):
                 message = [message]
-            inner_histories.append(message)
+            inner_histories.append(deepcopy(message))
         offsets = [len(inner) for inner in inner_histories]
         finish_flags = [False for _ in range(len(batch_messages))]
         for _ in range(self.max_turn):
