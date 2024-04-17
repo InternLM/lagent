@@ -170,9 +170,17 @@ class Internlm2Protocol:
             action = action.split(self.tool['end'].strip())[0]
             return 'plugin', message, action
         if self.tool['name_map']['interpreter'] in message:
-            message, code = message.split(
-                f"{self.tool['start_token']}"
-                f"{self.tool['name_map']['interpreter']}")
+            try:
+                message, code, *_ = message.split(
+                    f"{self.tool['start_token']}"
+                    f"{self.tool['name_map']['interpreter']}")
+            except ValueError:
+                message, code, *_ = message.split(
+                    self.tool['name_map']['interpreter'])
+                tool_start_idx = message.rfind(self.tool['start_token'])
+                if tool_start_idx != -1:
+                    message = message[:tool_start_idx]
+                message = message.strip()
             code = code.split(self.tool['end'].strip())[0].strip()
             return 'interpreter', message, dict(
                 name=interpreter_executor.action_names()[0],
@@ -439,7 +447,7 @@ class Internlm2Agent(BaseAgent):
 
             for executor, action_args in executor2action_args.items():
                 for action_name, args in action_args.items():
-                    indexes, names, actions, languages = list(zip(*args))
+                    indexes, _, actions, _ = list(zip(*args))
                     action_returns = executor.actions[action_name]([
                         action['parameters']['command'] for action in actions
                     ], list(indexes))

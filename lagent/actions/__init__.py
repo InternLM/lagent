@@ -9,6 +9,7 @@ from .google_scholar_search import GoogleScholar
 from .google_search import GoogleSearch
 from .ipython_interactive import IPythonInteractive
 from .ipython_interpreter import IPythonInterpreter
+from .ipython_manager import IPythonInteractiveManager
 from .parser import BaseParser, JsonParser, TupleParser
 from .ppt import PPT
 from .python_interpreter import PythonInterpreter
@@ -17,8 +18,9 @@ __all__ = [
     'BaseAction', 'ActionExecutor', 'InvalidAction', 'FinishAction',
     'NoAction', 'BINGMap', 'ArxivSearch', 'FinishAction', 'GoogleSearch',
     'GoogleScholar', 'IPythonInterpreter', 'IPythonInteractive',
-    'PythonInterpreter', 'PPT', 'BaseParser', 'JsonParser', 'TupleParser',
-    'tool_api', 'list_tools', 'get_tool_cls', 'get_tool'
+    'IPythonInteractiveManager', 'PythonInterpreter', 'PPT', 'BaseParser',
+    'JsonParser', 'TupleParser', 'tool_api', 'list_tools', 'get_tool_cls',
+    'get_tool'
 ]
 
 

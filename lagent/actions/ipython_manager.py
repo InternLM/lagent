@@ -20,7 +20,7 @@ class IPythonProcess(Process):
     def __init__(self,
                  in_q: Queue,
                  out_q: Queue,
-                 timeout: int = 30,
+                 timeout: int = 20,
                  ci_lock: str = None,
                  daemon: bool = True):
         super().__init__(daemon=daemon)
@@ -118,7 +118,7 @@ class IPythonInteractiveManager(BaseAction):
 
     def __call__(self,
                  commands: Union[str, List[str]],
-                 session_ids: Union[int, List[int]] = None) -> ActionReturn:
+                 session_ids: Union[int, List[int]] = None):
         if isinstance(commands, list):
             batch_size = len(commands)
             is_batch = True
@@ -135,35 +135,28 @@ class IPythonInteractiveManager(BaseAction):
             raise ValueError(
                 'the size of `session_ids` must equal that of `commands`')
         try:
-            exec_ret = self.run_code_blocks([
+            exec_results = self.run_code_blocks([
                 (session_id, command)
                 for session_id, command in zip(session_ids, commands)
             ])
         except KeyboardInterrupt:
             self.clear()
-            exit(0)
-        action_results = []
-        for result, code in zip(exec_ret, commands):
+            exit(1)
+        action_returns = []
+        for result, code in zip(exec_results, commands):
+            action_return = ActionReturn({'command': code}, type=self.name)
             if result['status'] == 'SUCCESS':
-                action_results.append(
-                    ActionReturn(
-                        args={'command': code},
-                        type=self.name,
-                        result=[{
-                            'type': 'text',
-                            'content': result['value']
-                        }],
-                        state=ActionStatusCode.SUCCESS))
+                action_return.result = [
+                    dict(type='text', content=result['value'])
+                ]
+                action_return.state = ActionStatusCode.SUCCESS
             else:
-                action_results.append(
-                    ActionReturn(
-                        args={'command': code},
-                        type=self.name,
-                        errmsg=result['msg'],
-                        state=ActionStatusCode.API_ERROR))
+                action_return.errmsg = result['msg']
+                action_return.state = ActionStatusCode.API_ERROR
+            action_returns.append(action_return)
         if not is_batch:
-            return action_results[0]
-        return action_results
+            return action_returns[0]
+        return action_returns
 
     def process_code(self, index, session_id, code):
         ipy_id = session_id % self.max_workers
@@ -198,6 +191,8 @@ class IPythonInteractiveManager(BaseAction):
         for proc in self.id2process.values():
             proc.terminate()
         self.id2process.clear()
+        while not self.out_queue.empty():
+            self.out_queue.get()
 
     def reset(self):
         cnt = 0
