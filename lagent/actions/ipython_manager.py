@@ -7,7 +7,6 @@ from multiprocessing import Process, Queue
 from typing import List, Optional, Type, Union
 
 from filelock import FileLock
-from IPython import InteractiveShell
 from timeout_decorator import timeout as tm
 
 from ..schema import ActionReturn, ActionStatusCode
@@ -27,7 +26,7 @@ class IPythonProcess(Process):
         self.in_q = in_q
         self.out_q = out_q
         self.timeout = timeout
-        self.session_id2shell = defaultdict(InteractiveShell)
+        self.session_id2shell = defaultdict(self.create_shell)
         self.ci_lock = FileLock(
             ci_lock) if ci_lock else nullcontext()  # avoid core corruption
         self._highlighting = re.compile(r'\x1b\[\d{,3}(;\d{,3}){,3}m')
@@ -36,13 +35,14 @@ class IPythonProcess(Process):
         while True:
             msg = self.in_q.get()
             if msg == 'reset':
-                with self.ci_lock:
-                    for session_id, shell in self.session_id2shell.items():
+                for session_id, shell in self.session_id2shell.items():
+                    with self.ci_lock:
                         try:
                             shell.reset(new_session=False)
+                            # shell.run_line_magic('reset', '-sf')
                         except Exception:
                             self.session_id2shell[
-                                session_id] = InteractiveShell()
+                                session_id] = self.create_shell()
                 self.out_q.put('ok')
             elif isinstance(msg, tuple) and len(msg) == 3:
                 i, session_id, code = msg
@@ -67,6 +67,18 @@ class IPythonProcess(Process):
             return {'status': 'SUCCESS', 'value': output}
         except Exception as e:
             return {'status': 'FAILURE', 'msg': str(e)}
+
+    @staticmethod
+    def create_shell(enable_history: bool = False, in_memory: bool = True):
+        from IPython import InteractiveShell
+        from traitlets.config import Config
+
+        c = Config()
+        c.HistoryManager.enabled = enable_history
+        if in_memory:
+            c.HistoryManager.hist_file = ':memory:'
+        shell = InteractiveShell(config=c)
+        return shell
 
     @staticmethod
     def extract_code(text: str) -> str:
@@ -98,11 +110,12 @@ class IPythonProcess(Process):
 
 
 class IPythonInteractiveManager(BaseAction):
+    """An interactive IPython shell manager for code execution"""
 
     def __init__(
         self,
         max_workers: int = 50,
-        timeout: int = 30,
+        timeout: int = 20,
         ci_lock: str = None,
         description: Optional[dict] = None,
         parser: Type[BaseParser] = JsonParser,
