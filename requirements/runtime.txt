@@ -1,5 +1,6 @@
 arxiv
 distro
+filelock
 func_timeout
 griffe
 json5
@@ -10,4 +11,5 @@ phx-class-registry
 requests
 streamlit
 tiktoken
+timeout-decorator
 typing-extensions

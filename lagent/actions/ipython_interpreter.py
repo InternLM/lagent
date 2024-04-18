@@ -9,7 +9,8 @@ import signal
 import sys
 import traceback
 import uuid
-from typing import Optional, Tuple, Type
+from concurrent.futures import ThreadPoolExecutor, wait
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 from lagent.actions.base_action import BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
@@ -286,6 +287,54 @@ def get_multiline_input(hint):
         return '\n'.join(lines)
     else:
         return ''
+
+
+class BatchIPythonInterpreter(BaseAction):
+    """A IPython executor that can execute Python scripts in batches in a jupyter manner."""
+
+    def __init__(
+        self,
+        python_interpreter: Dict[str, Any],
+        description: Optional[dict] = None,
+        parser: Type[BaseParser] = JsonParser,
+        enable: bool = True,
+    ):
+        self.python_interpreter_init_args = python_interpreter
+        self.index2python_interpreter = {}
+        super().__init__(description, parser, enable)
+
+    def __call__(self,
+                 commands: Union[str, List[str]],
+                 indexes: Union[int, List[int]] = None) -> ActionReturn:
+        if isinstance(commands, list):
+            batch_size = len(commands)
+            is_batch = True
+        else:
+            batch_size = 1
+            commands = [commands]
+            is_batch = False
+        if indexes is None:
+            indexes = range(batch_size)
+        elif isinstance(indexes, int):
+            indexes = [indexes]
+        if len(indexes) != batch_size or len(indexes) != len(set(indexes)):
+            raise ValueError(
+                'the size of `indexes` must equal that of `commands`')
+        tasks = []
+        with ThreadPoolExecutor(max_workers=batch_size) as pool:
+            for idx, command in zip(indexes, commands):
+                interpreter = self.index2python_interpreter.setdefault(
+                    idx,
+                    IPythonInterpreter(**self.python_interpreter_init_args))
+                tasks.append(pool.submit(interpreter.run, command))
+        wait(tasks)
+        results = [task.result() for task in tasks]
+        if not is_batch:
+            return results[0]
+        return results
+
+    def reset(self):
+        self.index2python_interpreter.clear()
 
 
 if __name__ == '__main__':
