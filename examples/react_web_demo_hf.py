@@ -65,7 +65,7 @@ class StreamlitUI:
         force_stop = st.sidebar.text_area(
             '强制停止提示：', value=FORCE_STOP_PROMPT_EN)
         model_path = st.sidebar.text_input(
-            '模型路径：', value='./internlm/Agent-Flan-7b')
+            '模型路径：', value='internlm/Agent-Flan-7b')
         if model_name != st.session_state['model_selected'] or st.session_state[
                 'model_path'] != model_path:
             st.session_state['model_path'] = model_path
