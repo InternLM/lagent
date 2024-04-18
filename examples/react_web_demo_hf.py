@@ -5,10 +5,10 @@ import os
 
 import streamlit as st
 
-from lagent.actions import ActionExecutor, ArxivSearch
+from lagent.actions import ActionExecutor, ArxivSearch, FinishAction
 from lagent.agents.react import CALL_PROTOCOL_EN, FORCE_STOP_PROMPT_EN, ReAct, ReActProtocol
 from lagent.llms import HFTransformer
-from lagent.llms.meta_template import INTERNLM_META as META
+from lagent.llms.meta_template import LLAMA2_META as META
 from lagent.schema import AgentStatusCode
 
 
@@ -85,6 +85,8 @@ class StreamlitUI:
         plugin_action = [
             st.session_state['plugin_map'][name] for name in plugin_name
         ]
+        # 保证一定有 FinishAction 以输出
+        plugin_action.append(FinishAction())
 
         if 'chatbot' in st.session_state:
             if len(plugin_action) > 0:
@@ -101,6 +103,7 @@ class StreamlitUI:
         return model_name, model, plugin_action, uploaded_file, model_path
 
     def init_model(self, model_name, path):
+        """Initialize the model based on the input model name."""
         st.session_state['model_map'][model_name] = HFTransformer(
             path=path,
             meta_template=META,
@@ -109,12 +112,16 @@ class StreamlitUI:
             top_k=None,
             temperature=0.1,
             repetition_penalty=1.0,
-            stop_words=['<eoa>'])
+            stop_words=['ി'])
         return st.session_state['model_map'][model_name]
 
     def initialize_chatbot(self, model, plugin_action):
         """Initialize the chatbot with the given model and plugin actions."""
-        return ReAct(llm=model, protocol=ReActProtocol(), max_turn=7)
+        return ReAct(
+            llm=model,
+            action_executor=None,
+            protocol=ReActProtocol(),
+            max_turn=7)
 
     def render_user(self, prompt: str):
         with st.chat_message('user'):
@@ -255,47 +262,14 @@ def main():
         if isinstance(user_input, str):
             user_input = [dict(role='user', content=user_input)]
         st.session_state['last_status'] = AgentStatusCode.SESSION_READY
-        for agent_return in st.session_state['chatbot'].stream_chat(
-                st.session_state['session_history'] + user_input):
-            if agent_return.state == AgentStatusCode.PLUGIN_RETURN:
-                with st.container():
-                    st.session_state['ui'].render_plugin_args(
-                        agent_return.actions[-1])
-                    st.session_state['ui'].render_action_results(
-                        agent_return.actions[-1])
-            elif agent_return.state == AgentStatusCode.CODE_RETURN:
-                with st.container():
-                    st.session_state['ui'].render_action_results(
-                        agent_return.actions[-1])
-            elif (agent_return.state == AgentStatusCode.STREAM_ING
-                  or agent_return.state == AgentStatusCode.CODING):
-                # st.markdown(agent_return.response)
-                # 清除占位符的当前内容，并显示新内容
-                with st.container():
-                    if agent_return.state != st.session_state['last_status']:
-                        st.session_state['temp'] = ''
-                        placeholder = st.empty()
-                        st.session_state['placeholder'] = placeholder
-                    if isinstance(agent_return.response, dict):
-                        action = f"\n\n {agent_return.response['name']}: \n\n"
-                        action_input = agent_return.response['parameters']
-                        if agent_return.response[
-                                'name'] == 'IPythonInterpreter':
-                            action_input = action_input['command']
-                        response = action + action_input
-                    else:
-                        response = agent_return.response
-                    st.session_state['temp'] = response
-                    st.session_state['placeholder'].markdown(
-                        st.session_state['temp'])
-            elif agent_return.state == AgentStatusCode.END:
-                st.session_state['session_history'] += (
-                    user_input + agent_return.inner_steps)
-                agent_return = copy.deepcopy(agent_return)
-                agent_return.response = st.session_state['temp']
-                st.session_state['assistant'].append(
-                    copy.deepcopy(agent_return))
-            st.session_state['last_status'] = agent_return.state
+        agent_return = st.session_state['chatbot'].chat(
+            st.session_state['session_history'] + user_input)
+        if agent_return.state == AgentStatusCode.END:
+            st.session_state['ui'].render_assistant(agent_return)
+        st.session_state['session_history'] += (
+            user_input + agent_return.inner_steps)
+        st.session_state['assistant'].append(copy.deepcopy(agent_return))
+        st.session_state['last_status'] = agent_return.state
 
 
 if __name__ == '__main__':
