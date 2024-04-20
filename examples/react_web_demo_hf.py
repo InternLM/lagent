@@ -7,7 +7,7 @@ import streamlit as st
 
 from lagent.actions import ActionExecutor, ArxivSearch, FinishAction
 from lagent.agents.react import CALL_PROTOCOL_EN, FORCE_STOP_PROMPT_EN, ReAct, ReActProtocol
-from lagent.llms import HFTransformer
+from lagent.llms import HFTransformerCasualLM
 from lagent.llms.meta_template import LLAMA2_AGENT_META as META
 from lagent.schema import AgentStatusCode
 
@@ -104,7 +104,7 @@ class StreamlitUI:
 
     def init_model(self, model_name, path):
         """Initialize the model based on the input model name."""
-        st.session_state['model_map'][model_name] = HFTransformer(
+        st.session_state['model_map'][model_name] = HFTransformerCasualLM(
             path=path,
             meta_template=META,
             max_new_tokens=1024,
