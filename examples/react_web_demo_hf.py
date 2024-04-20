@@ -8,7 +8,7 @@ import streamlit as st
 from lagent.actions import ActionExecutor, ArxivSearch, FinishAction
 from lagent.agents.react import CALL_PROTOCOL_EN, FORCE_STOP_PROMPT_EN, ReAct, ReActProtocol
 from lagent.llms import HFTransformer
-from lagent.llms.meta_template import LLAMA2_META as META
+from lagent.llms.meta_template import LLAMA2_AGENT_META as META
 from lagent.schema import AgentStatusCode
 
 
