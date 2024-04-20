@@ -39,12 +39,6 @@ INTERNLM2_META = [
         end='<|im_end|>\n'),
 ]
 
-LLAMA2_META = [
-    dict(role='system', begin='<|System|>:', end='\n '),
-    dict(role='user', begin='<|User|>:', end='\n '),
-    dict(role='assistant', begin='<|Bot|>:', end='\n '),
-]
-
 LLAMA2_AGENT_META = [
     dict(role='system', begin='<|Human|>െ', end='\n '),
     dict(role='user', begin='<|Human|>െ', end='\n '),
