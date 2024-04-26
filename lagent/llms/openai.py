@@ -67,6 +67,7 @@ class GPTAPI(BaseAPIModel):
             query_per_second=query_per_second,
             retry=retry,
             **gen_params)
+        self.gen_params.pop('top_k')
         self.logger = getLogger(__name__)
 
         if isinstance(key, str):
