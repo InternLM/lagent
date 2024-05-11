@@ -1,3 +1,4 @@
+import json
 from typing import List, Optional, Union
 
 from lagent.llms.base_llm import BaseModel
@@ -432,6 +433,64 @@ class LMDeployServer(BaseModel):
             if finished:
                 break
         yield ModelStatusCode.END, resp, None
+
+    def function_call(self,
+                      inputs: List[dict],
+                      tools: List[dict] = None,
+                      tool_choice: dict = None,
+                      sotool: str = '<|action_start|>',
+                      eotool: str = '<|action_end|>\n',
+                      system: str = 'system',
+                      assistant: str = 'assistant',
+                      plugin: str = '<|plugin|>',
+                      **kwargs):
+        """
+
+        Args:
+            inputs (List[dict]): user's inputs in this round conversation.
+            tools (List[dict]): function specifications provided.
+            tool_choice (dict): forced to use a specific function by setting the tool_choice parameter to {"type": "function", "function": {"name": "my_function"}}.
+                The API can also be forced to not use any function by setting the tool_choice parameter to "none".
+            sotool (str): start token of tool.
+            eotool (str): end token of tool.
+            system (str): role name of system.
+            assistant (str): role name of assistant.
+            plugin (str): token of tool.
+        Returns:
+            dict: completion of llm.
+        """
+        tool_calls = None
+        if tools and tool_choice != 'none':
+            if tool_choice:
+                tools = [
+                    item for item in tools
+                    if item['name'] == tool_choice['function']['name']
+                ]
+            tools_prompt = dict(
+                role=system,
+                name=plugin,
+                content=json.dumps(tools, ensure_ascii=False))
+            insert_index = 0
+            if inputs[0]['role'] == system:
+                insert_index = 1
+            inputs.insert(insert_index, tools_prompt)
+        for model_state, response, _ in self.stream_chat(inputs, **kwargs):
+            pass
+        if plugin in response:
+            response, action = response.split(f'{sotool}{plugin}')
+            action = action.split(eotool.strip())[0]
+            try:
+                action = json.loads(action)
+                tool_calls = [dict(function=action, type='function')]
+            except Exception as e:
+                print(f'Exception: {e}')
+                raise Exception(
+                    'Failed to parse fc related info to json format!')
+        return dict(
+            role=assistant,
+            content=response,
+            function_call=None,
+            tool_calls=tool_calls)
 
 
 class LMDeployClient(LMDeployServer):
