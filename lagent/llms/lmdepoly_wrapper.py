@@ -494,7 +494,7 @@ class LMDeployServer(BaseModel):
 
 
 class LMDeployClient(LMDeployServer):
-    """
+    """call functions with chat models.
 
     Args:
         url (str): communicating address 'http://<ip>:<port>' of
