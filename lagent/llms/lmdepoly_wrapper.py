@@ -444,7 +444,7 @@ class LMDeployServer(BaseModel):
                       assistant: str = 'assistant',
                       plugin: str = '<|plugin|>',
                       **kwargs):
-        """
+        """call functions with chat models.
 
         Args:
             inputs (List[dict]): user's inputs in this round conversation.
@@ -494,7 +494,7 @@ class LMDeployServer(BaseModel):
 
 
 class LMDeployClient(LMDeployServer):
-    """call functions with chat models.
+    """
 
     Args:
         url (str): communicating address 'http://<ip>:<port>' of
