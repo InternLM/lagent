@@ -67,7 +67,7 @@ class StreamlitUI:
         meta_prompt = st.sidebar.text_area('系统提示词', value=META_CN)
         da_prompt = st.sidebar.text_area('数据分析提示词', value=INTERPRETER_CN)
         plugin_prompt = st.sidebar.text_area('插件提示词', value=PLUGIN_CN)
-        model_ip = st.sidebar.text_input('模型IP：', value='10.140.0.220:23333')
+        model_ip = st.sidebar.text_input('模型IP：', value='127.0.0.1:23333')
         if model_name != st.session_state[
                 'model_selected'] or st.session_state['ip'] != model_ip:
             st.session_state['ip'] = model_ip
