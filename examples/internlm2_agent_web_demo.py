@@ -5,7 +5,8 @@ import os
 
 import streamlit as st
 
-from lagent.actions import ActionExecutor, ArxivSearch, IPythonInterpreter
+from lagent.actions import PPT, ActionExecutor, ArxivSearch, BINGMap, GoogleScholar, IPythonInterpreter
+# from lagent.actions.agentlego_wrapper import AgentLegoToolkit
 from lagent.agents.internlm2_agent import INTERPRETER_CN, META_CN, PLUGIN_CN, Internlm2Agent, Internlm2Protocol
 from lagent.llms.lmdeploy_wrapper import LMDeployClient
 from lagent.llms.meta_template import INTERNLM2_META as META
@@ -23,6 +24,13 @@ class SessionState:
 
         action_list = [
             ArxivSearch(),
+            PPT(),
+            BINGMap(
+                key='qaTBEmz3VIVotIKfVFLO~B_F0RIwD8ZEljsKEgQopdQ~AmFcljtooPxkBsCRVVQMtIBNS9S-oSmS1MaAsPiBUVN1eds4UeNum4M3a6cYX-kg'
+            ),
+            GoogleScholar(
+                api_key='a558de7dee10146326ca86fbaa0736bdd947c9e646cd3f14da5aff177d6b2ff0'
+            )
         ]
         st.session_state['plugin_map'] = {
             action.name: action
