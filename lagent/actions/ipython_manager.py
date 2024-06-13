@@ -46,16 +46,19 @@ class IPythonProcess(Process):
                 self.out_q.put('ok')
             elif isinstance(msg, tuple) and len(msg) == 3:
                 i, session_id, code = msg
-                res = tm(self.timeout)(self.exec)(session_id, code)
+                res = self.exec(session_id, code)
                 self.out_q.put((i, session_id, res))
 
     def exec(self, session_id, code):
         try:
+            shell = self.session_id2shell[session_id]
             with StringIO() as io:
                 old_stdout = sys.stdout
                 sys.stdout = io
-                self.session_id2shell[session_id].run_cell(
-                    self.extract_code(code))
+                if self.timeout is False or self.timeout < 0:
+                    shell.run_cell(self.extract_code(code))
+                else:
+                    tm(self.timeout)(shell.run_cell)(self.extract_code(code))
                 sys.stdout = old_stdout
                 output = self._highlighting.sub('', io.getvalue().strip())
                 output = re.sub(r'^Out\[\d+\]: ', '', output)
@@ -63,10 +66,10 @@ class IPythonProcess(Process):
                 output = output.lstrip('-').strip()
                 if output.startswith('TimeoutError'):
                     output = 'The code interpreter encountered a timeout error.'
-                return {'status': 'FAILURE', 'msg': output}
-            return {'status': 'SUCCESS', 'value': output}
+                return {'status': 'FAILURE', 'msg': output, 'code': code}
+            return {'status': 'SUCCESS', 'value': output, 'code': code}
         except Exception as e:
-            return {'status': 'FAILURE', 'msg': str(e)}
+            return {'status': 'FAILURE', 'msg': str(e), 'code': code}
 
     @staticmethod
     def create_shell(enable_history: bool = False, in_memory: bool = True):
