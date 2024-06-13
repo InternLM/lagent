@@ -52,8 +52,13 @@ class IPythonInteractive(BaseAction):
     ):
         super().__init__(description, parser, enable)
         from IPython import InteractiveShell
+        from traitlets.config import Config
+
         self.timeout = timeout
-        self._executor = InteractiveShell()
+        c = Config()
+        c.HistoryManager.enabled = False
+        c.HistoryManager.hist_file = ':memory:'
+        self._executor = InteractiveShell(config=c)
         self._highlighting = re.compile(r'\x1b\[\d{,3}(;\d{,3}){,3}m')
         self._max_out_len = max_out_len if max_out_len >= 0 else None
         self._use_signals = use_signals
