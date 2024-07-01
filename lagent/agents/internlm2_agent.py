@@ -113,7 +113,6 @@ class Internlm2Protocol:
             else:
                 new_message.append(
                     dict(role=message['role'], content=new_content))
-
         return new_message
 
     def format(self,
@@ -125,9 +124,10 @@ class Internlm2Protocol:
         if self.meta_prompt:
             formatted.append(dict(role='system', content=self.meta_prompt))
         if interpreter_executor and self.interpreter_prompt:
-            interpreter_info = interpreter_executor.get_actions_info()[0]
-            interpreter_prompt = self.interpreter_prompt.format(
-                code_prompt=interpreter_info['description'])
+            # interpreter_info = interpreter_executor.get_actions_info()[0]
+            # interpreter_prompt = self.interpreter_prompt.format(
+            #     code_prompt=interpreter_info['description'])
+            interpreter_prompt = self.interpreter_prompt
             formatted.append(
                 dict(
                     role='system',
@@ -169,13 +169,23 @@ class Internlm2Protocol:
             action = action.split(self.tool['end'].strip())[0]
             return 'plugin', message, action
         if self.tool['name_map']['interpreter'] in message:
-            message, code = message.split(
-                f"{self.tool['start_token']}"
-                f"{self.tool['name_map']['interpreter']}")
+            try:
+                message, code, *_ = message.split(
+                    f"{self.tool['start_token']}"
+                    f"{self.tool['name_map']['interpreter']}")
+                # message, code, *_ = message.split(f"{self.tool['start_token']}")
+                # _, code, *_ = code.split(f"{self.tool['name_map']['interpreter']}")
+            except ValueError:
+                message, code, *_ = message.split(
+                    self.tool['name_map']['interpreter'])
+                tool_start_idx = message.rfind(self.tool['start_token'])
+                if tool_start_idx != -1:
+                    message = message[:tool_start_idx]
+                message = message.strip()
             code = code.split(self.tool['end'].strip())[0].strip()
             return 'interpreter', message, dict(
-                name=interpreter_executor.action_names()[0],
-                parameters=dict(command=code))
+                name='IPythonInterpreter', parameters=dict(
+                    command=code)) if interpreter_executor else None
         return None, message.split(self.tool['start_token'])[0], None
 
     def format_response(self, action_return, name) -> dict:

@@ -1,6 +1,7 @@
 import json
 import os
 import time
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from logging import getLogger
 from threading import Lock
@@ -9,6 +10,8 @@ from typing import Dict, List, Optional, Union
 import requests
 
 from .base_api import BaseAPIModel
+
+warnings.simplefilter('default')
 
 OPENAI_API_BASE = 'https://api.openai.com/v1/chat/completions'
 
@@ -45,6 +48,7 @@ class GPTAPI(BaseAPIModel):
                  model_type: str = 'gpt-3.5-turbo',
                  query_per_second: int = 1,
                  retry: int = 2,
+                 json_mode: bool = False,
                  key: Union[str, List[str]] = 'ENV',
                  org: Optional[Union[str, List[str]]] = None,
                  meta_template: Optional[Dict] = [
@@ -53,13 +57,19 @@ class GPTAPI(BaseAPIModel):
                      dict(role='assistant', api_role='assistant')
                  ],
                  openai_api_base: str = OPENAI_API_BASE,
+                 proxies: Optional[Dict] = None,
                  **gen_params):
+        if 'top_k' in gen_params:
+            warnings.warn('`top_k` parameter is deprecated in OpenAI APIs.',
+                          DeprecationWarning)
+            gen_params.pop('top_k')
         super().__init__(
             model_type=model_type,
             meta_template=meta_template,
             query_per_second=query_per_second,
             retry=retry,
             **gen_params)
+        self.gen_params.pop('top_k')
         self.logger = getLogger(__name__)
 
         if isinstance(key, str):
@@ -79,16 +89,8 @@ class GPTAPI(BaseAPIModel):
         self.org_ctr = 0
         self.url = openai_api_base
         self.model_type = model_type
-
-        # max num token for gpt-3.5-turbo is 4097
-        context_window = 4096
-        if '32k' in self.model_type:
-            context_window = 32768
-        elif '16k' in self.model_type:
-            context_window = 16384
-        elif 'gpt-4' in self.model_type:
-            context_window = 8192
-        self.context_window = context_window
+        self.proxies = proxies
+        self.json_mode = json_mode
 
     def chat(
         self,
@@ -132,9 +134,7 @@ class GPTAPI(BaseAPIModel):
         gen_params = gen_params.copy()
 
         # Hold out 100 tokens due to potential errors in tiktoken calculation
-        max_tokens = min(
-            gen_params.pop('max_new_tokens'),
-            self.context_window - len(self.tokenize(str(input))) - 100)
+        max_tokens = min(gen_params.pop('max_new_tokens'), 4096)
         if max_tokens <= 0:
             return ''
 
@@ -170,17 +170,23 @@ class GPTAPI(BaseAPIModel):
                 header['OpenAI-Organization'] = self.orgs[self.org_ctr]
 
             try:
+                gen_params_new = gen_params.copy()
                 data = dict(
                     model=self.model_type,
                     messages=messages,
                     max_tokens=max_tokens,
                     n=1,
-                    stop=gen_params.pop('stop_words'),
-                    frequency_penalty=gen_params.pop('repetition_penalty'),
-                    **gen_params,
+                    stop=gen_params_new.pop('stop_words'),
+                    frequency_penalty=gen_params_new.pop('repetition_penalty'),
+                    **gen_params_new,
                 )
+                if self.json_mode:
+                    data['response_format'] = {'type': 'json_object'}
                 raw_response = requests.post(
-                    self.url, headers=header, data=json.dumps(data))
+                    self.url,
+                    headers=header,
+                    data=json.dumps(data),
+                    proxies=self.proxies)
             except requests.ConnectionError:
                 print('Got connection error, retrying...')
                 continue
