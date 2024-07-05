@@ -7,7 +7,15 @@ from .openai import GPTAPI
 from .vllm_wrapper import VllmModel
 
 __all__ = [
-    'BaseModel', 'BaseAPIModel', 'GPTAPI', 'LMDeployClient',
-    'LMDeployPipeline', 'LMDeployServer', 'HFTransformer',
-    'HFTransformerCasualLM', 'INTERNLM2_META', 'HFTransformerChat', 'VllmModel'
+    'BaseModel',
+    'BaseAPIModel',
+    'GPTAPI',
+    'LMDeployClient',
+    'LMDeployPipeline',
+    'LMDeployServer',
+    'HFTransformer',
+    'HFTransformerCasualLM',
+    'INTERNLM2_META',
+    'HFTransformerChat',
+    'VllmModel',
 ]

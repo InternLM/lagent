@@ -1,6 +1,8 @@
 from dataclasses import asdict, dataclass, field
 from enum import IntEnum
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
+
+from pydantic import BaseModel
 
 
 def enum_dict_factory(inputs):
@@ -11,6 +13,12 @@ def enum_dict_factory(inputs):
 
 def dataclass2dict(data):
     return asdict(data, dict_factory=enum_dict_factory)
+
+
+@dataclass
+class FunctionCall:
+    name: str
+    parameters: Union[Dict, str]
 
 
 class ActionStatusCode(IntEnum):
@@ -86,3 +94,10 @@ class AgentReturn:
     response: str = ''
     inner_steps: List = field(default_factory=list)
     errmsg: Optional[str] = None
+
+
+class AgentMessage(BaseModel):
+    sender: str
+    content: Any
+    type: Optional[str] = None
+    receiver: Optional[str] = None

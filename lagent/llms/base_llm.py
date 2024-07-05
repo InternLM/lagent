@@ -2,6 +2,8 @@ from copy import copy
 from typing import Dict, List, Optional, Tuple, Union
 from warnings import warn
 
+from lagent.registry import LLM_REGISTRY, AutoRegister, RegistryMeta
+
 
 class LMTemplateParser:
     """Intermidate prompt template parser, specifically for language models.
@@ -94,7 +96,7 @@ class LMTemplateParser:
         return res
 
 
-class BaseModel:
+class BaseModel(metaclass=AutoRegister(LLM_REGISTRY, RegistryMeta)):
     """Base class for model wrapper.
 
     Args:
