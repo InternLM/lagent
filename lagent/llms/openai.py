@@ -208,10 +208,8 @@ class GPTAPI(BaseAPIModel):
                     headers=header,
                     data=json.dumps(data),
                     proxies=self.proxies)
-                if 'stream' not in data or not data['stream']:
-                    response = raw_response.json()
-                    return response['choices'][0]['message']['content'].strip()
-                else:
+
+                if data.get('stream', False):
                     resp = ''
                     for chunk in raw_response.iter_lines(
                             chunk_size=8192, decode_unicode=False,
@@ -228,6 +226,9 @@ class GPTAPI(BaseAPIModel):
                                 return
                             resp += choice['delta']['content'].strip()
                             yield resp
+                else:
+                    response = raw_response.json()
+                    return response['choices'][0]['message']['content'].strip()
             except requests.ConnectionError:
                 print('Got connection error, retrying...')
                 continue
