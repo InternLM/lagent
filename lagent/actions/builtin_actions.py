@@ -22,7 +22,7 @@ class InvalidAction(BaseAction):
                  str = 'The action is invalid, please check the action name.',
                  description: Optional[dict] = None,
                  parser=BaseParser) -> None:
-        super().__init__(description, parser, enable=False)
+        super().__init__(description, parser)
         self._err_msg = err_msg
 
     @tool_api
@@ -57,7 +57,7 @@ class NoAction(BaseAction):
                  err_msg: str = 'Please follow the format',
                  description: Optional[dict] = None,
                  parser=BaseParser):
-        super().__init__(description, parser, enable=False)
+        super().__init__(description, parser)
         self._err_msg = err_msg
 
     @tool_api
@@ -87,7 +87,7 @@ class FinishAction(BaseAction):
     result."""
 
     def __init__(self, description: Optional[dict] = None, parser=BaseParser):
-        super().__init__(description, parser, enable=True)
+        super().__init__(description, parser)
 
     @tool_api
     def run(self, response: str) -> ActionReturn:

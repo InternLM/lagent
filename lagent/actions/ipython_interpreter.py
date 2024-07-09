@@ -43,19 +43,19 @@ class IPythonInterpreter(BaseAction):
         description (dict): The description of the action. Defaults to ``None``.
         parser (Type[BaseParser]): The parser class to process the
             action's inputs and outputs. Defaults to :class:`JsonParser`.
-        enable (bool, optional): Whether the action is enabled. Defaults to ``True``.
     """
 
     _KERNEL_CLIENTS = {}
 
-    def __init__(self,
-                 timeout: int = 20,
-                 user_data_dir: str = 'ENV',
-                 work_dir='./work_dir/tmp_dir',
-                 description: Optional[dict] = None,
-                 parser: Type[BaseParser] = JsonParser,
-                 enable: bool = True):
-        super().__init__(description, parser, enable)
+    def __init__(
+        self,
+        timeout: int = 20,
+        user_data_dir: str = 'ENV',
+        work_dir='./work_dir/tmp_dir',
+        description: Optional[dict] = None,
+        parser: Type[BaseParser] = JsonParser,
+    ):
+        super().__init__(description, parser)
 
         self.timeout = timeout
         if user_data_dir == 'ENV':
@@ -297,11 +297,10 @@ class BatchIPythonInterpreter(BaseAction):
         python_interpreter: Dict[str, Any],
         description: Optional[dict] = None,
         parser: Type[BaseParser] = JsonParser,
-        enable: bool = True,
     ):
         self.python_interpreter_init_args = python_interpreter
         self.index2python_interpreter = {}
-        super().__init__(description, parser, enable)
+        super().__init__(description, parser)
 
     def __call__(self,
                  commands: Union[str, List[str]],

@@ -16,16 +16,15 @@ class GoogleScholar(BaseAction):
         description (dict): The description of the action. Defaults to ``None``.
         parser (Type[BaseParser]): The parser class to process the
             action's inputs and outputs. Defaults to :class:`JsonParser`.
-        enable (bool, optional): Whether the action is enabled. Defaults to
-            True.
     """
 
-    def __init__(self,
-                 api_key: Optional[str] = None,
-                 description: Optional[dict] = None,
-                 parser: Type[BaseParser] = JsonParser,
-                 enable: bool = True):
-        super().__init__(description, parser, enable)
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        description: Optional[dict] = None,
+        parser: Type[BaseParser] = JsonParser,
+    ):
+        super().__init__(description, parser)
         api_key = os.environ.get('SERPER_API_KEY', api_key)
         if api_key is None:
             raise ValueError(

@@ -135,7 +135,7 @@ class JSONParser(StrParser):
                     else:
                         parsed_data[field_name] = value
 
-            return model.model_validate(parsed_data)
+            return model.model_validate(parsed_data).dict()
         except json.JSONDecodeError:
             raise ValueError('Input string is not a valid JSON.')
 

@@ -2,7 +2,7 @@ from copy import copy
 from typing import Dict, List, Optional, Tuple, Union
 from warnings import warn
 
-from lagent.registry import LLM_REGISTRY, AutoRegister, RegistryMeta
+from lagent.registry import LLM_REGISTRY, AutoRegister
 
 
 class LMTemplateParser:
@@ -96,7 +96,7 @@ class LMTemplateParser:
         return res
 
 
-class BaseModel(metaclass=AutoRegister(LLM_REGISTRY, RegistryMeta)):
+class BaseModel(metaclass=AutoRegister(LLM_REGISTRY)):
     """Base class for model wrapper.
 
     Args:

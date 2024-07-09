@@ -1,5 +1,4 @@
 import inspect
-from abc import ABCMeta
 from typing import Any, Dict, Optional, Union
 
 from class_registry import AutoRegister, ClassRegistry
@@ -7,14 +6,6 @@ from class_registry import AutoRegister, ClassRegistry
 
 def is_class(obj):
     return inspect.isclass(obj)
-
-
-class RegistryMeta(ABCMeta):
-    """Metaclass of tools."""
-
-    def __new__(mcs, name, base, attrs):
-        attrs.setdefault('__name__', name)
-        return super().__new__(mcs, name, base, attrs)
 
 
 AGENT_REGISTRY = ClassRegistry('__name__', unique=True)
@@ -33,7 +24,7 @@ class ObjectFactory:
                registry: Optional[ClassRegistry] = None):
         if config is None:
             return None
-        if is_class(config):
+        if not isinstance(config, dict):
             return config
         assert isinstance(config, dict) and 'type' in config
 
@@ -49,7 +40,6 @@ class ObjectFactory:
 __all__ = [
     'ObjectFactory',
     'AutoRegister',
-    'RegistryMeta',
     'is_class',
     'AGENT_REGISTRY',
     'LLM_REGISTRY',

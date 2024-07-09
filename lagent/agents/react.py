@@ -1,3 +1,4 @@
+import json
 from typing import Dict, List, Union
 
 from pydantic import BaseModel, Field
@@ -5,9 +6,10 @@ from pydantic import BaseModel, Field
 from lagent.actions import ActionExecutor
 from lagent.actions.base_action import BaseAction
 from lagent.agents.agent import Agent
+from lagent.llms.base_llm import BaseModel as BaseLLM
 from lagent.prompts.parsers.json_parser import JSONParser
 from lagent.prompts.prompt_template import PromptTemplate
-from lagent.registry import AGENT_REGISTRY, ObjectFactory
+from lagent.registry import AGENT_REGISTRY, TOOL_REGISTRY, ObjectFactory
 from lagent.schema import AgentMessage
 
 select_action_template = """你是一个可以调用外部工具的助手，可以使用的工具包括：
@@ -21,40 +23,54 @@ output_format_template = """如果使用工具请遵循以下格式回复：
 如果你已经知道了答案，或者你不需要工具，请遵循以下格式回复
 {finish_format}"""
 
-summary_template = """你已经完成了所有的搜索，总结你的搜索结果。"""
-
 
 class ReAct(Agent):
 
     def __init__(self,
-                 action_select_agent: Union[Dict, Agent],
-                 summary_agent: Union[Dict, Agent],
+                 llm: Union[BaseLLM, Dict],
                  actions: Union[BaseAction, List[BaseAction]],
+                 template: Union[PromptTemplate, str] = None,
+                 memory: Dict = dict(type='Memory'),
+                 output_format: Dict = dict(type='JsonParser'),
+                 aggregator: Dict = dict(type='DefaultAggregator'),
+                 hooks: List = [dict(type='ActionPreprocessor')],
                  max_turn: int = 5,
                  **kwargs):
         self.max_turn = max_turn
-        self.action_select_agent = ObjectFactory.create(
-            action_select_agent, AGENT_REGISTRY)
-        self.summary_agent = ObjectFactory.create(summary_agent,
-                                                  AGENT_REGISTRY)
-        self.action_manager = ActionExecutor(actions, hooks=[ParameterHook()])
+
+        actions = dict(
+            type=ActionExecutor,
+            actions=actions,
+            hooks=hooks,
+        )
+
+        self.actions: ActionExecutor = ObjectFactory.create(
+            actions, TOOL_REGISTRY)
+        select_agent = dict(
+            type=Agent,
+            llm=llm,
+            template=template.format(
+                action_info=json.dumps(self.actions.description()),
+                output_format=output_format.format()),
+            output_format=output_format,
+            memory=memory,
+            aggregator=aggregator,
+            hooks=hooks,
+        )
+        self.select_agent = ObjectFactory.create(select_agent, AGENT_REGISTRY)
         super().__init__(**kwargs)
 
     def forward(self, message: AgentMessage):
         for _ in range(self.max_turn):
-            message = self.action_select_agent(message)
-            if isinstance(message.content, FinishFormat):
+            message = self.select_agent(message)
+            if 'conclusion' in message.content or 'conclusion' in message.formatted:
                 return message
-            message = self.action_manager(message)
+            message = self.actions(message)
 
-        return self.summary_agent(
-            AgentMessage(
-                sender=self.name,
-                content=self.action_select_agent.memory.get_memory()))
+        return message
 
 
 if __name__ == '__main__':
-    from lagent.actions import PythonInterpreter
     from lagent.llms import GPTAPI
 
     class ActionCall(BaseModel):
@@ -77,52 +93,19 @@ if __name__ == '__main__':
         function_format=ActionFormat,
         finish_format=FinishFormat)
 
-    class ParameterHook:
-
-        def pre_forward(self, message):
-            content = message.content
-            content = content.action.model_dump()
-            content['command'] = content.pop('parameters')
-            message.content = content
-            return message
-
-        def post_forward(self, message):
-            content = message.content
-            content = str(content.result or content.errmsg)
-            message.content = content
-            return message
-
     llm = dict(
         type=GPTAPI,
         model_type='gpt-4o-2024-05-13',
         query_per_second=50,
         max_new_tokens=4096,
         retry=1000)
-    action = PythonInterpreter()
-    variables = {
-        'action_info': 'Searcher 助手是一个强大的搜索引擎，可以帮助标注员快速获取信息。',
-    }
-    prompt = prompt_template.format(
-        output_format=output_format.format(), action_info=action.description)
-    action_select_agent = dict(
-        type=Agent,
+
+    agent = ReAct(
         llm=llm,
-        template=prompt,
+        template=prompt_template,
         output_format=output_format,
         aggregator=dict(type='DefaultAggregator'),
-    )
-
-    summary_agent = dict(
-        type=Agent,
-        name='SelectNextActionAgent',
-        llm=llm,
-        template=prompt,
-        aggregator=dict(type='DefaultAggregator'),
-    )
-    agent = ReAct(
-        action_select_agent,
-        summary_agent,
-        actions=[action],
+        actions=[dict(type='PythonInterpreter')],
     )
     response = agent(
         AgentMessage(sender='user', content='用 Python 计算一下 3 ** 5'))

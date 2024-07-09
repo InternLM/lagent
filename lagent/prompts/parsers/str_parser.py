@@ -1,11 +1,13 @@
 from typing import Any
 
+from lagent.registry import PARSER_REGISTRY, AutoRegister
 
-class StrParser:
+
+class StrParser(metaclass=AutoRegister(PARSER_REGISTRY)):
 
     def __init__(
         self,
-        template: str,
+        template: str = '',
         **format_field,
     ):
 

@@ -1,10 +1,10 @@
 from typing import Callable, Dict, List, Optional, Union
 
-from lagent.registry import MEMORY_REGISTRY, AutoRegister, RegistryMeta
+from lagent.registry import MEMORY_REGISTRY, AutoRegister
 from lagent.schema import AgentMessage
 
 
-class Memory(metaclass=AutoRegister(MEMORY_REGISTRY, RegistryMeta)):
+class Memory(metaclass=AutoRegister(MEMORY_REGISTRY)):
 
     def __init__(self, recent_n=None) -> None:
         self.memory = []
@@ -27,7 +27,7 @@ class Memory(metaclass=AutoRegister(MEMORY_REGISTRY, RegistryMeta)):
     def add(self, memories: Union[List[Dict], Dict, None]) -> None:
         if isinstance(memories, AgentMessage):
             self.memory.append(memories)
-        elif isinstance(memories, list):
+        elif isinstance(memories, (list, tuple)):
             self.memory.extend(memories)
 
     def delete(self, index: Union[List, int]) -> None:

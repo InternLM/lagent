@@ -43,19 +43,18 @@ class PythonInterpreter(BaseAction):
         description (dict, Optional): The description of the action. Defaults to ``None``.
         parser (Type[BaseParser]): The parser class to process the
             action's inputs and outputs. Defaults to :class:`JsonParser`.
-        enable (bool, optional): Whether the action is enabled. Defaults to
-            ``True``.
     """
 
-    def __init__(self,
-                 answer_symbol: Optional[str] = None,
-                 answer_expr: Optional[str] = 'solution()',
-                 answer_from_stdout: bool = False,
-                 timeout: int = 20,
-                 description: Optional[dict] = None,
-                 parser: Type[BaseParser] = JsonParser,
-                 enable: bool = True) -> None:
-        super().__init__(description, parser, enable)
+    def __init__(
+        self,
+        answer_symbol: Optional[str] = None,
+        answer_expr: Optional[str] = 'solution()',
+        answer_from_stdout: bool = False,
+        timeout: int = 20,
+        description: Optional[dict] = None,
+        parser: Type[BaseParser] = JsonParser,
+    ) -> None:
+        super().__init__(description, parser)
         self.answer_symbol = answer_symbol
         self.answer_expr = answer_expr
         self.answer_from_stdout = answer_from_stdout

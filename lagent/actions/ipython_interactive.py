@@ -38,7 +38,6 @@ class IPythonInteractive(BaseAction):
         description (dict): The description of the action. Defaults to ``None``.
         parser (Type[BaseParser]): The parser class to process the
             action's inputs and outputs. Defaults to :class:`JsonParser`.
-        enable (bool): Whether the action is enabled. Defaults to ``True``.
     """
 
     def __init__(
@@ -48,9 +47,8 @@ class IPythonInteractive(BaseAction):
         use_signals: bool = True,
         description: Optional[dict] = None,
         parser: Type[BaseParser] = JsonParser,
-        enable: bool = True,
     ):
-        super().__init__(description, parser, enable)
+        super().__init__(description, parser)
         from IPython import InteractiveShell
         from traitlets.config import Config
 

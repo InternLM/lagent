@@ -12,12 +12,13 @@ from lagent.actions.parser import BaseParser, JsonParser
 class BINGMap(BaseAction):
     """BING Map plugin for looking up map information."""
 
-    def __init__(self,
-                 key: Optional[str] = None,
-                 description: Optional[dict] = None,
-                 parser: Type[BaseParser] = JsonParser,
-                 enable: bool = True) -> None:
-        super().__init__(description, parser, enable)
+    def __init__(
+        self,
+        key: Optional[str] = None,
+        description: Optional[dict] = None,
+        parser: Type[BaseParser] = JsonParser,
+    ) -> None:
+        super().__init__(description, parser)
         key = os.environ.get('BING_MAP_KEY', key)
         if key is None:
             raise ValueError(

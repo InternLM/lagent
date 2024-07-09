@@ -1,7 +1,9 @@
-from typing import Dict, List, Union
+from collections import OrderedDict
+from typing import Callable, Dict, List, Union
 
 from lagent.actions.base_action import BaseAction
-from lagent.registry import TOOL_REGISTRY, ObjectFactory
+from lagent.agents.hooks import Hook, RemovableHandle
+from lagent.registry import HOOK_REGISTRY, TOOL_REGISTRY, ObjectFactory
 from lagent.schema import ActionReturn, ActionValidCode, AgentMessage, FunctionCall
 
 
@@ -44,13 +46,15 @@ class ActionExecutor:
                                                    TOOL_REGISTRY)
         self.no_action = ObjectFactory.create(no_action, TOOL_REGISTRY)
         self.finish_action = finish_action
-        self._hook = hooks
+        self._hooks: Dict[int, Hook] = OrderedDict()
+        if hooks:
+            for hook in hooks:
+                hook = ObjectFactory.create(hook, HOOK_REGISTRY)
+                self.register_hook(hook)
 
-    def get_actions_info(self) -> List[Dict]:
+    def description(self) -> List[Dict]:
         actions = []
         for action_name, action in self.actions.items():
-            if not action.enable:
-                continue
             if action.is_toolkit:
                 for api in action.description['api_list']:
                     api_desc = api.copy()
@@ -61,29 +65,25 @@ class ActionExecutor:
                 actions.append(action_desc)
         return actions
 
-    def is_valid(self, name: str):
-        return name in self.actions and self.actions[name].enable
+    def __contains__(self, name: str):
+        return name in self.actions
 
-    def action_names(self, only_enable: bool = True):
-        if only_enable:
-            return [k for k, v in self.actions.items() if v.enable]
-        else:
-            return list(self.actions.keys())
+    def keys(self):
+        return list(self.actions.keys())
 
-    def add_action(self, action: Union[BaseAction, Dict]):
+    def __setitem__(self, name: str, action: Union[BaseAction, Dict]):
         action = ObjectFactory.create(action, TOOL_REGISTRY)
         self.actions[action.name] = action
 
-    def del_action(self, name: str):
-        if name in self.actions:
-            del self.actions[name]
+    def __delitem__(self, name: str):
+        del self.actions[name]
 
     def forward(self, name, parameters, **kwargs) -> ActionReturn:
 
         action_name, api_name = (
             name.split('.') if '.' in name else (name, 'run'))
         action_return: ActionReturn = ActionReturn()
-        if not self.is_valid(action_name):
+        if action_name not in self:
             if name == self.no_action.name:
                 action_return = self.no_action(parameters)
             elif name == self.finish_action.name:
@@ -95,10 +95,10 @@ class ActionExecutor:
             action_return.valid = ActionValidCode.OPEN
         return action_return
 
-    def __call__(self, *message: AgentMessage, **kwargs) -> AgentMessage:
+    def __call__(self, message: AgentMessage, **kwargs) -> AgentMessage:
         # message.receiver = self.name
         for hook in self._hooks.values():
-            result = hook.forward_pre_hook(message)
+            result = hook.before_action(self, message)
             if result:
                 message = result
 
@@ -106,8 +106,8 @@ class ActionExecutor:
             isinstance(message.content, dict) and 'name' in message.content
             and 'parameters' in message.content)
         if isinstance(message.content, dict):
-            name = message.content['name']
-            parameters = message.content['parameters']
+            name = message.content.get('name')
+            parameters = message.content.get('parameters')
         else:
             name = message.content.name
             parameters = message.content.parameters
@@ -116,12 +116,17 @@ class ActionExecutor:
             name=name, parameters=parameters, **kwargs)
         if not isinstance(response_message, AgentMessage):
             response_message = AgentMessage(
-                sender=self.name,
+                sender=self.__class__.__name__,
                 content=response_message,
             )
 
         for hook in self._hooks.values():
-            result = hook.forward_post_hook(message)
+            result = hook.after_action(self, response_message)
             if result:
-                message = result
+                response_message = result
         return response_message
+
+    def register_hook(self, hook: Callable):
+        handle = RemovableHandle(self._hooks)
+        self._hooks[handle.id] = hook
+        return handle

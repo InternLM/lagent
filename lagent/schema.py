@@ -99,5 +99,6 @@ class AgentReturn:
 class AgentMessage(BaseModel):
     sender: str
     content: Any
+    formatted: Optional[Any] = None
     type: Optional[str] = None
     receiver: Optional[str] = None

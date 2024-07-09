@@ -1,16 +1,32 @@
 from itertools import count
 
+from lagent.registry import HOOK_REGISTRY, AutoRegister
 
-class Hook:
 
-    def forward_pre_hook(
+class Hook(metaclass=AutoRegister(HOOK_REGISTRY)):
+
+    def before_agent(
         self,
         agent,
         message,
     ):
         pass
 
-    def forward_post_hook(
+    def after_agent(
+        self,
+        agent,
+        message,
+    ):
+        pass
+
+    def before_action(
+        self,
+        agent,
+        message,
+    ):
+        pass
+
+    def after_action(
         self,
         agent,
         message,

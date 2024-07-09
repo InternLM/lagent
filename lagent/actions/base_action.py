@@ -11,16 +11,14 @@ try:
 except ImportError:
     from typing_extensions import Annotated
 
-from class_registry import AutoRegister, ClassRegistry
 from griffe import Docstring
 from griffe.enumerations import DocstringSectionKind
 
+from lagent.registry import TOOL_REGISTRY, AutoRegister
 from ..schema import ActionReturn, ActionStatusCode
 from .parser import BaseParser, JsonParser, ParseError
 
 logging.getLogger('griffe').setLevel(logging.ERROR)
-
-TOOL_REGISTRY = ClassRegistry('__tool_name__', unique=True)
 
 
 def tool_api(func: Optional[Callable] = None,
@@ -212,7 +210,7 @@ class ToolMeta(ABCMeta):
 
     def __new__(mcs, name, base, attrs):
         is_toolkit, tool_desc = True, dict(
-            name=attrs.setdefault('__tool_name__', name),
+            name=name,
             description=Docstring(attrs.get('__doc__',
                                             '')).parse('google')[0].value)
         for key, value in attrs.items():
@@ -258,8 +256,6 @@ class BaseAction(metaclass=AutoRegister(TOOL_REGISTRY, ToolMeta)):
             Defaults to ``None``.
         parser (:class:`Type[BaseParser]`): The parser class to process the
             action's inputs and outputs. Defaults to :class:`JsonParser`.
-        enable (:class:`bool`): Whether the action is enabled. Defaults to
-            ``True``.
 
     Examples:
 
@@ -318,14 +314,14 @@ class BaseAction(metaclass=AutoRegister(TOOL_REGISTRY, ToolMeta)):
             action = Calculator()
     """
 
-    def __init__(self,
-                 description: Optional[dict] = None,
-                 parser: Type[BaseParser] = JsonParser,
-                 enable: bool = True):
+    def __init__(
+        self,
+        description: Optional[dict] = None,
+        parser: Type[BaseParser] = JsonParser,
+    ):
         self._description = deepcopy(description or self.__tool_description__)
         self._name = self._description['name']
         self._parser = parser(self)
-        self._enable = enable
 
     def __call__(self, inputs: str, name='run') -> ActionReturn:
         fallback_args = {'inputs': inputs, 'name': name}
@@ -365,10 +361,6 @@ class BaseAction(metaclass=AutoRegister(TOOL_REGISTRY, ToolMeta)):
     @property
     def name(self):
         return self._name
-
-    @property
-    def enable(self):
-        return self._enable
 
     @property
     def is_toolkit(self):

@@ -12,14 +12,15 @@ Computer Science, Quantitative Biology, Quantitative Finance, Statistics, \
 Electrical Engineering, and Economics from scientific articles on arxiv.org.
     """
 
-    def __init__(self,
-                 top_k_results: int = 3,
-                 max_query_len: int = 300,
-                 doc_content_chars_max: int = 1500,
-                 description: Optional[dict] = None,
-                 parser: Type[BaseParser] = JsonParser,
-                 enable: bool = True):
-        super().__init__(description, parser, enable)
+    def __init__(
+        self,
+        top_k_results: int = 3,
+        max_query_len: int = 300,
+        doc_content_chars_max: int = 1500,
+        description: Optional[dict] = None,
+        parser: Type[BaseParser] = JsonParser,
+    ):
+        super().__init__(description, parser)
         self.top_k_results = top_k_results
         self.max_query_len = max_query_len
         self.doc_content_chars_max = doc_content_chars_max

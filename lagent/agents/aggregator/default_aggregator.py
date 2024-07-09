@@ -1,11 +1,10 @@
 from typing import Dict, List
 
 from lagent.memory import Memory
-from lagent.registry import AGGREGATOR_REGISTRY, AutoRegister, RegistryMeta
+from lagent.registry import AGGREGATOR_REGISTRY, AutoRegister
 
 
-class DefaultAggregator(
-        metaclass=AutoRegister(AGGREGATOR_REGISTRY, RegistryMeta)):
+class DefaultAggregator(metaclass=AutoRegister(AGGREGATOR_REGISTRY)):
 
     def aggregate(self,
                   messages: Memory,

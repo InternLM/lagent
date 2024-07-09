@@ -16,12 +16,13 @@ THEME_MAPPING = {
 class PPT(BaseAction):
     """Plugin to create ppt slides with text, paragraph, images in good looking styles."""
 
-    def __init__(self,
-                 theme_mapping: Optional[Dict[str, dict]] = None,
-                 description: Optional[dict] = None,
-                 parser: Type[BaseParser] = JsonParser,
-                 enable: bool = True):
-        super().__init__(description, parser, enable)
+    def __init__(
+        self,
+        theme_mapping: Optional[Dict[str, dict]] = None,
+        description: Optional[dict] = None,
+        parser: Type[BaseParser] = JsonParser,
+    ):
+        super().__init__(description, parser)
         self.theme_mapping = theme_mapping or THEME_MAPPING
         self.pointer = None
         self.location = None

@@ -1,3 +1,4 @@
+import copy
 from collections import OrderedDict
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -10,12 +11,11 @@ from lagent.prompts.parsers import StrParser
 from lagent.prompts.prompt_template import PromptTemplate
 from lagent.registry import (AGENT_REGISTRY, AGGREGATOR_REGISTRY,
                              HOOK_REGISTRY, LLM_REGISTRY, MEMORY_REGISTRY,
-                             PARSER_REGISTRY, AutoRegister, ObjectFactory,
-                             RegistryMeta)
+                             PARSER_REGISTRY, AutoRegister, ObjectFactory)
 from lagent.schema import AgentMessage
 
 
-class Agent(metaclass=AutoRegister(AGENT_REGISTRY, RegistryMeta)):
+class Agent(metaclass=AutoRegister(AGENT_REGISTRY)):
     """Agent is the basic unit of the system. It is responsible for
     communicating with the LLM, managing the memory, and handling the
     message aggregation and parsing. It can also be extended with hooks
@@ -40,13 +40,13 @@ class Agent(metaclass=AutoRegister(AGENT_REGISTRY, RegistryMeta)):
         llm: Union[BaseLLM, Dict] = None,
         template: Union[PromptTemplate, str] = None,
         memory: Dict = dict(type='Memory'),
-        output_format: Dict = dict(type='StrParser'),
+        output_format: Optional[Dict] = None,
         aggregator: Dict = dict(type='DefaultAggregator'),
         name: Optional[str] = None,
         description: Optional[str] = None,
         hooks: Optional[Union[List[Dict], Dict]] = None,
     ):
-        self.name = name
+        self.name = name or self.__class__.__name__
         self.llm: BaseLLM = ObjectFactory.create(llm, LLM_REGISTRY)
         self.memory: Memory = ObjectFactory.create(memory, MEMORY_REGISTRY)
         self.output_format: StrParser = ObjectFactory.create(
@@ -72,20 +72,24 @@ class Agent(metaclass=AutoRegister(AGENT_REGISTRY, RegistryMeta)):
     def __call__(self, *message: AgentMessage, **kwargs) -> AgentMessage:
         # message.receiver = self.name
         for hook in self._hooks.values():
-            result = hook.forward_pre_hook(message)
+            message = copy.deepcopy(message)
+            result = hook.before_agent(self, message)
             if result:
                 message = result
 
         self.update_memory(message)
         response_message = self.forward(*message, **kwargs)
         if not isinstance(response_message, AgentMessage):
+            parsed_response = self.parse_response(response_message)
             response_message = AgentMessage(
                 sender=self.name,
                 content=response_message,
+                formatted=parsed_response,
             )
-        self.update_memory(message)
+        self.update_memory(response_message)
         for hook in self._hooks.values():
-            result = hook.forward_post_hook(message)
+            response_message = copy.deepcopy(response_message)
+            result = hook.after_agent(self, response_message)
             if result:
                 message = result
         return response_message
@@ -98,8 +102,8 @@ class Agent(metaclass=AutoRegister(AGENT_REGISTRY, RegistryMeta)):
             self.template,
         )
         llm_response = self.llm.chat(formatted_messages)
-        parsed_response = self.parse_response(llm_response)
-        return llm_response, parsed_response
+
+        return llm_response
 
     def __setattr__(self, __name: str, __value: Any) -> None:
         if isinstance(__value, Agent):
@@ -132,3 +136,6 @@ class Agent(metaclass=AutoRegister(AGENT_REGISTRY, RegistryMeta)):
         handle = RemovableHandle(self._hooks)
         self._hooks[handle.id] = hook
         return handle
+
+    def dummy_forward(self, *message: AgentMessage, **kwargs) -> AgentMessage:
+        return 'dummy response'
