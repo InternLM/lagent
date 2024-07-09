@@ -120,6 +120,27 @@ class GPTAPI(BaseAPIModel):
         ret = [task.result() for task in tasks]
         return ret[0] if isinstance(inputs[0], dict) else ret
 
+    def stream_chat(
+        self,
+        inputs: List[dict],
+        **gen_params,
+    ) -> str:
+        """Generate responses given the contexts.
+
+        Args:
+            inputs (List[dict]): a list of messages
+            gen_params: additional generation configuration
+
+        Returns:
+            str: generated string
+        """
+        assert isinstance(inputs, list)
+        if 'max_tokens' in gen_params:
+            raise NotImplementedError('unsupported parameter: max_tokens')
+        gen_params = {**self.gen_params, **gen_params}
+        gen_params['stream'] = True
+        yield from self._chat(inputs, **gen_params)
+
     def _chat(self, messages: List[dict], **gen_params) -> str:
         """Generate completion from a list of templates.
 
@@ -187,16 +208,32 @@ class GPTAPI(BaseAPIModel):
                     headers=header,
                     data=json.dumps(data),
                     proxies=self.proxies)
+                if 'stream' not in data or not data['stream']:
+                    response = raw_response.json()
+                    return response['choices'][0]['message']['content'].strip()
+                else:
+                    resp = ''
+                    for chunk in raw_response.iter_lines(
+                            chunk_size=8192, decode_unicode=False,
+                            delimiter=b'\n'):
+                        if chunk:
+                            decoded = chunk.decode('utf-8')
+                            if decoded == 'data: [DONE]':
+                                return
+                            if decoded[:6] == 'data: ':
+                                decoded = decoded[6:]
+                            response = json.loads(decoded)
+                            choice = response['choices'][0]
+                            if choice['finish_reason'] == 'stop':
+                                return
+                            resp += choice['delta']['content'].strip()
+                            yield resp
             except requests.ConnectionError:
                 print('Got connection error, retrying...')
                 continue
-            try:
-                response = raw_response.json()
             except requests.JSONDecodeError:
                 print('JsonDecode error, got', str(raw_response.content))
                 continue
-            try:
-                return response['choices'][0]['message']['content'].strip()
             except KeyError:
                 if 'error' in response:
                     if response['error']['code'] == 'rate_limit_exceeded':
@@ -209,6 +246,8 @@ class GPTAPI(BaseAPIModel):
 
                     print('Find error message in response: ',
                           str(response['error']))
+            except Exception as error:
+                print(str(error))
             max_num_retries += 1
 
         raise RuntimeError('Calling OpenAI failed after retrying for '

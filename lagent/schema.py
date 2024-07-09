@@ -1,6 +1,6 @@
 from dataclasses import asdict, dataclass, field
 from enum import IntEnum
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 
 def enum_dict_factory(inputs):
@@ -77,12 +77,17 @@ class AgentStatusCode(IntEnum):
     CODING = 6  # start python
     CODE_END = 7  # end python
     CODE_RETURN = 8  # python return
+    ANSWER_ING = 9  # final answer is in streaming
 
 
 @dataclass
 class AgentReturn:
+    type: str = ''
+    content: str = ''
     state: Union[AgentStatusCode, int] = AgentStatusCode.END
     actions: List[ActionReturn] = field(default_factory=list)
     response: str = ''
     inner_steps: List = field(default_factory=list)
+    nodes: Dict = None
+    adjacency_list: Dict = None
     errmsg: Optional[str] = None
