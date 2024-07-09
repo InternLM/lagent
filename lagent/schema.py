@@ -83,6 +83,7 @@ class AgentStatusCode(IntEnum):
 @dataclass
 class AgentReturn:
     type: str = ''
+    content: str = ''
     state: Union[AgentStatusCode, int] = AgentStatusCode.END
     actions: List[ActionReturn] = field(default_factory=list)
     response: str = ''
