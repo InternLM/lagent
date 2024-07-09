@@ -151,6 +151,24 @@ class GPTAPI(BaseAPIModel):
         Returns:
             str: The generated string.
         """
+
+        def _stream_chat(raw_response):
+            resp = ''
+            for chunk in raw_response.iter_lines(
+                    chunk_size=8192, decode_unicode=False, delimiter=b'\n'):
+                if chunk:
+                    decoded = chunk.decode('utf-8')
+                    if decoded == 'data: [DONE]':
+                        return
+                    if decoded[:6] == 'data: ':
+                        decoded = decoded[6:]
+                    response = json.loads(decoded)
+                    choice = response['choices'][0]
+                    if choice['finish_reason'] == 'stop':
+                        return
+                    resp += choice['delta']['content'].strip()
+                    yield resp
+
         assert isinstance(messages, list)
         gen_params = gen_params.copy()
 
@@ -211,7 +229,7 @@ class GPTAPI(BaseAPIModel):
                     proxies=self.proxies)
 
                 if data.get('stream', False):
-                    return self._stream_chat(raw_response)
+                    return _stream_chat(raw_response)
                 else:
                     response = raw_response.json()
                     return response['choices'][0]['message']['content'].strip()
@@ -240,23 +258,6 @@ class GPTAPI(BaseAPIModel):
         raise RuntimeError('Calling OpenAI failed after retrying for '
                            f'{max_num_retries} times. Check the logs for '
                            'details.')
-
-    def _stream_chat(self, raw_response):
-        resp = ''
-        for chunk in raw_response.iter_lines(
-                chunk_size=8192, decode_unicode=False, delimiter=b'\n'):
-            if chunk:
-                decoded = chunk.decode('utf-8')
-                if decoded == 'data: [DONE]':
-                    return
-                if decoded[:6] == 'data: ':
-                    decoded = decoded[6:]
-                response = json.loads(decoded)
-                choice = response['choices'][0]
-                if choice['finish_reason'] == 'stop':
-                    return
-                resp += choice['delta']['content'].strip()
-                yield resp
 
     def tokenize(self, prompt: str) -> list:
         """Tokenize the input prompt.
