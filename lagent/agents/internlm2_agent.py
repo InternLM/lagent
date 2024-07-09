@@ -125,10 +125,12 @@ class Internlm2Protocol:
         formatted = []
         if self.meta_prompt:
             formatted.append(dict(role='system', content=self.meta_prompt))
-        if interpreter_executor and self.interpreter_prompt:
-            interpreter_info = interpreter_executor.get_actions_info()[0]
-            interpreter_prompt = self.interpreter_prompt.format(
-                code_prompt=interpreter_info['description'])
+        if self.interpreter_prompt:
+            interpreter_prompt = self.interpreter_prompt
+            if isinstance(interpreter_executor, ActionExecutor):
+                interpreter_info = interpreter_executor.get_actions_info()[0]
+                interpreter_prompt = self.interpreter_prompt.format(
+                    code_prompt=interpreter_info['description'])
             formatted.append(
                 dict(
                     role='system',
@@ -183,9 +185,10 @@ class Internlm2Protocol:
                 message = message.strip()
             code = code.split(self.tool['end'].strip())[0].strip()
             return 'interpreter', message, dict(
-                name=interpreter_executor.action_names()[0],
-                parameters=dict(
-                    command=code)) if interpreter_executor else None
+                name=interpreter_executor.action_names()[0] if isinstance(
+                    interpreter_executor, ActionExecutor) else
+                'IPythonInterpreter',
+                parameters=dict(command=code))
         return None, message.split(self.tool['start_token'])[0], None
 
     def format_response(self, action_return, name) -> dict:
