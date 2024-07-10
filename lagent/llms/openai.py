@@ -9,6 +9,8 @@ from typing import Dict, List, Optional, Union
 
 import requests
 
+from lagent.schema import ModelStatusCode
+from lagent.utils.util import filter_suffix
 from .base_api import BaseAPIModel
 
 warnings.simplefilter('default')
@@ -137,9 +139,27 @@ class GPTAPI(BaseAPIModel):
         assert isinstance(inputs, list)
         if 'max_tokens' in gen_params:
             raise NotImplementedError('unsupported parameter: max_tokens')
-        gen_params = {**self.gen_params, **gen_params}
+        # gen_params = {**self.gen_params, **gen_params}
+        gen_params = self.update_gen_params(**gen_params)
         gen_params['stream'] = True
-        yield from self._chat(inputs, **gen_params)
+
+        resp = ''
+        finished = False
+        stop_words = gen_params.get('stop_words')
+        for text in self._chat(inputs, **gen_params):
+            resp += text
+            if not resp:
+                continue
+            # remove stop_words
+            for sw in stop_words:
+                if sw in resp:
+                    resp = filter_suffix(resp, stop_words)
+                    finished = True
+                    break
+            yield ModelStatusCode.STREAM_ING, resp, None
+            if finished:
+                break
+        yield ModelStatusCode.END, resp, None
 
     def _chat(self, messages: List[dict], **gen_params) -> str:
         """Generate completion from a list of templates.
@@ -153,7 +173,6 @@ class GPTAPI(BaseAPIModel):
         """
 
         def _stream_chat(raw_response):
-            resp = ''
             for chunk in raw_response.iter_lines(
                     chunk_size=8192, decode_unicode=False, delimiter=b'\n'):
                 if chunk:
@@ -166,8 +185,7 @@ class GPTAPI(BaseAPIModel):
                     choice = response['choices'][0]
                     if choice['finish_reason'] == 'stop':
                         return
-                    resp += choice['delta']['content'].strip()
-                    yield resp
+                    yield choice['delta']['content']
 
         assert isinstance(messages, list)
         gen_params = gen_params.copy()
