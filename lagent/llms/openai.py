@@ -56,7 +56,8 @@ class GPTAPI(BaseAPIModel):
                  meta_template: Optional[Dict] = [
                      dict(role='system', api_role='system'),
                      dict(role='user', api_role='user'),
-                     dict(role='assistant', api_role='assistant')
+                     dict(role='assistant', api_role='assistant'),
+                     dict(role='environment', api_role='system')
                  ],
                  openai_api_base: str = OPENAI_API_BASE,
                  proxies: Optional[Dict] = None,
@@ -140,10 +141,20 @@ class GPTAPI(BaseAPIModel):
         if 'max_tokens' in gen_params:
             raise NotImplementedError('unsupported parameter: max_tokens')
         gen_params = self.update_gen_params(**gen_params)
+        gen_params['stream'] = True
 
         resp = ''
         finished = False
         stop_words = gen_params.get('stop_words')
+        if stop_words is None:
+            stop_words = []
+        # mapping to role that openai supports
+        messages = inputs.copy()
+        for item in messages:
+            for role_cfg in self.meta_template:
+                if item['role'] == role_cfg['role']:
+                    item['role'] = role_cfg['api_role']
+                    break
         for text in self._stream_chat(inputs, **gen_params):
             resp += text
             if not resp:
