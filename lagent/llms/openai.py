@@ -149,13 +149,8 @@ class GPTAPI(BaseAPIModel):
         if stop_words is None:
             stop_words = []
         # mapping to role that openai supports
-        messages = inputs.copy()
-        for item in messages:
-            for role_cfg in self.meta_template:
-                if item['role'] == role_cfg['role']:
-                    item['role'] = role_cfg['api_role']
-                    break
-        for text in self._stream_chat(inputs, **gen_params):
+        messages = self.template_parser._prompt2api(inputs)
+        for text in self._stream_chat(messages, **gen_params):
             resp += text
             if not resp:
                 continue
@@ -277,7 +272,7 @@ class GPTAPI(BaseAPIModel):
             str: The generated string.
         """
 
-        def _stream_chat(raw_response):
+        def streaming(raw_response):
             for chunk in raw_response.iter_lines(
                     chunk_size=8192, decode_unicode=False, delimiter=b'\n'):
                 if chunk:
@@ -346,7 +341,7 @@ class GPTAPI(BaseAPIModel):
                     headers=header,
                     data=json.dumps(data),
                     proxies=self.proxies)
-                return _stream_chat(raw_response)
+                return streaming(raw_response)
             except requests.ConnectionError:
                 print('Got connection error, retrying...')
                 continue
