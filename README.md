@@ -2,8 +2,8 @@
 
 <div align="center">
 
-# 思·索 MindSearch<br>Deeper and Wider AI Search Engine with LLM Agents
-| [Research Preview](https://mindsearch.netlify.app/) | [Paper]() |
+# Lagent $\times$ MindSearch<br>
+[Research Preview](https://mindsearch.netlify.app/) | [Paper]() | [Blog](https://mindsearch.netlify.app/mindsearch)
 </div>
 
 <div align="center">
@@ -25,7 +25,7 @@ English | [简体中文](README_zh-CN.md)
     👋 join us on <a href="https://twitter.com/intern_lm" target="_blank">𝕏 (Twitter)</a>, <a href="https://discord.gg/xa29JuW87d" target="_blank">Discord</a> and <a href="https://r.vansin.top/?r=internwx" target="_blank">WeChat</a>
 </p>
 
-## ✨ Introduction
+## ✨ MindSearch: Towards Deeper and Wider AI Search Engine
 
 #### Demo Video here
 
@@ -42,13 +42,6 @@ Comparison on human preference based on depth, breadth, factuality of the respon
 <img src="docs/imgs/mindsearch_openset.png" width="90%">
 </div>
 * All experiments are done before July.7 2024.
-
-## 👀 How MindSearch Works
-
-<img src="docs/imgs/mindsearch_framework.png">
-
-MindSearch consists of a Web Planner and Web Searcher. WebPlanner models the complex problem-solving minds as a dynamic graph construction process: it decomposes the question into sub-queries as graph nodes and progressively extends the graph based on the search result from WebSearcher. Tasked with each sub-query, WebSearcher performs hierarchical information retrieval with search engines and collects valuable information for WebPlanner.
-The multi-agent design of MindSearch dispatches a load of processing massive information to different agents, enabling the whole framework to process a much longer context.
 
 ## ⚽️ Getting Started
 
