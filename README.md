@@ -2,7 +2,7 @@
 
 <div align="center">
 
-# 思·索 MindSearch<br>Towards Deeper and Wider Answer Engine with LLM Agents
+# 思·索 MindSearch<br>Deeper and Wider Answer Engine with LLM Agents
 | [Research Preview](https://mindsearch.netlify.app/) | [Paper]() |
 </div>
 
