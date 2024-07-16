@@ -6,6 +6,7 @@ import threading
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
+from dataclasses import asdict
 from typing import Dict, List, Optional
 
 from termcolor import colored
@@ -206,7 +207,8 @@ class MindSearchAgent(BaseAgent):
 
             if code:
                 yield from self._process_code(agent_return, inner_history,
-                                              code, ptr)
+                                              code, ptr,
+                                              kwargs.get('as_dict', False))
             else:
                 agent_return.state = AgentStatusCode.END
                 yield deepcopy(agent_return)
@@ -220,8 +222,15 @@ class MindSearchAgent(BaseAgent):
             return AgentStatusCode.PLUGIN_START if model_state == ModelStatusCode.END else AgentStatusCode.PLUGIN_START
         return AgentStatusCode.ANSWER_ING if agent_return.nodes and 'response' in agent_return.nodes else AgentStatusCode.STREAM_ING
 
-    def _process_code(self, agent_return, inner_history, code, ptr):
+    def _process_code(self,
+                      agent_return,
+                      inner_history,
+                      code,
+                      ptr,
+                      as_dict=False):
         for node_name, node, adj in self.execute_code(code):
+            if as_dict:
+                node['detail'] = asdict(node['detail'])
             agent_return.nodes[node_name] = node
             agent_return.adjacency_list[node_name] = adj
             if not adj:
