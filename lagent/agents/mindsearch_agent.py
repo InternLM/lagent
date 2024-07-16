@@ -35,6 +35,7 @@ class SearcherAgent(Internlm2Agent):
         print(colored(f'current query: {message}', 'green'))
         for agent_return in super().stream_chat(message, **kwargs):
             agent_return.type = 'searcher'
+            agent_return.content = message
             yield deepcopy(agent_return)
 
 

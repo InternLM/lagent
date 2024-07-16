@@ -288,8 +288,7 @@ class Internlm2Agent(BaseAgent):
         if isinstance(message, dict):
             message = [message]
         inner_history = message[:]
-        # offset = len(inner_history)
-        offset = 0
+        offset = len(inner_history)
         agent_return = AgentReturn()
         agent_return.inner_steps = deepcopy(inner_history)
         last_agent_state = AgentStatusCode.SESSION_READY
