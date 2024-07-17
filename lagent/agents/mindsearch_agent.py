@@ -309,9 +309,12 @@ class MindSearchAgent(BaseAgent):
                 item = WebSearchGraph.searcher_resp_queue.get(timeout=60)
                 if item is WebSearchGraph.end_signal:
                     for node_name in ordered_nodes:
+                        resp = None
                         for resp in responses[node_name]:
                             yield deepcopy(resp)
-                        assert resp[1]['detail'].state == AgentStatusCode.END
+                        if resp:
+                            assert resp[1][
+                                'detail'].state == AgentStatusCode.END
                     break
                 node_name, node, adj = item
                 if node_name in ['root', 'response']:
