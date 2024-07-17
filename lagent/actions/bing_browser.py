@@ -1,15 +1,17 @@
+import logging
 import random
 import re
 import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Type, Union
 
 import requests
 from bs4 import BeautifulSoup
 from cachetools import TTLCache, cached
 
 from lagent.actions import BaseAction, tool_api
+from lagent.actions.parser import BaseParser, JsonParser
 
 
 class BingSearch:
@@ -36,6 +38,7 @@ class BingSearch:
                 response = self._call_bing_api(query)
                 return self._parse_response(response)
             except Exception as e:
+                logging.exception(str(e))
                 warnings.warn(
                     f'Retry {attempt + 1}/{max_retry} due to error: {e}')
                 time.sleep(random.randint(2, 5))
@@ -109,20 +112,35 @@ class ContentFetcher:
 
 
 class BingBrowser(BaseAction):
+    """Wrapper around the Web Browser Tool.
+    """
 
     def __init__(self,
                  api_key: str,
                  timeout: int = 5,
-                 black_list: Optional[List[str]] = None,
+                 black_list: Optional[List[str]] = [
+                     'enoN',
+                     'youtube.com',
+                     'bilibili.com',
+                     'researchgate.net',
+                 ],
                  region: str = 'zh-CN',
-                 topk: int = 20):
+                 topk: int = 20,
+                 description: Optional[dict] = None,
+                 parser: Type[BaseParser] = JsonParser,
+                 enable: bool = True):
         self.searcher = BingSearch(
             api_key, black_list=black_list, topk=topk, region=region)
         self.fetcher = ContentFetcher(timeout=timeout)
         self.search_results = None
+        super().__init__(description, parser, enable)
 
     @tool_api
     def search(self, query: Union[str, List[str]]) -> dict:
+        """BING search API
+        Args:
+            query (List[str]): list of search query strings
+        """
         queries = query if isinstance(query, list) else [query]
         search_results = {}
 
@@ -154,6 +172,11 @@ class BingBrowser(BaseAction):
 
     @tool_api
     def select(self, select_ids: List[int]) -> dict:
+        """get the detailed content on the selected pages.
+
+        Args:
+            select_ids (List[int]): list of index to select. Max number of index to be selected is no more than 4.
+        """
         if not self.search_results:
             raise ValueError('No search results to select from.')
 
