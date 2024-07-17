@@ -229,7 +229,7 @@ class MindSearchAgent(BaseAgent):
                       ptr,
                       as_dict=False):
         for node_name, node, adj in self.execute_code(code):
-            if as_dict:
+            if as_dict and 'detail' in node:
                 node['detail'] = asdict(node['detail'])
             agent_return.nodes[node_name] = node
             agent_return.adjacency_list[node_name] = adj
