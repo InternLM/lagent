@@ -1,12 +1,17 @@
+import asyncio
 import json
 import logging
+# import os
 from dataclasses import asdict, dataclass
 from typing import Dict, List, Optional, Union
 
+import janus
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
+
+from lagent.schema import AgentStatusCode
 
 
 @dataclass
@@ -134,6 +139,8 @@ def init_agent(cfg):
     return agent
 
 
+# agent = os.environ.get('agent_cfg', dict())
+
 app = FastAPI(docs_url='/')
 
 app.add_middleware(
@@ -160,29 +167,48 @@ async def run(request: GenerationParams):
 
     async def generate():
         try:
-            for response in agent.stream_chat(inputs, as_dict=True):
+            queue = janus.Queue()
+
+            # 使用 run_in_executor 将同步生成器包装成异步生成器
+            def sync_generator_wrapper():
+                try:
+                    for response in agent.stream_chat(
+                            inputs, return_mode='dict'):
+                        queue.sync_q.put(response)
+                except KeyError as e:
+                    logging.error(f'KeyError in sync_generator_wrapper: {e}')
+
+            async def async_generator_wrapper():
+                loop = asyncio.get_event_loop()
+                loop.run_in_executor(None, sync_generator_wrapper)
+                while True:
+                    response = await queue.async_q.get()
+                    yield response
+                    if not isinstance(
+                            response,
+                            tuple) and response.state == AgentStatusCode.END:
+                        break
+
+            async for response in async_generator_wrapper():
                 if isinstance(response, tuple):
                     agent_return, node_name = response
                 else:
                     agent_return = response
                     node_name = None
-                yield {
-                    'data':
-                    json.dumps(
-                        dict(
-                            response=asdict(agent_return),
-                            current_node=node_name),
-                        ensure_ascii=False)
-                }
-        except RuntimeError as exc:
+                response_json = json.dumps(
+                    dict(
+                        response=asdict(agent_return), current_node=node_name),
+                    ensure_ascii=False)
+                yield {'data': response_json}
+                # yield f'data: {response_json}\n\n'
+        except Exception as exc:
             msg = 'An error occurred while generating the response.'
             logging.exception(msg)
-            yield {
-                'data':
-                json.dumps(
-                    dict(error=dict(msg=msg, details=str(exc))),
-                    ensure_ascii=False)
-            }
+            response_json = json.dumps(
+                dict(error=dict(msg=msg, details=str(exc))),
+                ensure_ascii=False)
+            yield {'data': response_json}
+            # yield f'data: {response_json}\n\n'
 
     return EventSourceResponse(generate())
 
