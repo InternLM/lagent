@@ -36,7 +36,7 @@ class SearcherAgent(Internlm2Agent):
         print(colored(f'current query: {message}', 'green'))
         for agent_return in super().stream_chat(message, **kwargs):
             agent_return.type = 'searcher'
-            agent_return.content = message
+            agent_return.content = question
             yield deepcopy(agent_return)
 
 
@@ -163,6 +163,7 @@ class MindSearchAgent(BaseAgent):
                  protocol=MindSearchProtocol(),
                  max_turn=3):
         self.local_dict = {}
+        self.ptr = 0
         self.llm = llm
         self.max_turn = max_turn
         WebSearchGraph.searcher_cfg = searcher_cfg
@@ -173,9 +174,9 @@ class MindSearchAgent(BaseAgent):
             message = [{'role': 'user', 'content': message}]
         elif isinstance(message, dict):
             message = [message]
-
+        self.local_dict.clear()
+        self.ptr = 0
         inner_history = message[:]
-        ptr = 0
         agent_return = AgentReturn()
         agent_return.type = 'planner'
         agent_return.nodes = {}
@@ -206,8 +207,8 @@ class MindSearchAgent(BaseAgent):
             print(colored(response, 'blue'))
 
             if code:
-                yield from self._process_code(agent_return, inner_history,
-                                              code, ptr,
+                yield from self._process_code(agent_return,
+                                              inner_history, code,
                                               kwargs.get('as_dict', False))
             else:
                 agent_return.state = AgentStatusCode.END
@@ -222,12 +223,7 @@ class MindSearchAgent(BaseAgent):
             return AgentStatusCode.PLUGIN_START if model_state == ModelStatusCode.END else AgentStatusCode.PLUGIN_START
         return AgentStatusCode.ANSWER_ING if agent_return.nodes and 'response' in agent_return.nodes else AgentStatusCode.STREAM_ING
 
-    def _process_code(self,
-                      agent_return,
-                      inner_history,
-                      code,
-                      ptr,
-                      as_dict=False):
+    def _process_code(self, agent_return, inner_history, code, as_dict=False):
         for node_name, node, adj in self.execute_code(code):
             if as_dict and 'detail' in node:
                 node['detail'] = asdict(node['detail'])
@@ -236,7 +232,8 @@ class MindSearchAgent(BaseAgent):
             if not adj:
                 yield deepcopy((agent_return, node_name))
 
-        reference = self._generate_reference(agent_return, code, ptr)
+        reference, references_url = self._generate_reference(
+            agent_return, code)
         inner_history.append({
             'role': 'tool',
             'content': code,
@@ -249,9 +246,10 @@ class MindSearchAgent(BaseAgent):
         })
         agent_return.inner_steps = deepcopy(inner_history)
         agent_return.state = AgentStatusCode.PLUGIN_RETURN
+        agent_return.references.update(references_url)
         yield deepcopy(agent_return)
 
-    def _generate_reference(self, agent_return, code, ptr):
+    def _generate_reference(self, agent_return, code):
         node_list = [
             node.strip().strip('\"').strip('\'')
             for node in re.findall(r'graph.node\((.*?)\)', code)
@@ -259,16 +257,26 @@ class MindSearchAgent(BaseAgent):
         if 'add_response_node' in code:
             return self._protocol.response_prompt
         references = []
+        references_url = dict()
         for node_name in node_list:
+            ref_results = agent_return.nodes[node_name]['actions'][0][
+                'result'][0]['content']
+            ref_results = json.loads(ref_results)
+            ref2url = {idx: item['url'] for idx, item in ref_results.items()}
             ref = f"## {node_name}\n\n{agent_return.nodes[node_name]['response']}\n"
             updated_ref = re.sub(
                 r'\[\[(\d+)\]\]',
-                lambda match: f'[[{int(match.group(1)) + ptr}]]', ref)
+                lambda match: f'[[{int(match.group(1)) + self.ptr}]]', ref)
             numbers = [int(n) for n in re.findall(r'\[\[(\d+)\]\]', ref)]
+            assert all(str(elem) in ref2url for elem in numbers)
             if numbers:
-                ptr += max(numbers) + 1
+                references_url.update({
+                    str(int(idx) + self.ptr): url
+                    for idx, url in ref2url.items()
+                })
+                self.ptr += max(numbers) + 1
             references.append(updated_ref)
-        return '\n'.join(references)
+        return '\n'.join(references), references_url
 
     def execute_code(self, command: str):
 
