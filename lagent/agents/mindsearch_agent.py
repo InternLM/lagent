@@ -102,7 +102,6 @@ class MindSearchProtocol(Internlm2Protocol):
 
 class WebSearchGraph:
     end_signal = 'end'
-    searcher_resp_queue = queue.Queue()
     searcher_cfg = dict()
 
     def __init__(self):
@@ -110,6 +109,7 @@ class WebSearchGraph:
         self.adjacency_list = defaultdict(list)
         self.executor = ThreadPoolExecutor(max_workers=10)
         self.future_to_query = dict()
+        self.searcher_resp_queue = queue.Queue()
 
     def add_root_node(self, node_content, node_name='root'):
         self.nodes[node_name] = dict(content=node_content, type='root')
@@ -227,13 +227,14 @@ class MindSearchAgent(BaseAgent):
         for node_name, node, adj in self.execute_code(code):
             if as_dict and 'detail' in node:
                 node['detail'] = asdict(node['detail'])
-            agent_return.nodes[node_name] = node
-            agent_return.adjacency_list[node_name] = adj
             if not adj:
+                agent_return.nodes[node_name] = node
                 yield deepcopy((agent_return, node_name))
+            else:
+                agent_return.adjacency_list[node_name] = adj
 
         reference, references_url = self._generate_reference(
-            agent_return, code)
+            agent_return, code, as_dict)
         inner_history.append({
             'role': 'tool',
             'content': code,
@@ -249,18 +250,22 @@ class MindSearchAgent(BaseAgent):
         agent_return.references.update(references_url)
         yield deepcopy(agent_return)
 
-    def _generate_reference(self, agent_return, code):
+    def _generate_reference(self, agent_return, code, as_dict):
         node_list = [
             node.strip().strip('\"').strip('\'')
             for node in re.findall(r'graph.node\((.*?)\)', code)
         ]
         if 'add_response_node' in code:
-            return self._protocol.response_prompt
+            return self._protocol.response_prompt, dict()
         references = []
         references_url = dict()
         for node_name in node_list:
-            ref_results = agent_return.nodes[node_name]['actions'][0][
-                'result'][0]['content']
+            if as_dict:
+                ref_results = agent_return.nodes[node_name]['detail'][
+                    'actions'][0]['result'][0]['content']
+            else:
+                ref_results = agent_return.nodes[node_name]['detail'].actions[
+                    0].result[0]['content']
             ref_results = json.loads(ref_results)
             ref2url = {idx: item['url'] for idx, item in ref_results.items()}
             ref = f"## {node_name}\n\n{agent_return.nodes[node_name]['response']}\n"
@@ -271,8 +276,8 @@ class MindSearchAgent(BaseAgent):
             assert all(str(elem) in ref2url for elem in numbers)
             if numbers:
                 references_url.update({
-                    str(int(idx) + self.ptr): url
-                    for idx, url in ref2url.items()
+                    str(idx + self.ptr): ref2url[str(idx)]
+                    for idx in set(numbers)
                 })
                 self.ptr += max(numbers) + 1
             references.append(updated_ref)
@@ -314,7 +319,8 @@ class MindSearchAgent(BaseAgent):
 
         while True:
             try:
-                item = WebSearchGraph.searcher_resp_queue.get(timeout=60)
+                item = self.local_dict.get('graph').searcher_resp_queue.get(
+                    timeout=60)
                 if item is WebSearchGraph.end_signal:
                     for node_name in ordered_nodes:
                         # resp = None

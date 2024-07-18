@@ -90,5 +90,5 @@ class AgentReturn:
     inner_steps: List = field(default_factory=list)
     nodes: Dict = None
     adjacency_list: Dict = None
-    references: Dict = dict()
+    references: Dict = field(default_factory=dict)
     errmsg: Optional[str] = None
