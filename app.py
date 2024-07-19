@@ -86,11 +86,7 @@ def init_agent(cfg):
     if cfg['type'] == 'MindSearchAgent' and searcher_cfg is None:
         searcher_cfg = dict(
             llm=llm,
-            plugin=[
-                dict(
-                    type='BingBrowser',
-                    api_key='8900c5f8d66a4df9afefd964aadead53')
-            ],
+            plugin=[dict(type='BingBrowser', api_key='Your API Key')],
             protocol=dict(
                 type='MindSearchProtocol',
                 meta_prompt=datetime.now().strftime(
