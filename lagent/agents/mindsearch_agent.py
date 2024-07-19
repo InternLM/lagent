@@ -64,15 +64,15 @@ class MindSearchProtocol(Internlm2Protocol):
         execute: Dict = dict(
             role='execute', begin='', end='', fallback_role='environment'),
     ) -> None:
-        self.meta_prompt = meta_prompt
-        self.roles_cfg = dict(tool=tool, language=language)
-        self.language = language
-        self.execute = execute
-        self.tool = tool
-        self.few_shot = few_shot
-        self.interpreter_prompt = interpreter_prompt
-        self.plugin_prompt = plugin_prompt
         self.response_prompt = response_prompt
+        super().__init__(
+            meta_prompt=meta_prompt,
+            interpreter_prompt=interpreter_prompt,
+            plugin_prompt=plugin_prompt,
+            few_shot=few_shot,
+            language=language,
+            tool=tool,
+            execute=execute)
 
     def format(self,
                inner_step: List[Dict],
