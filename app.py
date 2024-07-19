@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-# import os
+import os
 from dataclasses import asdict, dataclass
 from typing import Dict, List, Optional, Union
 
@@ -67,7 +67,7 @@ def init_agent(cfg):
         llm_cfg = dict(
             type='LMDeployClient',
             model_name='internlm2-chat-7b',
-            url='http://22.8.69.5:23333',
+            url=os.environ.get('LLM_URL', 'http://localhost:23333'),
             meta_template=INTERNLM2_META,
             max_new_tokens=4096,
             top_p=0.8,
@@ -86,7 +86,11 @@ def init_agent(cfg):
     if cfg['type'] == 'MindSearchAgent' and searcher_cfg is None:
         searcher_cfg = dict(
             llm=llm,
-            plugin=[dict(type='BingBrowser', api_key='Your API Key')],
+            plugin=[
+                dict(
+                    type='BingBrowser',
+                    api_key='8900c5f8d66a4df9afefd964aadead53')
+            ],
             protocol=dict(
                 type='MindSearchProtocol',
                 meta_prompt=datetime.now().strftime(
