@@ -1,24 +1,27 @@
 from datetime import datetime
 
-from lagent.actions import ActionExecutor
-from lagent.actions import BingBrowser
+from lagent.actions import ActionExecutor, BingBrowser
 from lagent.agents.mindsearch_agent import MindSearchAgent, MindSearchProtocol
 from lagent.agents.mindsearch_prompt import GRAPH_PROMPT_CN, searcher_input_template_cn, searcher_system_prompt_cn
-from lagent.llms import INTERNLM2_META, GPTAPI
+from lagent.llms import GPTAPI
 
 url = 'https://puyu.staging.openxlab.org.cn/puyu/api/v1/chat/completions'
 llm = GPTAPI(
     model_type='internlm2.5-api-7b-0627',
+    openai_api_base=url,
+    key='YOUR API KEY',
     meta_template=[
         dict(role='system', api_role='system'),
         dict(role='user', api_role='user'),
         dict(role='assistant', api_role='assistant'),
-        dict(role='environment', api_role='environment'),
+        dict(role='environment', api_role='system')
     ],
-    openai_api_base=url,
-    key='YOUR API KEY',
-    stop_words=['<|im_end|>'],
-)
+    top_p=0.8,
+    top_k=1,
+    temperature=0.8,
+    max_new_tokens=8192,
+    repetition_penalty=1.02,
+    stop_words=['<|im_end|>'])
 
 agent = MindSearchAgent(
     llm=llm,
