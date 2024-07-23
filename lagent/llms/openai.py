@@ -73,6 +73,8 @@ class GPTAPI(BaseAPIModel):
             retry=retry,
             **gen_params)
         self.gen_params.pop('top_k')
+        if not model_type.lower().startswith('internlm'):
+            self.gen_params.pop('skip_special_tokens')
         self.logger = getLogger(__name__)
 
         if isinstance(key, str):
