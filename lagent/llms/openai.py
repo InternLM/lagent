@@ -284,6 +284,10 @@ class GPTAPI(BaseAPIModel):
                     if decoded[:6] == 'data: ':
                         decoded = decoded[6:]
                     response = json.loads(decoded)
+                    if 'code' in response and response['code'] == -20003:
+                        # Context exceeds maximum length
+                        yield ''
+                        return
                     choice = response['choices'][0]
                     if choice['finish_reason'] == 'stop':
                         return

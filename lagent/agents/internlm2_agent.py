@@ -358,6 +358,7 @@ class Internlm2Agent(BaseAgent):
             if name:
                 action_return: ActionReturn = executor(action['name'],
                                                        action['parameters'])
+                action_return.type = action['name']
                 action_return.thought = language
                 agent_return.actions.append(action_return)
                 print(colored(action_return.result, 'magenta'))
