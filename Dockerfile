@@ -1,39 +1,19 @@
-# 使用官方的 Python 镜像作为基础镜像
-FROM python:3.10-slim
+# 使用Dockerfile-base制作的镜像作为基础镜像
+FROM lagent-fastapi-puyu:latest
 
-# 安装必要的工具
-RUN apt-get update && apt-get install -y \
-    wget \
-    bzip2 \
-    git \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+ARG PUYU_API_KEY
+ENV PUYU_API_KEY=${PUYU_API_KEY}
 
-# 下载并安装 Miniconda
-RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
-    /bin/bash /tmp/miniconda.sh -b -p /opt/conda && \
-    rm /tmp/miniconda.sh
+ARG BING_API_KEY
+ENV BING_API_KEY=${BING_API_KEY}
 
-ARG LLM_URL
-ENV LLM_URL=${LLM_URL}
-
-# 设置环境变量
-ENV PATH=/opt/conda/bin:$PATH
-
-# 创建并激活 fastapi 环境
-RUN conda create --name fastapi python=3.10 -y
+# 克隆git仓库
+RUN git clone --branch ljn/fastapi https://github.com/liujiangning30/lagent.git /app
+WORKDIR /app
 
 # 激活环境并安装依赖包
 RUN /bin/bash -c "source activate fastapi && \
-    pip install sse-starlette janus pyvis -i https://pypi.tuna.tsinghua.edu.cn/simple && \
-    pip install lmdeploy==0.2.3 -i https://pypi.tuna.tsinghua.edu.cn/simple && \
-    pip install git+https://github.com/liujiangning30/lagent@ljn/fastapi -i https://pypi.tuna.tsinghua.edu.cn/simple"
-
-# 设置工作目录
-WORKDIR /app
-
-# 复制当前目录内容到工作目录
-COPY . /app
+    pip install -e . -i https://pypi.tuna.tsinghua.edu.cn/simple"
 
 # 暴露 FastAPI 默认端口
 EXPOSE 8000

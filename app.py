@@ -29,7 +29,8 @@ def init_agent(cfg):
     import lagent.llms as llm_factory
     from lagent.actions import ActionExecutor
     from lagent.agents.mindsearch_prompt import GRAPH_PROMPT_CN, searcher_input_template_cn, searcher_system_prompt_cn
-    from lagent.llms import INTERNLM2_META
+
+    # from lagent.llms import INTERNLM2_META
 
     def init_module(module_cfg, module_factory):
         try:
@@ -64,15 +65,33 @@ def init_agent(cfg):
 
     llm_cfg = cfg.get('llm', None)
     if not llm_cfg:
+        # llm_cfg = dict(
+        #     type='LMDeployClient',
+        #     model_name='internlm2-chat-7b',
+        #     url=os.environ.get('LLM_URL', 'http://localhost:23333'),
+        #     meta_template=INTERNLM2_META,
+        #     max_new_tokens=4096,
+        #     top_p=0.8,
+        #     top_k=1,
+        #     temperature=0.8,
+        #     repetition_penalty=1.02,
+        #     stop_words=['<|im_end|>'])
+        url = 'https://puyu.openxlab.org.cn/puyu/api/v1/chat/completions'
         llm_cfg = dict(
-            type='LMDeployClient',
-            model_name='internlm2-chat-7b',
-            url=os.environ.get('LLM_URL', 'http://localhost:23333'),
-            meta_template=INTERNLM2_META,
-            max_new_tokens=4096,
+            type='GPTAPI',
+            model_type='internlm2.5-latest',
+            openai_api_base=url,
+            key=os.environ.get('PUYU_API_KEY', 'YOUR PUYU API KEY'),
+            meta_template=[
+                dict(role='system', api_role='system'),
+                dict(role='user', api_role='user'),
+                dict(role='assistant', api_role='assistant'),
+                dict(role='environment', api_role='environment')
+            ],
             top_p=0.8,
             top_k=1,
             temperature=0.8,
+            max_new_tokens=8192,
             repetition_penalty=1.02,
             stop_words=['<|im_end|>'])
     llm = init_module(llm_cfg, llm_factory)
@@ -86,7 +105,12 @@ def init_agent(cfg):
     if cfg['type'] == 'MindSearchAgent' and searcher_cfg is None:
         searcher_cfg = dict(
             llm=llm,
-            plugin=[dict(type='BingBrowser', api_key='Your API Key')],
+            plugin=[
+                dict(
+                    type='BingBrowser',
+                    api_key=os.environ.get('BING_API_KEY',
+                                           'YOUR BING API KEY'))
+            ],
             protocol=dict(
                 type='MindSearchProtocol',
                 meta_prompt=datetime.now().strftime(
