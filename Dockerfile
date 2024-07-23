@@ -1,5 +1,5 @@
 # 使用Dockerfile-base制作的镜像作为基础镜像
-FROM lagent-fastapi-puyu:latest
+FROM lagent-fastapi-base:latest
 
 ARG PUYU_API_KEY
 ENV PUYU_API_KEY=${PUYU_API_KEY}
