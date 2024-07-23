@@ -133,7 +133,7 @@ class WebSearchGraph:
                 self.nodes[node_name]['response'] = answer.response
                 self.nodes[node_name]['detail'] = answer
             except Exception as e:
-                logger.error(f'Error in model_stream_thread: {e}')
+                logger.exception(f'Error in model_stream_thread: {e}')
 
         self.future_to_query[self.executor.submit(
             model_stream_thread)] = f'{node_name}-{node_content}'
@@ -306,7 +306,7 @@ class MindSearchAgent(BaseAgent):
                 plan_graph.future_to_query.clear()
                 plan_graph.searcher_resp_queue.put(plan_graph.end_signal)
             except Exception as e:
-                logger.error(f'Error executing code: {e}')
+                logger.exception(f'Error executing code: {e}')
 
         command = extract_code(command)
         producer_thread = threading.Thread(
