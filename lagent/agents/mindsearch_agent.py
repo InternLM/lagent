@@ -273,8 +273,8 @@ class MindSearchAgent(BaseAgent):
                 r'\[\[(\d+)\]\]',
                 lambda match: f'[[{int(match.group(1)) + self.ptr}]]', ref)
             numbers = [int(n) for n in re.findall(r'\[\[(\d+)\]\]', ref)]
-            assert all(str(elem) in ref2url for elem in numbers)
             if numbers:
+                assert all(str(elem) in ref2url for elem in numbers)
                 references_url.update({
                     str(idx + self.ptr): ref2url[str(idx)]
                     for idx in set(numbers)
