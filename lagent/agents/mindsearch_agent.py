@@ -252,8 +252,8 @@ class MindSearchAgent(BaseAgent):
 
     def _generate_reference(self, agent_return, code, as_dict):
         node_list = [
-            node.strip().strip('\"').strip('\'')
-            for node in re.findall(r'graph.node\((.*?)\)', code)
+            node.strip().strip('\"') for node in re.findall(
+                r'graph\.node\("((?:[^"\\]|\\.)*?)"\)', code)
         ]
         if 'add_response_node' in code:
             return self._protocol.response_prompt, dict()
