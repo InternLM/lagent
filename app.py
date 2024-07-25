@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from typing import Dict, List, Optional, Union
 
 import janus
@@ -11,6 +12,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
+import lagent.actions as action_factory
+import lagent.agents as agent_factory
+import lagent.llms as llm_factory
+from lagent.actions import ActionExecutor
+from lagent.agents.mindsearch_prompt import (GRAPH_PROMPT_CN,
+                                             searcher_context_template_cn,
+                                             searcher_input_template_cn,
+                                             searcher_system_prompt_cn)
 from lagent.schema import AgentStatusCode
 
 
@@ -22,13 +31,6 @@ class InvalidConfig:
 
 
 def init_agent(cfg):
-    from datetime import datetime
-
-    import lagent.actions as action_factory
-    import lagent.agents as agent_factory
-    import lagent.llms as llm_factory
-    from lagent.actions import ActionExecutor
-    from lagent.agents.mindsearch_prompt import GRAPH_PROMPT_CN, searcher_input_template_cn, searcher_system_prompt_cn
 
     # from lagent.llms import INTERNLM2_META
 
@@ -117,7 +119,9 @@ def init_agent(cfg):
                     'The current date is %Y-%m-%d.'),
                 plugin_prompt=searcher_system_prompt_cn,
             ),
-            template=searcher_input_template_cn)
+            template=dict(
+                input=searcher_input_template_cn,
+                context=searcher_context_template_cn))
     if searcher_cfg:
         # searcher initialization
         if 'type' in searcher_cfg:
@@ -161,6 +165,21 @@ def init_agent(cfg):
         cfg['interpreter_executor'] = executors[1]
     agent = init_module(cfg, agent_factory)
     return agent
+
+
+def convert_adjacency_to_tree(adjacency_input, root_name):
+
+    def build_tree(node_name):
+        node = {'name': node_name, 'children': []}
+        if node_name in adjacency_input:
+            for child in adjacency_input[node_name]:
+                child_node = build_tree(child['name'])
+                child_node['state'] = child['state']
+                child_node['id'] = child['id']
+                node['children'].append(child_node)
+        return node
+
+    return build_tree(root_name)
 
 
 # agent = os.environ.get('agent_cfg', dict())
@@ -218,6 +237,11 @@ async def run(request: GenerationParams):
                 else:
                     agent_return = response
                     node_name = None
+                adjacency_list = convert_adjacency_to_tree(
+                    agent_return.adjacency_list, 'root')
+                assert adjacency_list[
+                    'name'] == 'root' and 'children' in adjacency_list
+                agent_return.adjacency_list = adjacency_list['children']
                 response_json = json.dumps(
                     dict(
                         response=asdict(agent_return), current_node=node_name),

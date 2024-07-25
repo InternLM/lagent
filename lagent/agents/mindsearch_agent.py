@@ -3,6 +3,7 @@ import logging
 import queue
 import re
 import threading
+import uuid
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
@@ -30,9 +31,17 @@ class SearcherAgent(Internlm2Agent):
     def stream_chat(self,
                     question: str,
                     root_question: str = None,
-                    parent_response: List[str] = None,
+                    parent_response: List[dict] = None,
                     **kwargs) -> AgentReturn:
-        message = self.template.format(question=question, topic=root_question)
+        message = self.template['input'].format(
+            question=question, topic=root_question)
+        if parent_response:
+            if 'context' in self.template:
+                parent_response = [
+                    self.template['context'].format(**item)
+                    for item in parent_response
+                ]
+                message = '\n'.join(parent_response + [message])
         print(colored(f'current query: {message}', 'green'))
         for agent_return in super().stream_chat(message, **kwargs):
             agent_return.type = 'searcher'
@@ -123,8 +132,21 @@ class WebSearchGraph:
         def model_stream_thread():
             agent = SearcherAgent(**self.searcher_cfg)
             try:
-                for answer in agent.stream_chat(node_content,
-                                                self.nodes['root']['content']):
+                parent_nodes = []
+                for start_node, adj in self.adjacency_list.items():
+                    for neighbor in adj:
+                        if node_name == neighbor[
+                                'name'] and start_node in self.nodes and 'response' in self.nodes[
+                                    start_node]:
+                            parent_nodes.append(self.nodes[start_node])
+                parent_response = [
+                    dict(question=node['content'], answer=node['response'])
+                    for node in parent_nodes
+                ]
+                for answer in agent.stream_chat(
+                        node_content,
+                        self.nodes['root']['content'],
+                        parent_response=parent_response):
                     self.searcher_resp_queue.put(
                         deepcopy(
                             (node_name,
@@ -143,7 +165,8 @@ class WebSearchGraph:
         self.searcher_resp_queue.put((node_name, self.nodes[node_name], []))
 
     def add_edge(self, start_node, end_node):
-        self.adjacency_list[start_node].append(end_node)
+        self.adjacency_list[start_node].append(
+            dict(id=str(uuid.uuid4()), name=end_node, state=2))
         self.searcher_resp_queue.put((start_node, self.nodes[start_node],
                                       self.adjacency_list[start_node]))
 
@@ -229,10 +252,23 @@ class MindSearchAgent(BaseAgent):
                 node['detail'] = asdict(node['detail'])
             if not adj:
                 agent_return.nodes[node_name] = node
-                yield deepcopy((agent_return, node_name))
             else:
                 agent_return.adjacency_list[node_name] = adj
-
+            # state  1进行中，2未开始，3已结束
+            for start_node, neighbors in agent_return.adjacency_list.items():
+                for neighbor in neighbors:
+                    if neighbor['name'] not in agent_return.nodes:
+                        state = 2
+                    elif 'detail' not in agent_return.nodes[neighbor['name']]:
+                        state = 2
+                    elif agent_return.nodes[neighbor['name']][
+                            'detail'].state == AgentStatusCode.END:
+                        state = 3
+                    else:
+                        state = 1
+                    neighbor['state'] = state
+            if not adj:
+                yield deepcopy((agent_return, node_name))
         reference, references_url = self._generate_reference(
             agent_return, code, as_dict)
         inner_history.append({
@@ -340,10 +376,16 @@ class MindSearchAgent(BaseAgent):
                     if not active_node and ordered_nodes:
                         active_node = ordered_nodes[0]
                     while active_node and responses[active_node]:
-                        item = responses[active_node].pop(0)
+                        if 'detail' in responses[active_node][-1][
+                                1] and responses[active_node][-1][1][
+                                    'detail'].state == AgentStatusCode.END:
+                            item = responses[active_node][-1]
+                        else:
+                            item = responses[active_node].pop(0)
                         if 'detail' in item[1] and item[1][
                                 'detail'].state == AgentStatusCode.END:
                             ordered_nodes.pop(0)
+                            responses[active_node].clear()
                             active_node = None
                         yield deepcopy(item)
             except queue.Empty:
