@@ -16,11 +16,18 @@ import lagent.actions as action_factory
 import lagent.agents as agent_factory
 import lagent.llms as llm_factory
 from lagent.actions import ActionExecutor
-from lagent.agents.mindsearch_prompt import (GRAPH_PROMPT_CN,
-                                             searcher_context_template_cn,
-                                             searcher_input_template_cn,
-                                             searcher_system_prompt_cn)
+from lagent.agents.mindsearch_prompt import (FINAL_RESPONSE_EN,
+                                             GRAPH_PROMPT_EN,
+                                             searcher_context_template_en,
+                                             searcher_input_template_en,
+                                             searcher_system_prompt_en)
 from lagent.schema import AgentStatusCode
+
+# from lagent.agents.mindsearch_prompt import (GRAPH_PROMPT_CN,
+#                                              searcher_context_template_cn,
+#                                              searcher_input_template_cn,
+#                                              searcher_system_prompt_cn,
+#                                              FINAL_RESPONSE_CN)
 
 
 @dataclass
@@ -117,11 +124,11 @@ def init_agent(cfg):
                 type='MindSearchProtocol',
                 meta_prompt=datetime.now().strftime(
                     'The current date is %Y-%m-%d.'),
-                plugin_prompt=searcher_system_prompt_cn,
+                plugin_prompt=searcher_system_prompt_en,
             ),
             template=dict(
-                input=searcher_input_template_cn,
-                context=searcher_context_template_cn))
+                input=searcher_input_template_en,
+                context=searcher_context_template_en))
     if searcher_cfg:
         # searcher initialization
         if 'type' in searcher_cfg:
@@ -146,8 +153,8 @@ def init_agent(cfg):
             type='MindSearchProtocol',
             meta_prompt=datetime.now().strftime(
                 'The current date is %Y-%m-%d.'),
-            interpreter_prompt=GRAPH_PROMPT_CN,
-            response_prompt='请根据上文内容对问题给出详细的回复')
+            interpreter_prompt=GRAPH_PROMPT_EN,
+            response_prompt=FINAL_RESPONSE_EN)
     if cfg.get('max_turn', None) is None:
         cfg['max_turn'] = 10
     # agent initialization
