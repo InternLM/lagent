@@ -20,8 +20,8 @@ def create_network_graph(nodes, adjacency_list):
             node_id, label=node_id, title=title, color='#FF5733', size=25)
     for node_id, neighbors in adjacency_list.items():
         for neighbor in neighbors:
-            if neighbor in nodes:
-                net.add_edge(node_id, neighbor)
+            if neighbor['name'] in nodes:
+                net.add_edge(node_id, neighbor['name'])
     net.show_buttons(filter_=['physics'])
     return net
 
