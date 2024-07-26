@@ -125,8 +125,6 @@ const RenderTest = () => {
         }
       })
       const firstArticle = articles[0].getBoundingClientRect();
-      // const lastArticle = articles[articles.length - 1].getBoundingClientRect();
-      // console.log('generateWidth---------------', maxRight, maxRight - firstArticle.left + 200, mapWidth);
       if (maxRight - firstArticle.left + 200 > mapWidth) {
         return maxRight - firstArticle.left + 200
       } else {
@@ -180,7 +178,6 @@ const RenderTest = () => {
   const renderSearchList = () => {
     let outputIndex = 0;
     const content = JSON.parse(currentNode.actions[currentStep].result[0].content);
-    // console.log('render search list------', currentStep, content);
 
     const arr: any = Object.keys(content).map(item => {
       return { id: item, ...content[item] };
@@ -200,7 +197,6 @@ const RenderTest = () => {
 
   // 高亮searchList
   const highLightSearchList = (ids: any) => {
-    // console.log('high light --------', currentStep);
     setSelectedIds([]);
     const newStep = currentStep + 1;
     setCurrentStep(newStep);
@@ -229,7 +225,6 @@ const RenderTest = () => {
   // 渲染结论
   const renderConclusion = () => {
     const res = window.localStorage.getItem('nodeRes') || '';
-    // console.log('node conclusion is--------------', res);
     const replaced = replaceStr(res);
     // setTimeout(() => { setCollapseInfo([false, false]); }, 2000);
     setCollapseInfo([false, false]);
@@ -251,7 +246,6 @@ const RenderTest = () => {
 
   const renderSteps = () => {
     setCurrentNodeRendering(true);
-    // console.log('render step----', currentStep, currentNode?.actions?.length);
     const queryEndCallback = () => {
       if (currentNode.actions[currentStep].result[0].content) {
         if (currentNode.actions[currentStep].type === "BingBrowser.search" || currentNode.actions[currentStep].type === "BingBrowser") {
@@ -267,7 +261,6 @@ const RenderTest = () => {
       }
     };
     if (currentNode.actions[currentStep].thought) {
-      // console.log('start to render current step------', currentNode.current_node, currentStep);
       renderDraft(currentNode.actions[currentStep].thought, `stepDraft-${currentStep}`, thoughtEndCallback);
     }
   }
@@ -281,7 +274,6 @@ const RenderTest = () => {
 
   // 渲染过程中保持渲染文字可见
   const keepScrollTop = (divA: any, divB: any) => {
-    console.log('keepScrollTop------');
     // 获取 divB 的当前高度  
     const bHeight = divB.offsetHeight;
 
@@ -293,7 +285,6 @@ const RenderTest = () => {
   };
 
   useEffect(() => {
-    // console.log('adjlist-----', adjList);
     setRenderData([
       {
         id: 0,
@@ -337,12 +328,10 @@ const RenderTest = () => {
 
     if (obj?.current_node && obj?.response?.state === 3) {
       // 当node节点的数据可以开始渲染时，给currentnode赋值
-      // console.log('updadddddddd------', obj.response.nodes[obj.current_node]?.detail);
       // update conclusion
       if (obj.response.nodes[obj.current_node]?.detail?.actions?.length === 2 &&
         obj.response.nodes[obj.current_node]?.detail?.state === 1 &&
         obj.response.nodes[obj.current_node]?.detail.response) {
-        // console.log('render response---------', obj.response.nodes[obj.current_node]?.detail.response);
         window.localStorage.setItem('nodeRes', obj.response.nodes[obj.current_node]?.detail.response);
       }
       if (obj.current_node &&
@@ -361,7 +350,6 @@ const RenderTest = () => {
       if (!selectedIds.length &&
         obj.response.nodes[obj.current_node]?.detail?.actions?.[1]?.type === 'BingBrowser.select' &&
         (obj.response.nodes[obj.current_node]?.detail?.state === 1)) {
-        // console.log('hightlight update current node----');
         setSelectedIds(obj.response.nodes[obj.current_node]?.detail?.actions?.[1]?.args?.select_ids || []);
         setCurrentNode({ ...obj.response.nodes[obj.current_node]?.detail, current_node: obj.current_node });
       }
@@ -377,14 +365,12 @@ const RenderTest = () => {
   useEffect(() => {
     if (!hasHighlight.current && selectedIds.length && currentNode?.actions.length === 2) {
       // 渲染高亮的search信息
-      // console.log('should update currentnode-------', currentNode?.actions[1]?.args?.select_ids);
       highLightSearchList(selectedIds);
     }
   }, [selectedIds, currentNode]);
 
   useEffect(() => {
     // 当前节点渲染结束
-    // console.log('before update node-----', nodeName, currentNode, progressEnd);
     if (nodeName && nodeName !== currentNode?.current_node && progressEnd && !isEnd) {
       resetNode(nodeName);
       setMapWidth(generateWidth());
@@ -457,7 +443,6 @@ const RenderTest = () => {
     try {
       setIsWaiting(false);
       const obj = JSON.parse(data);
-      console.log('format obj-----', obj);
       if (!obj.current_node && obj.response.state === 0) {
         console.log('chat is over end-------');
         setChatIsOver(true);
@@ -484,7 +469,6 @@ const RenderTest = () => {
       if (obj.current_node && obj.response.state === 3) {
         setNodeName(obj.current_node);
         // 有node
-        // console.log('has node-------------', obj);
         setObj(obj);
         const newAdjList = obj.response?.adjacency_list;
         if (newAdjList?.length > 0) {
@@ -498,7 +482,7 @@ const RenderTest = () => {
 
   const startEventSource = () => {
     if (!chatIsOver) {
-      alert('有对话进行中！');
+      message.warning('有对话进行中！');
       return;
     }
     setQuestion(stashQuestion);
@@ -511,7 +495,6 @@ const RenderTest = () => {
         }
       ]
     }
-    let count = 0;
     const ctrl = new AbortController();
     eventSource = fetchEventSource(GET_SSE_DATA, {
       method: 'POST',
@@ -520,10 +503,7 @@ const RenderTest = () => {
       },
       body: JSON.stringify(postData),
       onmessage(ev) {
-        // if (count < 1500) {
         formatData(ev.data);
-        count++;
-        // }
       },
       onerror(err) {
         console.log('sse error------', err);
@@ -576,12 +556,12 @@ const RenderTest = () => {
               }
               {
                 !response && <div className={styles.draft}>
-                  {!draftEnd && draft && <div className={styles.loading}>
+                  {/* {!draftEnd && draft && <div className={styles.loading}>
                     <div></div>
                     <div></div>
                     <div></div>
-                  </div>}
-                  {draft}
+                  </div>} */}
+                  <ReactMarkdown rehypePlugins={[rehypeRaw]}>{replaceStr(draft)}</ReactMarkdown>
                 </div>
               }
               {response && <div className={styles.response}>

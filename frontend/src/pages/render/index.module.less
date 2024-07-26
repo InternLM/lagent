@@ -195,6 +195,15 @@
       background: #FFF;
       position: relative;
 
+      :global {
+        .ant-input {
+          &:focus {
+            box-shadow: none !important;
+            outline: 0 !important;
+          }
+        }
+      }
+
       input {
         height: 36px;
         line-height: 36px;
@@ -490,9 +499,10 @@ ul {
 .draft {
   width: 100%;
   white-space: wrap;
-  display: flex;
-  justify-content: flex-start;
-  align-items: flex-start;
+  // display: flex;
+  // justify-content: flex-start;
+  // align-items: flex-start;
+  position: relative;
 
   .loading,
   .loading>div {
@@ -512,6 +522,9 @@ ul {
     border-radius: 50%;
     margin-right: 3px;
     flex-shrink: 0;
+    position: absolute;
+    top: 0;
+    left: 0;
   }
 
   .loading>div {
