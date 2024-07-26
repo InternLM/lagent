@@ -37,3 +37,19 @@ class ActionPreprocessor(Hook):
             response = action_return
         message.content = response
         return message
+
+
+class InternLMActionProcessor(ActionPreprocessor):
+
+    def __init__(self, code_parameter: str = 'command'):
+        self.code_parameter = code_parameter
+
+    def before_action(self, executor, message):
+        assert isinstance(message.formatted, dict) and set(
+            message.formatted) == {'tool_type', 'thought', 'action', 'status'}
+        if isinstance(message.formatted['action'], str):
+            # encapsulate code interpreter arguments
+            message.formatted['action'] = dict(
+                name=next(iter(executor.actions)),
+                parameters={self.code_parameter: message.formatted['action']})
+        return super().before_action(executor, message)

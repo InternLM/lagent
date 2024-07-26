@@ -3,15 +3,21 @@ from collections import OrderedDict
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from lagent.agents.aggregator import DefaultAggregator
-from lagent.agents.hooks import Hook
-from lagent.agents.hooks.hook import RemovableHandle
+from lagent.agents.hooks import Hook, RemovableHandle
 from lagent.llms.base_llm import BaseModel as BaseLLM
 from lagent.memory.base_memory import Memory
 from lagent.prompts.parsers import StrParser
 from lagent.prompts.prompt_template import PromptTemplate
-from lagent.registry import (AGENT_REGISTRY, AGGREGATOR_REGISTRY,
-                             HOOK_REGISTRY, LLM_REGISTRY, MEMORY_REGISTRY,
-                             PARSER_REGISTRY, AutoRegister, ObjectFactory)
+from lagent.registry import (
+    AGENT_REGISTRY,
+    AGGREGATOR_REGISTRY,
+    HOOK_REGISTRY,
+    LLM_REGISTRY,
+    MEMORY_REGISTRY,
+    PARSER_REGISTRY,
+    AutoRegister,
+    ObjectFactory,
+)
 from lagent.schema import AgentMessage
 
 
