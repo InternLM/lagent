@@ -24,6 +24,9 @@
 
    ```bash
    pip install sse-starlette janus pyvis fastapi uvicorn termcolor
+   git clone https://github.com/InternLM/lagent.git
+   cd lagent
+   pip install -e .
    ```
 
 2. 启动应用程序：
