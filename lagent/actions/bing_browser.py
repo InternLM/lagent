@@ -1,3 +1,4 @@
+import json
 import logging
 import random
 import re
@@ -83,7 +84,7 @@ class BingSearch:
                    for domain in self.black_list) and not url.endswith('.pdf'):
                 filtered_results[count] = {
                     'url': url,
-                    'summ': snippet,
+                    'summ': json.dumps(snippet, ensure_ascii=False)[1:-1],
                     'title': title
                 }
                 count += 1

@@ -3,6 +3,7 @@ import logging
 import queue
 import re
 import threading
+import uuid
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
@@ -30,13 +31,21 @@ class SearcherAgent(Internlm2Agent):
     def stream_chat(self,
                     question: str,
                     root_question: str = None,
-                    parent_response: List[str] = None,
+                    parent_response: List[dict] = None,
                     **kwargs) -> AgentReturn:
-        message = self.template.format(question=question, topic=root_question)
+        message = self.template['input'].format(
+            question=question, topic=root_question)
+        if parent_response:
+            if 'context' in self.template:
+                parent_response = [
+                    self.template['context'].format(**item)
+                    for item in parent_response
+                ]
+                message = '\n'.join(parent_response + [message])
         print(colored(f'current query: {message}', 'green'))
         for agent_return in super().stream_chat(message, **kwargs):
             agent_return.type = 'searcher'
-            agent_return.content = message
+            agent_return.content = question
             yield deepcopy(agent_return)
 
 
@@ -64,15 +73,15 @@ class MindSearchProtocol(Internlm2Protocol):
         execute: Dict = dict(
             role='execute', begin='', end='', fallback_role='environment'),
     ) -> None:
-        self.meta_prompt = meta_prompt
-        self.roles_cfg = dict(tool=tool, language=language)
-        self.language = language
-        self.execute = execute
-        self.tool = tool
-        self.few_shot = few_shot
-        self.interpreter_prompt = interpreter_prompt
-        self.plugin_prompt = plugin_prompt
         self.response_prompt = response_prompt
+        super().__init__(
+            meta_prompt=meta_prompt,
+            interpreter_prompt=interpreter_prompt,
+            plugin_prompt=plugin_prompt,
+            few_shot=few_shot,
+            language=language,
+            tool=tool,
+            execute=execute)
 
     def format(self,
                inner_step: List[Dict],
@@ -102,7 +111,6 @@ class MindSearchProtocol(Internlm2Protocol):
 
 class WebSearchGraph:
     end_signal = 'end'
-    searcher_resp_queue = queue.Queue()
     searcher_cfg = dict()
 
     def __init__(self):
@@ -110,6 +118,7 @@ class WebSearchGraph:
         self.adjacency_list = defaultdict(list)
         self.executor = ThreadPoolExecutor(max_workers=10)
         self.future_to_query = dict()
+        self.searcher_resp_queue = queue.Queue()
 
     def add_root_node(self, node_content, node_name='root'):
         self.nodes[node_name] = dict(content=node_content, type='root')
@@ -123,8 +132,21 @@ class WebSearchGraph:
         def model_stream_thread():
             agent = SearcherAgent(**self.searcher_cfg)
             try:
-                for answer in agent.stream_chat(node_content,
-                                                self.nodes['root']['content']):
+                parent_nodes = []
+                for start_node, adj in self.adjacency_list.items():
+                    for neighbor in adj:
+                        if node_name == neighbor[
+                                'name'] and start_node in self.nodes and 'response' in self.nodes[
+                                    start_node]:
+                            parent_nodes.append(self.nodes[start_node])
+                parent_response = [
+                    dict(question=node['content'], answer=node['response'])
+                    for node in parent_nodes
+                ]
+                for answer in agent.stream_chat(
+                        node_content,
+                        self.nodes['root']['content'],
+                        parent_response=parent_response):
                     self.searcher_resp_queue.put(
                         deepcopy(
                             (node_name,
@@ -133,7 +155,7 @@ class WebSearchGraph:
                 self.nodes[node_name]['response'] = answer.response
                 self.nodes[node_name]['detail'] = answer
             except Exception as e:
-                logger.error(f'Error in model_stream_thread: {e}')
+                logger.exception(f'Error in model_stream_thread: {e}')
 
         self.future_to_query[self.executor.submit(
             model_stream_thread)] = f'{node_name}-{node_content}'
@@ -143,7 +165,8 @@ class WebSearchGraph:
         self.searcher_resp_queue.put((node_name, self.nodes[node_name], []))
 
     def add_edge(self, start_node, end_node):
-        self.adjacency_list[start_node].append(end_node)
+        self.adjacency_list[start_node].append(
+            dict(id=str(uuid.uuid4()), name=end_node, state=2))
         self.searcher_resp_queue.put((start_node, self.nodes[start_node],
                                       self.adjacency_list[start_node]))
 
@@ -163,6 +186,7 @@ class MindSearchAgent(BaseAgent):
                  protocol=MindSearchProtocol(),
                  max_turn=3):
         self.local_dict = {}
+        self.ptr = 0
         self.llm = llm
         self.max_turn = max_turn
         WebSearchGraph.searcher_cfg = searcher_cfg
@@ -173,9 +197,9 @@ class MindSearchAgent(BaseAgent):
             message = [{'role': 'user', 'content': message}]
         elif isinstance(message, dict):
             message = [message]
-
+        self.local_dict.clear()
+        self.ptr = 0
         inner_history = message[:]
-        ptr = 0
         agent_return = AgentReturn()
         agent_return.type = 'planner'
         agent_return.nodes = {}
@@ -206,8 +230,8 @@ class MindSearchAgent(BaseAgent):
             print(colored(response, 'blue'))
 
             if code:
-                yield from self._process_code(agent_return, inner_history,
-                                              code, ptr,
+                yield from self._process_code(agent_return,
+                                              inner_history, code,
                                               kwargs.get('as_dict', False))
             else:
                 agent_return.state = AgentStatusCode.END
@@ -222,21 +246,31 @@ class MindSearchAgent(BaseAgent):
             return AgentStatusCode.PLUGIN_START if model_state == ModelStatusCode.END else AgentStatusCode.PLUGIN_START
         return AgentStatusCode.ANSWER_ING if agent_return.nodes and 'response' in agent_return.nodes else AgentStatusCode.STREAM_ING
 
-    def _process_code(self,
-                      agent_return,
-                      inner_history,
-                      code,
-                      ptr,
-                      as_dict=False):
+    def _process_code(self, agent_return, inner_history, code, as_dict=False):
         for node_name, node, adj in self.execute_code(code):
-            if as_dict:
+            if as_dict and 'detail' in node:
                 node['detail'] = asdict(node['detail'])
-            agent_return.nodes[node_name] = node
-            agent_return.adjacency_list[node_name] = adj
+            if not adj:
+                agent_return.nodes[node_name] = node
+            else:
+                agent_return.adjacency_list[node_name] = adj
+            # state  1进行中，2未开始，3已结束
+            for start_node, neighbors in agent_return.adjacency_list.items():
+                for neighbor in neighbors:
+                    if neighbor['name'] not in agent_return.nodes:
+                        state = 2
+                    elif 'detail' not in agent_return.nodes[neighbor['name']]:
+                        state = 2
+                    elif agent_return.nodes[neighbor['name']][
+                            'detail'].state == AgentStatusCode.END:
+                        state = 3
+                    else:
+                        state = 1
+                    neighbor['state'] = state
             if not adj:
                 yield deepcopy((agent_return, node_name))
-
-        reference = self._generate_reference(agent_return, code, ptr)
+        reference, references_url = self._generate_reference(
+            agent_return, code, as_dict)
         inner_history.append({
             'role': 'tool',
             'content': code,
@@ -249,26 +283,41 @@ class MindSearchAgent(BaseAgent):
         })
         agent_return.inner_steps = deepcopy(inner_history)
         agent_return.state = AgentStatusCode.PLUGIN_RETURN
+        agent_return.references.update(references_url)
         yield deepcopy(agent_return)
 
-    def _generate_reference(self, agent_return, code, ptr):
+    def _generate_reference(self, agent_return, code, as_dict):
         node_list = [
-            node.strip().strip('\"').strip('\'')
-            for node in re.findall(r'graph.node\((.*?)\)', code)
+            node.strip().strip('\"') for node in re.findall(
+                r'graph\.node\("((?:[^"\\]|\\.)*?)"\)', code)
         ]
         if 'add_response_node' in code:
-            return self._protocol.response_prompt
+            return self._protocol.response_prompt, dict()
         references = []
+        references_url = dict()
         for node_name in node_list:
+            if as_dict:
+                ref_results = agent_return.nodes[node_name]['detail'][
+                    'actions'][0]['result'][0]['content']
+            else:
+                ref_results = agent_return.nodes[node_name]['detail'].actions[
+                    0].result[0]['content']
+            ref_results = json.loads(ref_results)
+            ref2url = {idx: item['url'] for idx, item in ref_results.items()}
             ref = f"## {node_name}\n\n{agent_return.nodes[node_name]['response']}\n"
             updated_ref = re.sub(
                 r'\[\[(\d+)\]\]',
-                lambda match: f'[[{int(match.group(1)) + ptr}]]', ref)
+                lambda match: f'[[{int(match.group(1)) + self.ptr}]]', ref)
             numbers = [int(n) for n in re.findall(r'\[\[(\d+)\]\]', ref)]
             if numbers:
-                ptr += max(numbers) + 1
+                assert all(str(elem) in ref2url for elem in numbers)
+                references_url.update({
+                    str(idx + self.ptr): ref2url[str(idx)]
+                    for idx in set(numbers)
+                })
+                self.ptr += max(numbers) + 1
             references.append(updated_ref)
-        return '\n'.join(references)
+        return '\n'.join(references), references_url
 
     def execute_code(self, command: str):
 
@@ -293,7 +342,7 @@ class MindSearchAgent(BaseAgent):
                 plan_graph.future_to_query.clear()
                 plan_graph.searcher_resp_queue.put(plan_graph.end_signal)
             except Exception as e:
-                logger.error(f'Error executing code: {e}')
+                logger.exception(f'Error executing code: {e}')
 
         command = extract_code(command)
         producer_thread = threading.Thread(
@@ -306,12 +355,16 @@ class MindSearchAgent(BaseAgent):
 
         while True:
             try:
-                item = WebSearchGraph.searcher_resp_queue.get(timeout=60)
+                item = self.local_dict.get('graph').searcher_resp_queue.get(
+                    timeout=60)
                 if item is WebSearchGraph.end_signal:
                     for node_name in ordered_nodes:
+                        # resp = None
                         for resp in responses[node_name]:
                             yield deepcopy(resp)
-                        assert resp[1]['detail'].state == AgentStatusCode.END
+                        # if resp:
+                        #     assert resp[1][
+                        #         'detail'].state == AgentStatusCode.END
                     break
                 node_name, node, adj = item
                 if node_name in ['root', 'response']:
@@ -323,10 +376,16 @@ class MindSearchAgent(BaseAgent):
                     if not active_node and ordered_nodes:
                         active_node = ordered_nodes[0]
                     while active_node and responses[active_node]:
-                        item = responses[active_node].pop(0)
+                        if 'detail' in responses[active_node][-1][
+                                1] and responses[active_node][-1][1][
+                                    'detail'].state == AgentStatusCode.END:
+                            item = responses[active_node][-1]
+                        else:
+                            item = responses[active_node].pop(0)
                         if 'detail' in item[1] and item[1][
                                 'detail'].state == AgentStatusCode.END:
                             ordered_nodes.pop(0)
+                            responses[active_node].clear()
                             active_node = None
                         yield deepcopy(item)
             except queue.Empty:

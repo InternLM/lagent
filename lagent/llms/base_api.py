@@ -174,7 +174,8 @@ class BaseAPIModel(BaseModel):
             top_k=top_k,
             temperature=temperature,
             repetition_penalty=repetition_penalty,
-            stop_words=stop_words)
+            stop_words=stop_words,
+            skip_special_tokens=False)
 
     def _wait(self):
         """Wait till the next query can be sent.

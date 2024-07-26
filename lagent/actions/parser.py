@@ -72,7 +72,10 @@ class BaseParser:
             outputs = json.dumps(outputs, ensure_ascii=False)
         elif not isinstance(outputs, str):
             outputs = str(outputs)
-        return [{'type': 'text', 'content': outputs}]
+        return [{
+            'type': 'text',
+            'content': outputs.encode('gbk', 'ignore').decode('gbk')
+        }]
 
 
 class JsonParser(BaseParser):

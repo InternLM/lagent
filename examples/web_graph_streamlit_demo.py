@@ -20,8 +20,8 @@ def create_network_graph(nodes, adjacency_list):
             node_id, label=node_id, title=title, color='#FF5733', size=25)
     for node_id, neighbors in adjacency_list.items():
         for neighbor in neighbors:
-            if neighbor in nodes:
-                net.add_edge(node_id, neighbor)
+            if neighbor['name'] in nodes:
+                net.add_edge(node_id, neighbor['name'])
     net.show_buttons(filter_=['physics'])
     return net
 
@@ -274,14 +274,19 @@ def init_agent():
     # from lagent.agents.mindsearch_prompt import GRAPH_PROMPT_EN
     # from lagent.agents.mindsearch_prompt import searcher_input_template_en
     # from lagent.agents.mindsearch_prompt import searcher_system_prompt_en
-    from lagent.agents.mindsearch_prompt import GRAPH_PROMPT_CN, searcher_input_template_cn, searcher_system_prompt_cn
+    from lagent.agents.mindsearch_prompt import (FINAL_RESPONSE_CN,
+                                                 GRAPH_PROMPT_CN,
+                                                 searcher_context_template_cn,
+                                                 searcher_input_template_cn,
+                                                 searcher_system_prompt_cn)
+    # from lagent.agents.mindsearch_prompt import GRAPH_PROMPT_EN, searcher_input_template_en, searcher_system_prompt_en, searcher_context_template_en, FINAL_RESPONSE_EN
     from lagent.llms import INTERNLM2_META, LMDeployClient
 
     # from lagent.llms import GPTAPI
 
     llm = LMDeployClient(
         model_name='internlm2-chat-7b',
-        url='http://22.8.24.123:23333',
+        url='http://22.8.69.5:23333',
         meta_template=INTERNLM2_META,
         max_new_tokens=4096,
         top_p=0.8,
@@ -313,18 +318,20 @@ def init_agent():
         llm=llm,
         searcher_cfg=dict(
             llm=llm,
-            plugin_executor=ActionExecutor(BingBrowser('Your API Key')),
+            plugin_executor=ActionExecutor(BingBrowser('YOUR BING API KEY')),
             protocol=MindSearchProtocol(
                 meta_prompt=datetime.now().strftime(
                     'The current date is %Y-%m-%d.'),
                 plugin_prompt=searcher_system_prompt_cn,
             ),
-            template=searcher_input_template_cn),
+            template=dict(
+                input=searcher_input_template_cn,
+                context=searcher_context_template_cn)),
         protocol=MindSearchProtocol(
             meta_prompt=datetime.now().strftime(
                 'The current date is %Y-%m-%d.'),
             interpreter_prompt=GRAPH_PROMPT_CN,
-            response_prompt='请根据上文内容对问题给出详细的回复'),
+            response_prompt=FINAL_RESPONSE_CN),
         max_turn=10)
     return agent
 
