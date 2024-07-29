@@ -296,6 +296,7 @@ class GPTAPI(BaseAPIModel):
         assert isinstance(messages, list)
         gen_params = gen_params.copy()
 
+
         # Hold out 100 tokens due to potential errors in tiktoken calculation
         max_tokens = min(gen_params.pop('max_new_tokens'), 4096)
         if max_tokens <= 0:
