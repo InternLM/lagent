@@ -4,6 +4,8 @@ from collections import defaultdict
 from copy import deepcopy
 from typing import Dict, List, Optional, Union
 
+from termcolor import colored
+
 from lagent.actions import ActionExecutor
 from lagent.agents.base_agent import BaseAgent
 from lagent.llms import BaseAPIModel, BaseModel
@@ -160,8 +162,10 @@ class Internlm2Protocol:
         formatted += self.format_sub_role(inner_step)
         return formatted
 
-    def parse(self, message, plugin_executor: ActionExecutor,
-              interpreter_executor: ActionExecutor):
+    def parse(self,
+              message,
+              plugin_executor: ActionExecutor = None,
+              interpreter_executor: ActionExecutor = None):
         if self.language['begin']:
             message = message.split(self.language['begin'])[-1]
         if self.tool['name_map']['plugin'] in message:
@@ -183,9 +187,10 @@ class Internlm2Protocol:
                 message = message.strip()
             code = code.split(self.tool['end'].strip())[0].strip()
             return 'interpreter', message, dict(
-                name=interpreter_executor.action_names()[0],
-                parameters=dict(
-                    command=code)) if interpreter_executor else None
+                name=interpreter_executor.action_names()[0] if isinstance(
+                    interpreter_executor, ActionExecutor) else
+                'IPythonInterpreter',
+                parameters=dict(command=code))
         return None, message.split(self.tool['start_token'])[0], None
 
     def format_response(self, action_return, name) -> dict:
@@ -285,6 +290,7 @@ class Internlm2Agent(BaseAgent):
         inner_history = message[:]
         offset = len(inner_history)
         agent_return = AgentReturn()
+        agent_return.inner_steps = deepcopy(inner_history)
         last_agent_state = AgentStatusCode.SESSION_READY
         for _ in range(self.max_turn):
             # list of dict
@@ -348,11 +354,14 @@ class Internlm2Agent(BaseAgent):
                         agent_return.response = language
                     last_agent_state = agent_state
                     yield deepcopy(agent_return)
+            print(colored(response, 'red'))
             if name:
                 action_return: ActionReturn = executor(action['name'],
                                                        action['parameters'])
+                action_return.type = action['name']
                 action_return.thought = language
                 agent_return.actions.append(action_return)
+                print(colored(action_return.result, 'magenta'))
             inner_history.append(dict(role='language', content=language))
             if not name:
                 agent_return.response = language
@@ -372,6 +381,7 @@ class Internlm2Agent(BaseAgent):
                     self._protocol.format_response(action_return, name=name))
                 agent_state += 1
                 agent_return.state = agent_state
+                agent_return.inner_steps = deepcopy(inner_history[offset:])
                 yield agent_return
         agent_return.inner_steps = deepcopy(inner_history[offset:])
         agent_return.state = AgentStatusCode.END

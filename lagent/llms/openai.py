@@ -73,6 +73,8 @@ class GPTAPI(BaseAPIModel):
             retry=retry,
             **gen_params)
         self.gen_params.pop('top_k')
+        if not model_type.lower().startswith('internlm'):
+            self.gen_params.pop('skip_special_tokens')
         self.logger = getLogger(__name__)
 
         if isinstance(key, str):
@@ -282,6 +284,10 @@ class GPTAPI(BaseAPIModel):
                     if decoded[:6] == 'data: ':
                         decoded = decoded[6:]
                     response = json.loads(decoded)
+                    if 'code' in response and response['code'] == -20003:
+                        # Context exceeds maximum length
+                        yield ''
+                        return
                     choice = response['choices'][0]
                     if choice['finish_reason'] == 'stop':
                         return
@@ -289,6 +295,7 @@ class GPTAPI(BaseAPIModel):
 
         assert isinstance(messages, list)
         gen_params = gen_params.copy()
+
 
         # Hold out 100 tokens due to potential errors in tiktoken calculation
         max_tokens = min(gen_params.pop('max_new_tokens'), 4096)
