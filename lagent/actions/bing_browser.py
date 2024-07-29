@@ -50,13 +50,16 @@ class DuckDuckGoSearch(BaseSearch):
                      'researchgate.net',
                  ],
                  **kwargs):
+        self.proxy = kwargs.get('proxy')
+        self.timeout = kwargs.get('timeout', 10)
         super().__init__(topk, black_list)
 
     @cached(cache=TTLCache(maxsize=100, ttl=600))
     def search(self, query: str, max_retry: int = 3) -> dict:
         for attempt in range(max_retry):
             try:
-                response = self._call_ddgs(query, timeout=20)
+                response = self._call_ddgs(
+                    query, timeout=self.timeout, proxy=self.proxy)
                 return self._parse_response(response)
             except Exception as e:
                 logging.exception(str(e))
