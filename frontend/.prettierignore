@@ -1,7 +1,0 @@
-dist
-deploy
-values
-node_modules
-.gitignore
-.prettierignore
-.husky
