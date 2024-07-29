@@ -161,4 +161,3 @@ cython_debug/
 .vscode/
 docs/*/_build/
 tmp_dir/
-lagent/agents/mindsearch_prompt.py
