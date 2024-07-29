@@ -50,13 +50,16 @@ class DuckDuckGoSearch(BaseSearch):
                      'researchgate.net',
                  ],
                  **kwargs):
+        self.proxy = kwargs.get('proxy')
+        self.timeout = kwargs.get('timeout', 10)
         super().__init__(topk, black_list)
 
     @cached(cache=TTLCache(maxsize=100, ttl=600))
     def search(self, query: str, max_retry: int = 3) -> dict:
         for attempt in range(max_retry):
             try:
-                response = self._call_ddgs(query, timeout=20)
+                response = self._call_ddgs(
+                    query, timeout=self.timeout, proxy=self.proxy)
                 return self._parse_response(response)
             except Exception as e:
                 logging.exception(str(e))
@@ -91,9 +94,11 @@ class BingSearch(BaseSearch):
                      'youtube.com',
                      'bilibili.com',
                      'researchgate.net',
-                 ]):
+                 ],
+                 **kwargs):
         self.api_key = api_key
         self.market = region
+        self.proxy = kwargs.get('proxy')
         super().__init__(topk, black_list)
 
     @cached(cache=TTLCache(maxsize=100, ttl=600))
@@ -114,7 +119,8 @@ class BingSearch(BaseSearch):
         endpoint = 'https://api.bing.microsoft.com/v7.0/search'
         params = {'q': query, 'mkt': self.market, 'count': f'{self.topk * 2}'}
         headers = {'Ocp-Apim-Subscription-Key': self.api_key}
-        response = requests.get(endpoint, headers=headers, params=params)
+        response = requests.get(
+            endpoint, headers=headers, params=params, proxies=self.proxy)
         response.raise_for_status()
         return response.json()
 
