@@ -1,7 +1,0 @@
-.github/
-.vscode/
-docs/*/_build/
-*.egg-info
-lib/
-tmp_dir/
-work_dir/
