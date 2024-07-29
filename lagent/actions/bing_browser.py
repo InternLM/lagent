@@ -10,12 +10,77 @@ from typing import List, Optional, Tuple, Type, Union
 import requests
 from bs4 import BeautifulSoup
 from cachetools import TTLCache, cached
+from duckduckgo_search import DDGS
 
 from lagent.actions import BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
 
 
-class BingSearch:
+class BaseSearch:
+
+    def __init__(self, topk: int = 3, black_list: List[str] = None):
+        self.topk = topk
+        self.black_list = black_list
+
+    def _filter_results(self, results: List[tuple]) -> dict:
+        filtered_results = {}
+        count = 0
+        for url, snippet, title in results:
+            if all(domain not in url
+                   for domain in self.black_list) and not url.endswith('.pdf'):
+                filtered_results[count] = {
+                    'url': url,
+                    'summ': json.dumps(snippet, ensure_ascii=False)[1:-1],
+                    'title': title
+                }
+                count += 1
+                if count >= self.topk:
+                    break
+        return filtered_results
+
+
+class DuckDuckGoSearch(BaseSearch):
+
+    def __init__(self,
+                 topk: int = 3,
+                 black_list: List[str] = [
+                     'enoN',
+                     'youtube.com',
+                     'bilibili.com',
+                     'researchgate.net',
+                 ],
+                 **kwargs):
+        super().__init__(topk, black_list)
+
+    @cached(cache=TTLCache(maxsize=100, ttl=600))
+    def search(self, query: str, max_retry: int = 3) -> dict:
+        for attempt in range(max_retry):
+            try:
+                response = self._call_ddgs(query, timeout=20)
+                return self._parse_response(response)
+            except Exception as e:
+                logging.exception(str(e))
+                warnings.warn(
+                    f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                time.sleep(random.randint(2, 5))
+        raise Exception(
+            'Failed to get search results from DuckDuckGo after retries.')
+
+    def _call_ddgs(self, query: str, **kwargs) -> dict:
+        ddgs = DDGS(**kwargs)
+        response = ddgs.text(query.strip("'"), max_results=10)
+        return response
+
+    def _parse_response(self, response: dict) -> dict:
+        raw_results = []
+        for item in response:
+            raw_results.append(
+                (item['href'], item['description']
+                 if 'description' in item else item['body'], item['title']))
+        return self._filter_results(raw_results)
+
+
+class BingSearch(BaseSearch):
 
     def __init__(self,
                  api_key: str,
@@ -29,8 +94,7 @@ class BingSearch:
                  ]):
         self.api_key = api_key
         self.market = region
-        self.topk = topk
-        self.black_list = black_list
+        super().__init__(topk, black_list)
 
     @cached(cache=TTLCache(maxsize=100, ttl=600))
     def search(self, query: str, max_retry: int = 3) -> dict:
@@ -76,22 +140,6 @@ class BingSearch:
 
         return self._filter_results(raw_results)
 
-    def _filter_results(self, results: List[tuple]) -> dict:
-        filtered_results = {}
-        count = 0
-        for url, snippet, title in results:
-            if all(domain not in url
-                   for domain in self.black_list) and not url.endswith('.pdf'):
-                filtered_results[count] = {
-                    'url': url,
-                    'summ': json.dumps(snippet, ensure_ascii=False)[1:-1],
-                    'title': title
-                }
-                count += 1
-                if count >= self.topk:
-                    break
-        return filtered_results
-
 
 class ContentFetcher:
 
@@ -117,7 +165,7 @@ class BingBrowser(BaseAction):
     """
 
     def __init__(self,
-                 api_key: str,
+                 searcher_type: str = 'DuckDuckGoSearch',
                  timeout: int = 5,
                  black_list: Optional[List[str]] = [
                      'enoN',
@@ -125,13 +173,13 @@ class BingBrowser(BaseAction):
                      'bilibili.com',
                      'researchgate.net',
                  ],
-                 region: str = 'zh-CN',
                  topk: int = 20,
                  description: Optional[dict] = None,
                  parser: Type[BaseParser] = JsonParser,
-                 enable: bool = True):
-        self.searcher = BingSearch(
-            api_key, black_list=black_list, topk=topk, region=region)
+                 enable: bool = True,
+                 **kwargs):
+        self.searcher = eval(searcher_type)(
+            black_list=black_list, topk=topk, **kwargs)
         self.fetcher = ContentFetcher(timeout=timeout)
         self.search_results = None
         super().__init__(description, parser, enable)
