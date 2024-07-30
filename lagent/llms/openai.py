@@ -118,7 +118,9 @@ class GPTAPI(BaseAPIModel):
         gen_params = {**self.gen_params, **gen_params}
         with ThreadPoolExecutor(max_workers=20) as executor:
             tasks = [
-                executor.submit(self._chat, messages, **gen_params)
+                executor.submit(self._chat,
+                                self.template_parser._prompt2api(messages),
+                                **gen_params)
                 for messages in (
                     [inputs] if isinstance(inputs[0], dict) else inputs)
             ]
@@ -295,7 +297,6 @@ class GPTAPI(BaseAPIModel):
 
         assert isinstance(messages, list)
         gen_params = gen_params.copy()
-
 
         # Hold out 100 tokens due to potential errors in tiktoken calculation
         max_tokens = min(gen_params.pop('max_new_tokens'), 4096)
