@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import random
@@ -70,6 +71,8 @@ class DuckDuckGoSearch(BaseSearch):
             'Failed to get search results from DuckDuckGo after retries.')
 
     def _call_ddgs(self, query: str, **kwargs) -> dict:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         ddgs = DDGS(**kwargs)
         response = ddgs.text(query.strip("'"), max_results=10)
         return response
