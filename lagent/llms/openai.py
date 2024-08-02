@@ -146,6 +146,8 @@ class GPTAPI(BaseAPIModel):
             raise NotImplementedError('unsupported parameter: max_tokens')
         gen_params = self.update_gen_params(**gen_params)
         gen_params['stream'] = True
+        if not self.model_type.lower().startswith('internlm'):
+            gen_params.pop('session_id', None)
 
         resp = ''
         finished = False
