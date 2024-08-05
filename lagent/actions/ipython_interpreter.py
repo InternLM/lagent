@@ -423,9 +423,7 @@ class AsyncIPythonInterpreter(AsyncActionMixin, IPythonInterpreter):
             shutdown_kernel=False)
         execute_result, error_stacktrace, stream_text = result
         if error_stacktrace is not None:
-            ret = re.sub(
-                '^-*\n', '',
-                re.sub(r'\x1b\[\d{,3}(;\d{,3}){,3}m', '', error_stacktrace))
+            ret = re.sub('^-*\n', '', escape_ansi(error_stacktrace))
             if ret.endswith('KeyboardInterrupt: '):
                 ret = 'The code interpreter encountered a timeout error.'
             status, ret = False, ret.strip()
