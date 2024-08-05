@@ -1,10 +1,10 @@
 from typing import List, Union
 
-from lagent.llms.base_llm import BaseModel
+from lagent.llms.base_llm import BaseLLM
 from lagent.utils.util import filter_suffix
 
 
-class VllmModel(BaseModel):
+class VllmModel(BaseLLM):
     """
     A wrapper of vLLM model.
 

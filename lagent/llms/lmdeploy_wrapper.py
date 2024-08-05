@@ -1,11 +1,11 @@
 from typing import List, Optional, Union
 
-from lagent.llms.base_llm import BaseModel
+from lagent.llms.base_llm import BaseLLM
 from lagent.schema import ModelStatusCode
 from lagent.utils.util import filter_suffix
 
 
-class TritonClient(BaseModel):
+class TritonClient(BaseLLM):
     """TritonClient is a wrapper of TritonClient for LLM.
 
     Args:
@@ -196,7 +196,7 @@ class TritonClient(BaseModel):
         return cfg
 
 
-class LMDeployPipeline(BaseModel):
+class LMDeployPipeline(BaseLLM):
     """
 
     Args:
@@ -268,7 +268,7 @@ class LMDeployPipeline(BaseModel):
         return response[0]
 
 
-class LMDeployServer(BaseModel):
+class LMDeployServer(BaseLLM):
     """
 
     Args:
@@ -446,7 +446,7 @@ class LMDeployClient(LMDeployServer):
     """
 
     def __init__(self, url: str, model_name: str, **kwargs):
-        BaseModel.__init__(self, path=url, **kwargs)
+        BaseLLM.__init__(self, path=url, **kwargs)
         from lmdeploy.serve.openai.api_client import APIClient
         self.client = APIClient(url)
         self.model_name = model_name

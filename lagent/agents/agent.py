@@ -5,13 +5,14 @@ from typing import Any, Callable, Dict, List, Optional, Union
 from lagent.agents.aggregator import DefaultAggregator
 from lagent.agents.hooks import Hook
 from lagent.agents.hooks.hook import RemovableHandle
-from lagent.llms.base_llm import BaseModel as BaseLLM
+from lagent.llms.base_llm import BaseLLM
 from lagent.memory.base_memory import Memory
+from lagent.memory.manager import MemoryManager
 from lagent.prompts.parsers import StrParser
 from lagent.prompts.prompt_template import PromptTemplate
 from lagent.registry import (AGENT_REGISTRY, AGGREGATOR_REGISTRY,
-                             HOOK_REGISTRY, LLM_REGISTRY, MEMORY_REGISTRY,
-                             PARSER_REGISTRY, AutoRegister, ObjectFactory)
+                             HOOK_REGISTRY, LLM_REGISTRY, PARSER_REGISTRY,
+                             AutoRegister, ObjectFactory)
 from lagent.schema import AgentMessage
 
 
@@ -48,7 +49,8 @@ class Agent(metaclass=AutoRegister(AGENT_REGISTRY)):
     ):
         self.name = name or self.__class__.__name__
         self.llm: BaseLLM = ObjectFactory.create(llm, LLM_REGISTRY)
-        self.memory: Memory = ObjectFactory.create(memory, MEMORY_REGISTRY)
+
+        self.memory: MemoryManager = MemoryManager(memory) if memory else None
         self.output_format: StrParser = ObjectFactory.create(
             output_format, PARSER_REGISTRY)
         self.template = template
@@ -61,15 +63,19 @@ class Agent(metaclass=AutoRegister(AGENT_REGISTRY)):
                 hook = ObjectFactory.create(hook, HOOK_REGISTRY)
                 self.register_hook(hook)
 
-    def update_memory(self, message):
-        self.memory.add(message)
+    def update_memory(self, message, session_id=0):
+        if self.memory:
+            self.memory.add(message, session_id=session_id)
 
     def parse_response(self, response: str) -> str:
         if self.output_format:
             return self.output_format.parse(response)
         return response
 
-    def __call__(self, *message: AgentMessage, **kwargs) -> AgentMessage:
+    def __call__(self,
+                 *message: Union[AgentMessage, List[AgentMessage]],
+                 session_id: int = 0,
+                 **kwargs) -> AgentMessage:
         # message.receiver = self.name
         for hook in self._hooks.values():
             message = copy.deepcopy(message)
@@ -77,8 +83,9 @@ class Agent(metaclass=AutoRegister(AGENT_REGISTRY)):
             if result:
                 message = result
 
-        self.update_memory(message)
-        response_message = self.forward(*message, **kwargs)
+        self.update_memory(message, session_id=session_id)
+        response_message = self.forward(
+            *message, memory=self.memory.get(session_id), **kwargs)
         if not isinstance(response_message, AgentMessage):
             parsed_response = self.parse_response(response_message)
             response_message = AgentMessage(
@@ -86,22 +93,25 @@ class Agent(metaclass=AutoRegister(AGENT_REGISTRY)):
                 content=response_message,
                 formatted=parsed_response,
             )
-        self.update_memory(response_message)
+        self.update_memory(response_message, session_id=session_id)
         for hook in self._hooks.values():
             response_message = copy.deepcopy(response_message)
             result = hook.after_agent(self, response_message)
             if result:
-                message = result
+                response_message = result
         return response_message
 
-    def forward(self, *message: AgentMessage, **kwargs) -> Any:
+    def forward(self,
+                *message: AgentMessage,
+                memory: Optional[Memory] = None,
+                **kwargs) -> Any:
 
         formatted_messages = self.aggregator.aggregate(
-            self.memory,
+            memory,
             self.name,
             self.template,
         )
-        llm_response = self.llm.chat(formatted_messages)
+        llm_response = self.llm.chat(formatted_messages, **kwargs)
 
         return llm_response
 
@@ -110,25 +120,26 @@ class Agent(metaclass=AutoRegister(AGENT_REGISTRY)):
             getattr(self, '_agents', OrderedDict())[__name] = __value
         super().__setattr__(__name, __value)
 
-    def state_dict(self):
+    def state_dict(self, session_id=0):
 
         state_dict = {
             'name': self.name,
             'llm': self.llm,
             'template': self.template,
-            'memory': self.memory,
+            'memory':
+            self.memory.get(session_id).save_state() if self.memory else None,
             'output_format': self.output_format,
             'description': self.description,
         }
-        state_dict['memory'] = self.memory.save_state()
 
         return state_dict
 
-    def load_state_dict(self, state_dict: Dict):
+    def load_state_dict(self, state_dict: Dict, session_id=0):
         self.name = state_dict['name']
         self.llm = state_dict['llm']
         self.template = state_dict['template']
-        self.memory = Memory.load_state(state_dict['memory'])
+        self.memory = self.memory.get(session_id).load_state(
+            state_dict['memory']) if state_dict['memory'] else None
         self.output_format = state_dict['output_format']
         self.description = state_dict['description']
 
@@ -137,5 +148,47 @@ class Agent(metaclass=AutoRegister(AGENT_REGISTRY)):
         self._hooks[handle.id] = hook
         return handle
 
-    def dummy_forward(self, *message: AgentMessage, **kwargs) -> AgentMessage:
-        return 'dummy response'
+
+class AsyncAgent(Agent):
+
+    async def __call__(self,
+                       *message: AgentMessage | List[AgentMessage],
+                       session_id=0,
+                       **kwargs) -> AgentMessage:
+        for hook in self._hooks.values():
+            message = copy.deepcopy(message)
+            result = hook.before_agent(self, message)
+            if result:
+                message = result
+
+        self.update_memory(message, session_id=session_id)
+        response_message = await self.forward(
+            *message, memory=self.memory.get(session_id), **kwargs)
+        if not isinstance(response_message, AgentMessage):
+            parsed_response = self.parse_response(response_message)
+            response_message = AgentMessage(
+                sender=self.name,
+                content=response_message,
+                formatted=parsed_response,
+            )
+        self.update_memory(message, session_id=session_id)
+        for hook in self._hooks.values():
+            response_message = copy.deepcopy(response_message)
+            result = hook.after_agent(self, response_message)
+            if result:
+                response_message = result
+        return response_message
+
+    async def forward(self,
+                      *message: AgentMessage,
+                      memory: Optional[Memory] = None,
+                      **kwargs) -> Any:
+
+        formatted_messages = self.aggregator.aggregate(
+            memory,
+            self.name,
+            self.template,
+        )
+        llm_response = await self.llm.chat(formatted_messages, **kwargs)
+
+        return llm_response

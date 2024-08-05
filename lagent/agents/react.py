@@ -60,7 +60,7 @@ class ReAct(Agent):
         self.select_agent = ObjectFactory.create(select_agent, AGENT_REGISTRY)
         super().__init__(**kwargs)
 
-    def forward(self, message: AgentMessage):
+    def forward(self, message: AgentMessage, **kwargs) -> AgentMessage:
         for _ in range(self.max_turn):
             message = self.select_agent(message)
             if 'conclusion' in message.content or 'conclusion' in message.formatted:

@@ -1,3 +1,4 @@
+import json
 from typing import Callable, Dict, List, Optional, Union
 
 from lagent.registry import MEMORY_REGISTRY, AutoRegister
@@ -7,7 +8,7 @@ from lagent.schema import AgentMessage
 class Memory(metaclass=AutoRegister(MEMORY_REGISTRY)):
 
     def __init__(self, recent_n=None) -> None:
-        self.memory = []
+        self.memory: List[AgentMessage] = []
         self.recent_n = recent_n
 
     def get_memory(
@@ -45,6 +46,15 @@ class Memory(metaclass=AutoRegister(MEMORY_REGISTRY)):
         if overwrite:
             self.memory = []
         if isinstance(memories, dict):
-            self.memory.append(memories)
+            self.memory.append(AgentMessage(**memories))
         elif isinstance(memories, list):
-            self.memory.extend(memories)
+            for m in memories:
+                self.memory.append(AgentMessage(**m))
+        else:
+            raise TypeError(f'{type(memories)} is not supported')
+
+    def save(self) -> Union[Dict, List]:
+        memory = []
+        for m in self.memory:
+            memory.append(json.loads(m.model_dump_json()))
+        return memory
