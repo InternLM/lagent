@@ -1,3 +1,4 @@
+aioify
 arxiv
 distro
 filelock
@@ -9,6 +10,7 @@ jupyter
 jupyter_client
 phx-class-registry
 requests
+stdlib_list==0.10.0
 streamlit
 tiktoken
 timeout-decorator

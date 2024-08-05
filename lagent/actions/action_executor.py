@@ -1,3 +1,4 @@
+import inspect
 from collections import OrderedDict
 from typing import Callable, Dict, List, Union
 
@@ -79,7 +80,6 @@ class ActionExecutor:
         del self.actions[name]
 
     def forward(self, name, parameters, **kwargs) -> ActionReturn:
-
         action_name, api_name = (
             name.split('.') if '.' in name else (name, 'run'))
         action_return: ActionReturn = ActionReturn()
@@ -130,3 +130,58 @@ class ActionExecutor:
         handle = RemovableHandle(self._hooks)
         self._hooks[handle.id] = hook
         return handle
+
+
+@TOOL_REGISTRY.register
+class AsyncActionExecutor(ActionExecutor):
+
+    async def forward(self, name, parameters, **kwargs) -> ActionReturn:
+        action_name, api_name = (
+            name.split('.') if '.' in name else (name, 'run'))
+        action_return: ActionReturn = ActionReturn()
+        if action_name not in self:
+            if name == self.no_action.name:
+                action_return = self.no_action(parameters)
+            elif name == self.finish_action.name:
+                action_return = self.finish_action(parameters)
+            else:
+                action_return = self.invalid_action(parameters)
+        else:
+            action = self.actions[action_name]
+            if inspect.iscoroutinefunction(action.__call__):
+                action_return = await action(parameters, api_name)
+            else:
+                action_return = action(parameters, api_name)
+            action_return.valid = ActionValidCode.OPEN
+        return action_return
+
+    async def __call__(self, message: AgentMessage, **kwargs) -> AgentMessage:
+        # message.receiver = self.name
+        for hook in self._hooks.values():
+            result = hook.before_action(self, message)
+            if result:
+                message = result
+
+        assert isinstance(message.content, FunctionCall) or (
+            isinstance(message.content, dict) and 'name' in message.content
+            and 'parameters' in message.content)
+        if isinstance(message.content, dict):
+            name = message.content.get('name')
+            parameters = message.content.get('parameters')
+        else:
+            name = message.content.name
+            parameters = message.content.parameters
+
+        response_message = await self.forward(
+            name=name, parameters=parameters, **kwargs)
+        if not isinstance(response_message, AgentMessage):
+            response_message = AgentMessage(
+                sender=self.__class__.__name__,
+                content=response_message,
+            )
+
+        for hook in self._hooks.values():
+            result = hook.after_action(self, response_message)
+            if result:
+                response_message = result
+        return response_message
