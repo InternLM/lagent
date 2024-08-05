@@ -186,18 +186,34 @@ def tool_api(func: Optional[Callable] = None,
 
     if callable(func):
 
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            return func(self, *args, **kwargs)
+        if inspect.iscoroutinefunction(func):
+
+            @wraps(func)
+            async def wrapper(self, *args, **kwargs):
+                return await func(self, *args, **kwargs)
+
+        else:
+
+            @wraps(func)
+            def wrapper(self, *args, **kwargs):
+                return func(self, *args, **kwargs)
 
         wrapper.api_description = _parse_tool(func)
         return wrapper
 
     def decorate(func):
 
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            return func(self, *args, **kwargs)
+        if inspect.iscoroutinefunction(func):
+
+            @wraps(func)
+            async def wrapper(self, *args, **kwargs):
+                return await func(self, *args, **kwargs)
+
+        else:
+
+            @wraps(func)
+            def wrapper(self, *args, **kwargs):
+                return func(self, *args, **kwargs)
 
         wrapper.api_description = _parse_tool(func)
         return wrapper
@@ -375,3 +391,41 @@ class BaseAction(metaclass=AutoRegister(TOOL_REGISTRY, ToolMeta)):
         return f'{self.description}'
 
     __str__ = __repr__
+
+
+class AsyncActionMixin:
+
+    async def __call__(self, inputs: str, name='run') -> ActionReturn:
+        fallback_args = {'inputs': inputs, 'name': name}
+        if not hasattr(self, name):
+            return ActionReturn(
+                fallback_args,
+                type=self.name,
+                errmsg=f'invalid API: {name}',
+                state=ActionStatusCode.API_ERROR)
+        try:
+            inputs = self._parser.parse_inputs(inputs, name)
+        except ParseError as exc:
+            return ActionReturn(
+                fallback_args,
+                type=self.name,
+                errmsg=exc.err_msg,
+                state=ActionStatusCode.ARGS_ERROR)
+        try:
+            outputs = await getattr(self, name)(**inputs)
+        except Exception as exc:
+            return ActionReturn(
+                inputs,
+                type=self.name,
+                errmsg=str(exc),
+                state=ActionStatusCode.API_ERROR)
+        if isinstance(outputs, ActionReturn):
+            action_return = outputs
+            if not action_return.args:
+                action_return.args = inputs
+            if not action_return.type:
+                action_return.type = self.name
+        else:
+            result = self._parser.parse_outputs(outputs)
+            action_return = ActionReturn(inputs, type=self.name, result=result)
+        return action_return
