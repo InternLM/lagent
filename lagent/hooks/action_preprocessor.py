@@ -8,7 +8,7 @@ class ActionPreprocessor(Hook):
 
     """
 
-    def before_action(self, agent, message):
+    def before_action(self, executor, message, session_id):
         assert isinstance(message.formatted, FunctionCall) or (
             isinstance(message.formatted, dict) and 'name' in message.content
             and 'parameters' in message.formatted) or (
@@ -26,7 +26,7 @@ class ActionPreprocessor(Hook):
         message.content = dict(name=name, parameters=parameters)
         return message
 
-    def after_action(self, agent, message):
+    def after_action(self, executor, message, session_id):
         action_return = message.content
         if isinstance(action_return, ActionReturn):
             if action_return.state == ActionStatusCode.SUCCESS:
@@ -44,12 +44,15 @@ class InternLMActionProcessor(ActionPreprocessor):
     def __init__(self, code_parameter: str = 'command'):
         self.code_parameter = code_parameter
 
-    def before_action(self, executor, message):
+    def before_action(self, executor, message, session_id):
         assert isinstance(message.formatted, dict) and set(
             message.formatted) == {'tool_type', 'thought', 'action', 'status'}
         if isinstance(message.formatted['action'], str):
             # encapsulate code interpreter arguments
+            action_name = next(iter(executor.actions))
+            parameters = {self.code_parameter: message.formatted['action']}
+            if action_name in ['AsyncIPythonInterpreter']:
+                parameters['session_id'] = session_id
             message.formatted['action'] = dict(
-                name=next(iter(executor.actions)),
-                parameters={self.code_parameter: message.formatted['action']})
-        return super().before_action(executor, message)
+                name=action_name, parameters=parameters)
+        return super().before_action(executor, message, session_id)

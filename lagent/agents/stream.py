@@ -55,7 +55,7 @@ class AgentForInternLM(Agent):
                 executor = getattr(self, f'{tool_type}_executor', None)
                 if not executor:
                     raise RuntimeError(f'No available {tool_type} executor')
-                message = executor(message)
+                message = executor(message, session_id=session_id)
         return message
 
     def get_steps(self, session_id):
@@ -160,7 +160,7 @@ class AsyncAgentForInternLM(AsyncAgent):
                 executor = getattr(self, f'{tool_type}_executor', None)
                 if not executor:
                     raise RuntimeError(f'No available {tool_type} executor')
-                message = await executor(message)
+                message = await executor(message, session_id=session_id)
         return message
 
     def get_steps(self, session_id):
@@ -215,6 +215,15 @@ class AsyncMathCoder(AsyncAgentForInternLM):
             action_hooks=action_hooks,
             max_turn=max_turn,
             **kwargs)
+
+    async def forward(self, message: AgentMessage, session_id=0, **kwargs):
+        try:
+            return await super().forward(message, session_id, **kwargs)
+        finally:
+            interpreter = next(
+                iter(self.interpreter_executor.actions.values()))
+            if interpreter.name == 'AsyncIPythonInterpreter':
+                await interpreter.shutdown(session_id)
 
 
 if __name__ == '__main__':

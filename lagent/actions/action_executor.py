@@ -95,10 +95,13 @@ class ActionExecutor:
             action_return.valid = ActionValidCode.OPEN
         return action_return
 
-    def __call__(self, message: AgentMessage, **kwargs) -> AgentMessage:
+    def __call__(self,
+                 message: AgentMessage,
+                 session_id=0,
+                 **kwargs) -> AgentMessage:
         # message.receiver = self.name
         for hook in self._hooks.values():
-            result = hook.before_action(self, message)
+            result = hook.before_action(self, message, session_id)
             if result:
                 message = result
 
@@ -121,7 +124,7 @@ class ActionExecutor:
             )
 
         for hook in self._hooks.values():
-            result = hook.after_action(self, response_message)
+            result = hook.after_action(self, response_message, session_id)
             if result:
                 response_message = result
         return response_message
@@ -155,10 +158,13 @@ class AsyncActionExecutor(ActionExecutor):
             action_return.valid = ActionValidCode.OPEN
         return action_return
 
-    async def __call__(self, message: AgentMessage, **kwargs) -> AgentMessage:
+    async def __call__(self,
+                       message: AgentMessage,
+                       session_id=0,
+                       **kwargs) -> AgentMessage:
         # message.receiver = self.name
         for hook in self._hooks.values():
-            result = hook.before_action(self, message)
+            result = hook.before_action(self, message, session_id)
             if result:
                 message = result
 
@@ -181,7 +187,7 @@ class AsyncActionExecutor(ActionExecutor):
             )
 
         for hook in self._hooks.values():
-            result = hook.after_action(self, response_message)
+            result = hook.after_action(self, response_message, session_id)
             if result:
                 response_message = result
         return response_message

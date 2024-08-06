@@ -9,6 +9,7 @@ class Hook(metaclass=AutoRegister(HOOK_REGISTRY)):
         self,
         agent,
         message,
+        session_id,
     ):
         pass
 
@@ -16,20 +17,23 @@ class Hook(metaclass=AutoRegister(HOOK_REGISTRY)):
         self,
         agent,
         message,
+        session_id,
     ):
         pass
 
     def before_action(
         self,
-        agent,
+        executor,
         message,
+        session_id,
     ):
         pass
 
     def after_action(
         self,
-        agent,
+        executor,
         message,
+        session_id,
     ):
         pass
 
