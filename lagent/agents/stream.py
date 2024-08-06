@@ -1,9 +1,9 @@
 import warnings
 from typing import Dict, List, Union
 
-from lagent.actions import ActionExecutor
-from lagent.agents.agent import Agent
-from lagent.llms.base_llm import BaseModel as BaseLLM
+from lagent.actions import ActionExecutor, AsyncActionExecutor
+from lagent.agents.agent import Agent, AsyncAgent
+from lagent.llms.base_llm import BaseLLM
 from lagent.registry import AGENT_REGISTRY, ObjectFactory
 from lagent.schema import AgentMessage, AgentStatusCode
 
@@ -42,11 +42,11 @@ class AgentForInternLM(Agent):
         self.max_turn = max_turn
         super().__init__(**kwargs)
 
-    def forward(self, message: AgentMessage, **kwargs):
+    def forward(self, message: AgentMessage, session_id=0, **kwargs):
         if isinstance(message, str):
             message = AgentMessage(sender='user', content=message)
         for _ in range(self.max_turn):
-            message = self.agent(message, **kwargs)
+            message = self.agent(message, session_id=session_id, **kwargs)
             assert isinstance(message.formatted, dict)
             if message.formatted['status'] == AgentStatusCode.END:
                 return message
@@ -58,6 +58,26 @@ class AgentForInternLM(Agent):
                 message = executor(message)
         return message
 
+    def get_steps(self, session_id):
+        steps, tool_type = [], None
+        for msg in self.agent.memory.get_memory(session_id):
+            if msg.formatted:
+                steps.append(
+                    dict(role='language', content=msg.formatted['thought']))
+                if msg.formatted['tool_type']:
+                    tool_type = msg.formatted['tool_type']
+                    steps.append(
+                        dict(
+                            role='tool',
+                            content=msg.formatted['action'],
+                            name=tool_type))
+            elif msg.sender != 'user':
+                feedback = dict(role='environment', content=msg.content)
+                if tool_type:
+                    feedback['name'] = tool_type
+                steps.append(feedback)
+        return steps
+
 
 class MathCoder(AgentForInternLM):
 
@@ -66,6 +86,111 @@ class MathCoder(AgentForInternLM):
         llm: Union[BaseLLM, Dict],
         interpreter: dict = dict(
             type='IPythonInteractive', timeout=20, max_out_len=8192),
+        memory: Dict = dict(type='Memory'),
+        output_format: Dict = dict(type='InternLMToolParser'),
+        aggregator: Dict = dict(
+            type='InternLMToolAggregator',
+            interpreter_prompt=
+            ('Integrate step-by-step reasoning and Python code to solve math problems '
+             'using the following guidelines:\n'
+             '- Analyze the question and write jupyter code to solve the problem;\n'
+             r"- Present the final result in LaTeX using a '\boxed{{}}' without any "
+             'units. \n')),
+        action_hooks: List = [dict(type='InternLMActionProcessor')],
+        max_turn: int = 6,
+        **kwargs,
+    ):
+        kwargs.pop('plugins', None)
+        super().__init__(
+            llm=llm,
+            interpreter=interpreter,
+            memory=memory,
+            output_format=output_format,
+            aggregator=aggregator,
+            action_hooks=action_hooks,
+            max_turn=max_turn,
+            **kwargs)
+
+
+class AsyncAgentForInternLM(AsyncAgent):
+
+    def __init__(
+        self,
+        llm: Union[BaseLLM, Dict],
+        plugins: Union[dict, List[dict]] = None,
+        interpreter: dict = None,
+        memory: Dict = dict(type='Memory'),
+        output_format: Dict = dict(type='InternLMToolParser'),
+        aggregator: Dict = dict(type='InternLMToolAggregator'),
+        action_hooks: List = [dict(type='InternLMActionProcessor')],
+        max_turn: int = 4,
+        **kwargs,
+    ):
+        agent = dict(
+            type=AsyncAgent,
+            llm=llm,
+            output_format=output_format,
+            memory=memory,
+            aggregator=aggregator,
+            hooks=kwargs.pop('hooks', None),
+        )
+        self.agent = ObjectFactory.create(agent, AGENT_REGISTRY)
+        self.plugin_executor = plugins and AsyncActionExecutor(
+            plugins, hooks=action_hooks)
+        self.interpreter_executor = interpreter and AsyncActionExecutor(
+            interpreter, hooks=action_hooks)
+        if not (self.plugin_executor or self.interpreter_executor):
+            warnings.warn(
+                'Neither plugin nor interpreter executor is initialized. '
+                'An exception will be thrown when the agent call a tool.')
+        self.max_turn = max_turn
+        super().__init__(**kwargs)
+
+    async def forward(self, message: AgentMessage, session_id=0, **kwargs):
+        if isinstance(message, str):
+            message = AgentMessage(sender='user', content=message)
+        for _ in range(self.max_turn):
+            message = await self.agent(
+                message, session_id=session_id, **kwargs)
+            assert isinstance(message.formatted, dict)
+            if message.formatted['status'] == AgentStatusCode.END:
+                return message
+            if message.formatted['tool_type']:
+                tool_type = message.formatted["tool_type"]
+                executor = getattr(self, f'{tool_type}_executor', None)
+                if not executor:
+                    raise RuntimeError(f'No available {tool_type} executor')
+                message = await executor(message)
+        return message
+
+    def get_steps(self, session_id):
+        steps, tool_type = [], None
+        for msg in self.agent.memory.get_memory(session_id):
+            if msg.formatted:
+                steps.append(
+                    dict(role='language', content=msg.formatted['thought']))
+                if msg.formatted['tool_type']:
+                    tool_type = msg.formatted['tool_type']
+                    steps.append(
+                        dict(
+                            role='tool',
+                            content=msg.formatted['action'],
+                            name=tool_type))
+            elif msg.sender != 'user':
+                feedback = dict(role='environment', content=msg.content)
+                if tool_type:
+                    feedback['name'] = tool_type
+                steps.append(feedback)
+        return steps
+
+
+class AsyncMathCoder(AsyncAgentForInternLM):
+
+    def __init__(
+        self,
+        llm: Union[BaseLLM, Dict],
+        interpreter: dict = dict(
+            type='AsyncIPythonInteractive', timeout=20, max_out_len=8192),
         memory: Dict = dict(type='Memory'),
         output_format: Dict = dict(type='InternLMToolParser'),
         aggregator: Dict = dict(

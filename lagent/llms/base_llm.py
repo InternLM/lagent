@@ -295,7 +295,6 @@ class AsyncLLMMixin:
         """
         raise NotImplementedError
 
-    def update_gen_params(self, **kwargs):
-        gen_params = copy(self.gen_params)
-        gen_params.update(kwargs)
-        return gen_params
+
+class AsyncBaseLLM(AsyncLLMMixin, BaseLLM):
+    pass

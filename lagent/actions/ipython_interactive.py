@@ -67,7 +67,8 @@ class IPythonInteractive(BaseAction):
         super().__init__(description, parser)
         self.timeout = timeout
         self._executor = self.create_shell()
-        self._highlighting = re.compile(r'\x1b\[\d{,3}(;\d{,3}){,3}m')
+        self._highlighting = re.compile(
+            r'(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]')
         self._max_out_len = max_out_len if max_out_len >= 0 else None
         self._use_signals = use_signals
 
@@ -182,9 +183,14 @@ class IPythonInteractive(BaseAction):
         handle = ' ' * indent + f'with _raise_timeout({timeout}):\n'
         block = '\n'.join(['    ' + line for line in code.split('\n')])
         wrapped_code = handle + block
-        last_expr = code.split('\n')[-1]
-        if re.match(r'^\s*[a-zA-Z_][a-zA-Z0-9_]*\s*$', last_expr):
-            wrapped_code += '\n' * 5 + last_expr
+        last_line = code.split('\n')[-1]
+        is_expression = True
+        try:
+            compile(last_line.lstrip(), '<stdin>', 'eval')
+        except SyntaxError:
+            is_expression = False
+        if is_expression:
+            wrapped_code += '\n' * 5 + last_line
         return wrapped_code
 
 

@@ -1,5 +1,7 @@
-from .agent import Agent
+from .agent import Agent, AsyncAgent
+from .stream import AgentForInternLM, AsyncAgentForInternLM, AsyncMathCoder, MathCoder
 
 __all__ = [
-    'Agent',
+    'Agent', 'AsyncAgent', 'AgentForInternLM', 'AsyncAgentForInternLM',
+    'MathCoder', 'AsyncMathCoder'
 ]

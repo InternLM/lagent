@@ -18,10 +18,10 @@ class MemoryManager:
     def get_memory(self, session_id=0, **kwargs) -> list:
         return self.memory_map[session_id].get_memory(**kwargs)
 
-    def add(self, session_id=0, **kwargs) -> None:
-        self.memory_map.get(
-            session_id,
-            self.create_instance(session_id=session_id)).add(**kwargs)
+    def add(self, memory, session_id=0, **kwargs) -> None:
+        if session_id not in self.memory_map:
+            self.create_instance(session_id)
+        self.memory_map[session_id].add(memory, **kwargs)
 
     def get(self, session_id=0) -> Memory:
         return self.memory_map.get(session_id, None)

@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Union
 import aiohttp
 import requests
 
-from .base_api import BaseAPILLM
+from .base_api import AsyncBaseAPILLM, BaseAPILLM
 
 warnings.simplefilter('default')
 
@@ -48,7 +48,6 @@ class GPTAPI(BaseAPILLM):
 
     def __init__(self,
                  model_type: str = 'gpt-3.5-turbo',
-                 query_per_second: int = 1,
                  retry: int = 2,
                  json_mode: bool = False,
                  key: Union[str, List[str]] = 'ENV',
@@ -68,7 +67,6 @@ class GPTAPI(BaseAPILLM):
         super().__init__(
             model_type=model_type,
             meta_template=meta_template,
-            query_per_second=query_per_second,
             retry=retry,
             **gen_params)
         self.gen_params.pop('top_k')
@@ -142,8 +140,6 @@ class GPTAPI(BaseAPILLM):
 
         max_num_retries = 0
         while max_num_retries < self.retry:
-            self._wait()
-
             with Lock():
                 if len(self.invalid_keys) == len(self.keys):
                     raise RuntimeError('All keys have insufficient quota.')
@@ -232,7 +228,7 @@ class GPTAPI(BaseAPILLM):
         return enc.encode(prompt)
 
 
-class AsyncGPTAPI(BaseAPILLM):
+class AsyncGPTAPI(AsyncBaseAPILLM):
     """Model wrapper around OpenAI's models.
 
     Args:
@@ -393,15 +389,14 @@ class AsyncGPTAPI(BaseAPILLM):
                             self.url,
                             headers=header,
                             json=data,
-                            proxy=self.proxies) as response:
-                        raw_response = await response.text()
+                            proxy=self.proxies.get(
+                                'https', self.proxies.get('http'))) as resp:
+                        response = await resp.json()
             except aiohttp.ClientConnectionError:
                 print('Got connection error, retrying...')
                 continue
-            try:
-                response = raw_response.json()
             except requests.JSONDecodeError:
-                print('JsonDecode error, got', str(raw_response.content))
+                print('JsonDecode error, got', str(resp.content))
                 continue
             try:
                 return response['choices'][0]['message']['content'].strip()
