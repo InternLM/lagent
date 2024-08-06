@@ -3,7 +3,7 @@ from typing import Dict, List, Union
 
 from lagent.actions import ActionExecutor, AsyncActionExecutor
 from lagent.agents.agent import Agent, AsyncAgent
-from lagent.llms.base_llm import BaseLLM
+from lagent.llms import BaseLLM
 from lagent.registry import AGENT_REGISTRY, ObjectFactory
 from lagent.schema import AgentMessage, AgentStatusCode
 

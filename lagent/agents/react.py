@@ -3,10 +3,9 @@ from typing import Dict, List, Union
 
 from pydantic import BaseModel, Field
 
-from lagent.actions import ActionExecutor
-from lagent.actions.base_action import BaseAction
+from lagent.actions import ActionExecutor, BaseAction
 from lagent.agents.agent import Agent
-from lagent.llms.base_llm import BaseModel as BaseLLM
+from lagent.llms import BaseLLM
 from lagent.prompts.parsers.json_parser import JSONParser
 from lagent.prompts.prompt_template import PromptTemplate
 from lagent.registry import AGENT_REGISTRY, TOOL_REGISTRY, ObjectFactory

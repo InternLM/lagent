@@ -21,12 +21,10 @@ query = (
     'of 63. They happen to be thinking of the same number. There are two '
     'possibilities for the number that each of them is thinking of, one '
     'positive and one negative. Find the product of these two numbers.')
-res = coder(query)
+res = coder(query, session_id=0)
 print(res.model_dump_json())
 print('-' * 120)
-print(coder.agent.memory.get_memory())
-print('-' * 120)
-print(coder.agent.aggregator.aggregate(coder.agent.memory, coder.agent.name))
+print(coder.get_steps(0))
 
 # ----------------------- plugin -----------------------
 print('-' * 80, 'plugin', '-' * 80)
@@ -39,9 +37,7 @@ agent = AgentForInternLM(
         plugin_prompt=get_plugin_prompt(plugins)))
 
 query = 'LLM智能体方向的最新论文有哪些？'
-res = agent(query)
+res = agent(query, session_id=0)
 print(res.model_dump_json())
 print('-' * 120)
-print(agent.agent.memory.get_memory())
-print('-' * 120)
-print(agent.agent.aggregator.aggregate(agent.agent.memory, agent.agent.name))
+print(agent.get_steps(0))

@@ -3,10 +3,9 @@ from collections import OrderedDict
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from lagent.agents.aggregator import DefaultAggregator
-from lagent.agents.hooks import Hook
-from lagent.agents.hooks.hook import RemovableHandle
-from lagent.llms.base_llm import BaseLLM
-from lagent.memory.manager import MemoryManager
+from lagent.hooks import Hook, RemovableHandle
+from lagent.llms import BaseLLM
+from lagent.memory import MemoryManager
 from lagent.prompts.parsers import StrParser
 from lagent.prompts.prompt_template import PromptTemplate
 from lagent.registry import (

@@ -3,7 +3,7 @@ from collections import OrderedDict
 from typing import Callable, Dict, List, Union
 
 from lagent.actions.base_action import BaseAction
-from lagent.agents.hooks import Hook, RemovableHandle
+from lagent.hooks import Hook, RemovableHandle
 from lagent.registry import HOOK_REGISTRY, TOOL_REGISTRY, ObjectFactory
 from lagent.schema import ActionReturn, ActionValidCode, AgentMessage, FunctionCall
 
