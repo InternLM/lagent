@@ -45,7 +45,7 @@ async def async_run_code(
     *,
     interrupt_after=30,
     iopub_timeout=40,
-    wait_for_ready_timeout=30,
+    wait_for_ready_timeout=60,
     shutdown_kernel=True,
 ):
     assert iopub_timeout > interrupt_after
@@ -362,12 +362,16 @@ class AsyncIPythonInterpreter(AsyncActionMixin, IPythonInterpreter):
             action's inputs and outputs. Defaults to :class:`JsonParser`.
     """
 
+    _UNBOUND_KERNEL_CLIENTS = asyncio.Queue()
+
     def __init__(
         self,
         timeout: int = 20,
         user_data_dir: str = 'ENV',
         work_dir='./work_dir/tmp_dir',
         max_kernels: Optional[int] = None,
+        reuse_kernel: bool = True,
+        startup_rate: bool = 16,
         description: Optional[dict] = None,
         parser: Type[BaseParser] = JsonParser,
     ):
@@ -375,6 +379,8 @@ class AsyncIPythonInterpreter(AsyncActionMixin, IPythonInterpreter):
         self._amkm = AsyncMultiKernelManager(
             connection_dir=tempfile.gettempdir())
         self._max_kernels = max_kernels
+        self._reuse_kernel = reuse_kernel
+        self._sem = asyncio.Semaphore(startup_rate)
 
     async def start_kernel(self):
         kid = await self._amkm.start_kernel()
@@ -383,42 +389,63 @@ class AsyncIPythonInterpreter(AsyncActionMixin, IPythonInterpreter):
         return kid, kn, kc
 
     async def initialize(self, session_id: str):
-        assert isinstance(session_id, str)
+        session_id = str(session_id)
         while True:
             if session_id in self._KERNEL_CLIENTS:
                 return self._KERNEL_CLIENTS[session_id]
-            if self._max_kernels is None or len(
-                    self._KERNEL_CLIENTS) < self._max_kernels:
-                _, kernel, client = await self.start_kernel()
-                await async_run_code(
-                    kernel,
-                    START_CODE.format(self.user_data_dir),
-                    shutdown_kernel=False)
-                self._KERNEL_CLIENTS[session_id] = (kernel, client)
-                return kernel, client
-            asyncio.sleep(3)
+            if self._reuse_kernel and not self._UNBOUND_KERNEL_CLIENTS.empty():
+                self._KERNEL_CLIENTS[
+                    session_id] = await self._UNBOUND_KERNEL_CLIENTS.get()
+                return self._KERNEL_CLIENTS[session_id]
+            async with self._sem:
+                if self._max_kernels is None or len(
+                        self._KERNEL_CLIENTS) < self._max_kernels:
+                    try:
+                        kernel_id, kernel, client = await self.start_kernel()
+                        await async_run_code(
+                            kernel,
+                            START_CODE.format(self.user_data_dir),
+                            shutdown_kernel=False)
+                    except:
+                        await asyncio.sleep(1)
+                        continue
+                    self._KERNEL_CLIENTS[session_id] = (kernel_id, kernel,
+                                                        client)
+                    return kernel_id, kernel, client
+            await asyncio.sleep(3)
 
     async def reset(self, session_id: str):
-        assert isinstance(session_id, str)
+        session_id = str(session_id)
         if session_id not in self._KERNEL_CLIENTS:
             return
-        kernel, _ = self._KERNEL_CLIENTS[session_id]
+        _, kernel, _ = self._KERNEL_CLIENTS[session_id]
         code = "get_ipython().run_line_magic('reset', '-f')\n" + \
             START_CODE.format(self.user_data_dir)
         await async_run_code(kernel, code, shutdown_kernel=False)
 
     async def shutdown(self, session_id: str):
-        assert isinstance(session_id, str)
+        session_id = str(session_id)
         if session_id in self._KERNEL_CLIENTS:
-            kernel, _ = self._KERNEL_CLIENTS.get(session_id)
-            await kernel.shutdown_kernel()
+            kernel_id, _, _ = self._KERNEL_CLIENTS.get(session_id)
+            await self._amkm.shutdown_kernel(kernel_id)
+            self._amkm.remove_kernel(kernel_id)
             del self._KERNEL_CLIENTS[session_id]
 
+    async def close_session(self, session_id: str):
+        session_id = str(session_id)
+        if self._reuse_kernel:
+            if session_id in self._KERNEL_CLIENTS:
+                await self.reset(session_id)
+                await self._UNBOUND_KERNEL_CLIENTS.put(
+                    self._KERNEL_CLIENTS.pop(session_id))
+        else:
+            await self.shutdown(session_id)
+
     async def _call(self, command, timeout=None, session_id=None):
-        kernel, _ = await self.initialize(str(session_id))
+        _, kernel, _ = await self.initialize(str(session_id))
         result = await async_run_code(
             kernel,
-            command,
+            extract_code(command),
             interrupt_after=timeout or self.timeout,
             shutdown_kernel=False)
         execute_result, error_stacktrace, stream_text = result

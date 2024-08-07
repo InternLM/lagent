@@ -189,8 +189,7 @@ class AsyncMathCoder(AsyncAgentForInternLM):
     def __init__(
         self,
         llm: Union[BaseLLM, Dict],
-        interpreter: dict = dict(
-            type='AsyncIPythonInteractive', timeout=20, max_out_len=8192),
+        interpreter: dict = dict(type='AsyncIPythonInterpreter'),
         memory: Dict = dict(type='Memory'),
         output_format: Dict = dict(type='InternLMToolParser'),
         aggregator: Dict = dict(
@@ -223,7 +222,7 @@ class AsyncMathCoder(AsyncAgentForInternLM):
             interpreter = next(
                 iter(self.interpreter_executor.actions.values()))
             if interpreter.name == 'AsyncIPythonInterpreter':
-                await interpreter.shutdown(session_id)
+                await interpreter.close_session(session_id)
 
 
 if __name__ == '__main__':

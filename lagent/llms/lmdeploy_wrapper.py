@@ -1,6 +1,6 @@
 from typing import List, Optional, Union
 
-from lagent.llms.base_llm import BaseLLM
+from lagent.llms.base_llm import AsyncLLMMixin, BaseLLM
 from lagent.schema import ModelStatusCode
 from lagent.utils.util import filter_suffix
 
@@ -29,10 +29,10 @@ class TritonClient(BaseLLM):
             StatusCode.TRITON_SERVER_ERR: ModelStatusCode.SERVER_ERR,
             StatusCode.TRITON_SESSION_CLOSED: ModelStatusCode.SESSION_CLOSED,
             StatusCode.TRITON_STREAM_ING: ModelStatusCode.STREAM_ING,
-            StatusCode.TRITON_SESSION_OUT_OF_LIMIT:
-            ModelStatusCode.SESSION_OUT_OF_LIMIT,
-            StatusCode.TRITON_SESSION_INVALID_ARG:
-            ModelStatusCode.SESSION_INVALID_ARG,
+            StatusCode.TRITON_SESSION_OUT_OF_LIMIT: ModelStatusCode.
+            SESSION_OUT_OF_LIMIT,
+            StatusCode.TRITON_SESSION_INVALID_ARG: ModelStatusCode.
+            SESSION_INVALID_ARG,
             StatusCode.TRITON_SESSION_READY: ModelStatusCode.SESSION_READY
         }
         self.chatbot = Chatbot(
@@ -450,3 +450,93 @@ class LMDeployClient(LMDeployServer):
         from lmdeploy.serve.openai.api_client import APIClient
         self.client = APIClient(url)
         self.model_name = model_name
+
+
+class AsyncLMDeployPipeline(AsyncLLMMixin, LMDeployPipeline):
+    """
+
+    Args:
+        path (str): The path to the model.
+            It could be one of the following options:
+                    - i) A local directory path of a turbomind model which is
+                        converted by `lmdeploy convert` command or download
+                        from ii) and iii).
+                    - ii) The model_id of a lmdeploy-quantized model hosted
+                        inside a model repo on huggingface.co, such as
+                        "InternLM/internlm-chat-20b-4bit",
+                        "lmdeploy/llama2-chat-70b-4bit", etc.
+                    - iii) The model_id of a model hosted inside a model repo
+                        on huggingface.co, such as "internlm/internlm-chat-7b",
+                        "Qwen/Qwen-7B-Chat ", "baichuan-inc/Baichuan2-7B-Chat"
+                        and so on.
+        model_name (str): needed when model_path is a pytorch model on
+            huggingface.co, such as "internlm-chat-7b",
+            "Qwen-7B-Chat ", "Baichuan2-7B-Chat" and so on.
+        tp (int): tensor parallel
+        pipeline_cfg (dict): config of pipeline
+    """
+
+    async def generate(self,
+                       inputs: Union[str, List[str]],
+                       session_ids: Union[int, List[int]] = None,
+                       do_preprocess: bool = None,
+                       skip_special_tokens: bool = False,
+                       **kwargs):
+        """Return the chat completions in non-stream mode.
+
+        Args:
+            inputs (Union[str, List[str]]): input texts to be completed.
+            do_preprocess (bool): whether pre-process the messages. Default to
+                True, which means chat_template will be applied.
+            skip_special_tokens (bool): Whether or not to remove special tokens
+                in the decoding. Default to be False.
+        Returns:
+            (a list of/batched) text/chat completion
+        """
+        from lmdeploy.messages import GenerationConfig, Response
+
+        batched = True
+        if isinstance(inputs, str):
+            inputs = [inputs]
+            batched = False
+        if session_ids is None:
+            session_ids = list(range(len(inputs)))
+        elif isinstance(session_ids, (int, str)):
+            session_ids = [session_ids]
+        assert len(inputs) == len(session_ids)
+
+        prompt = inputs
+        gen_params = self.update_gen_params(**kwargs)
+        gen_config = GenerationConfig(
+            skip_special_tokens=skip_special_tokens, **gen_params)
+
+        response = []
+        for sid, inp in zip(session_ids, prompt):
+            resp = Response('', 0, 0, sid)
+            async for out in self.model.generate(
+                    inp,
+                    sid,
+                    gen_config,
+                    stream_response=True,
+                    sequence_start=True,
+                    sequence_end=True,
+                    do_preprocess=do_preprocess,
+                    **kwargs):
+                resp.text += out.response
+                resp.generate_token_len = out.generate_token_len
+                resp.input_token_len = out.input_token_len
+                resp.finish_reason = out.finish_reason
+                if out.token_ids:
+                    resp.token_ids.extend(out.token_ids)
+                if out.logprobs:
+                    if resp.logprobs is None:
+                        resp.logprobs = []
+                    resp.logprobs.extend(out.logprobs)
+            response.append(resp)
+
+        response = [resp.text for resp in response]
+        # remove stop_words
+        response = filter_suffix(response, self.gen_params.get('stop_words'))
+        if batched:
+            return response
+        return response[0]

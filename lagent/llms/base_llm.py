@@ -173,7 +173,10 @@ class BaseLLM(metaclass=AutoRegister(LLM_REGISTRY)):
         """
         raise NotImplementedError
 
-    def chat(self, inputs: Union[List[dict], List[List[dict]]], **gen_params):
+    def chat(self,
+             inputs: Union[List[dict], List[List[dict]]],
+             session_ids: Union[int, List[int]] = None,
+             **gen_params):
         """Generate completion from a list of templates.
 
         Args:
@@ -220,7 +223,9 @@ class BaseLLM(metaclass=AutoRegister(LLM_REGISTRY)):
 
 class AsyncLLMMixin:
 
-    async def generate(self, inputs: Union[str, List[str]],
+    async def generate(self,
+                       inputs: Union[str, List[str]],
+                       session_ids: Union[int, List[int]] = None,
                        **gen_params) -> str:
         """Generate results given a str (or list of) inputs.
 
@@ -255,7 +260,9 @@ class AsyncLLMMixin:
         """
         raise NotImplementedError
 
-    async def chat(self, inputs: Union[List[dict], List[List[dict]]],
+    async def chat(self,
+                   inputs: Union[List[dict], List[List[dict]]],
+                   session_ids: Union[int, List[int]] = None,
                    **gen_params):
         """Generate completion from a list of templates.
 
@@ -270,7 +277,7 @@ class AsyncLLMMixin:
                 _inputs.append(self.template_parser(msg))
         else:
             _inputs = self.template_parser(inputs)
-        return self.generate(_inputs, **gen_params)
+        return await self.generate(_inputs, session_ids, **gen_params)
 
     async def stream_chat(self, inputs: List[dict], **gen_params):
         """Generate results as streaming given a list of templates.

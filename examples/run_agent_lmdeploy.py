@@ -1,9 +1,12 @@
+import time
+
 from lagent.agents.stream import AgentForInternLM, MathCoder
 from lagent.llms import INTERNLM2_META, LMDeployPipeline
 from lagent.prompts.protocols.tool_protocol import get_plugin_prompt
 
 model = LMDeployPipeline(
-    path='internlm/internlm2_5-7b-chat',
+    path=
+    '/cpfs02/llm/shared/public/zhaoqian/ckpt/7B/240623/P-volc_internlm2_5_boost1_7B_FT_merge_boost_bbh_v2',
     meta_template=INTERNLM2_META,
     model_name='internlm-chat',
     tp=1,
@@ -36,8 +39,10 @@ agent = AgentForInternLM(
         type='InternLMToolAggregator',
         plugin_prompt=get_plugin_prompt(plugins)))
 
+tic = time.time()
 query = 'LLM智能体方向的最新论文有哪些？'
 res = agent(query, session_id=0)
 print(res.model_dump_json())
 print('-' * 120)
 print(agent.get_steps(0))
+print(f'time elapsed: {time.time() - tic}')

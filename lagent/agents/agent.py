@@ -112,7 +112,7 @@ class Agent(metaclass=AutoRegister(AGENT_REGISTRY)):
             self.name,
             self.template,
         )
-        llm_response = self.llm.chat(formatted_messages, **kwargs)
+        llm_response = self.llm.chat(formatted_messages, session_id, **kwargs)
 
         return llm_response
 
@@ -190,6 +190,7 @@ class AsyncAgent(Agent):
             self.name,
             self.template,
         )
-        llm_response = await self.llm.chat(formatted_messages, **kwargs)
+        llm_response = await self.llm.chat(formatted_messages, session_id,
+                                           **kwargs)
 
         return llm_response
