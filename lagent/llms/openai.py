@@ -271,21 +271,26 @@ class GPTAPI(BaseAPIModel):
                     else:
                         print(decoded)
                         continue
-                    response = json.loads(decoded)
-                    if 'code' in response and response['code'] == -20003:
-                        # Context exceeds maximum length
-                        yield ''
-                        return
-                    if self.model_type.lower().startswith('qwen'):
-                        choice = response['output']['choices'][0]
-                    else:
-                        choice = response['choices'][0]
-                    if choice['finish_reason'] == 'stop':
-                        return
-                    if self.model_type.lower().startswith('qwen'):
-                        yield choice['message']['content']
-                    else:
-                        yield choice['delta']['content']
+                    try:
+                        response = json.loads(decoded)
+                        if 'code' in response and response['code'] == -20003:
+                            # Context exceeds maximum length
+                            yield ''
+                            return
+                        if self.model_type.lower().startswith('qwen'):
+                            choice = response['output']['choices'][0]
+                            yield choice['message']['content']
+                            if choice['finish_reason'] == 'stop':
+                                return
+                        else:
+                            choice = response['choices'][0]
+                            if choice['finish_reason'] == 'stop':
+                                return
+                            yield choice['delta']['content']
+                    except Exception as exc:
+                        print(
+                            f'response {decoded} lead to exception of {str(exc)}'
+                        )
 
         assert isinstance(messages, list)
 
