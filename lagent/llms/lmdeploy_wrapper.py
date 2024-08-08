@@ -1,5 +1,7 @@
 from typing import List, Optional, Union
 
+import aiohttp
+
 from lagent.llms.base_llm import AsyncLLMMixin, BaseLLM
 from lagent.schema import ModelStatusCode
 from lagent.utils.util import filter_suffix
@@ -540,3 +542,198 @@ class AsyncLMDeployPipeline(AsyncLLMMixin, LMDeployPipeline):
         if batched:
             return response
         return response[0]
+
+
+class AsyncLMDeployServer(AsyncLLMMixin, LMDeployServer):
+    """
+
+    Args:
+        path (str): The path to the model.
+            It could be one of the following options:
+                - i) A local directory path of a turbomind model which is
+                    converted by `lmdeploy convert` command or download from
+                    ii) and iii).
+                - ii) The model_id of a lmdeploy-quantized model hosted
+                    inside a model repo on huggingface.co, such as
+                    "InternLM/internlm-chat-20b-4bit",
+                    "lmdeploy/llama2-chat-70b-4bit", etc.
+                - iii) The model_id of a model hosted inside a model repo
+                    on huggingface.co, such as "internlm/internlm-chat-7b",
+                    "Qwen/Qwen-7B-Chat ", "baichuan-inc/Baichuan2-7B-Chat"
+                    and so on.
+        model_name (str): needed when model_path is a pytorch model on
+            huggingface.co, such as "internlm-chat-7b",
+            "Qwen-7B-Chat ", "Baichuan2-7B-Chat" and so on.
+        server_name (str): host ip for serving
+        server_port (int): server port
+        tp (int): tensor parallel
+        log_level (str): set log level whose value among
+            [CRITICAL, ERROR, WARNING, INFO, DEBUG]
+    """
+
+    async def generate(
+        self,
+        inputs: Union[str, List[str]],
+        session_ids: Union[int, List[int]] = None,
+        sequence_start: bool = True,
+        sequence_end: bool = True,
+        ignore_eos: bool = False,
+        skip_special_tokens: Optional[bool] = False,
+        timeout: int = 30,
+        **kwargs,
+    ):
+        """Start a new round conversation of a session. Return the chat
+        completions in non-stream mode.
+
+        Args:
+            inputs (str, List[str]): user's prompt(s) in this round
+            session_ids (int, List[int]): session id(s)
+            sequence_start (bool): start flag of a session
+            sequence_end (bool): end flag of a session
+            ignore_eos (bool): indicator for ignoring eos
+            skip_special_tokens (bool): Whether or not to remove special tokens
+                in the decoding. Default to be False.
+            timeout (int): max time to wait for response
+        Returns:
+            (a list of/batched) text/chat completion
+        """
+        from lmdeploy.serve.openai.api_client import json_loads
+
+        batched = True
+        if isinstance(inputs, str):
+            inputs = [inputs]
+            batched = False
+
+        gen_params = self.update_gen_params(**kwargs)
+        max_new_tokens = gen_params.pop('max_new_tokens')
+        gen_params.update(max_tokens=max_new_tokens)
+
+        responses = [''] * len(inputs)
+        pload = dict(
+            model=self.model_name,
+            prompt=inputs,
+            sequence_start=sequence_start,
+            sequence_end=sequence_end,
+            stream=False,
+            ignore_eos=ignore_eos,
+            skip_special_tokens=skip_special_tokens,
+            timeout=timeout,
+            **gen_params)
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                    self.client.completions_v1_url,
+                    headers=self.client.headers,
+                    json=pload) as resp:
+                async for chunk in resp.content:
+                    if chunk:
+                        decoded = chunk.decode('utf-8')
+                        output = json_loads(decoded)
+                        responses = [
+                            response + item['text'] for response, item in zip(
+                                responses, output['choices'])
+                        ]
+        # remove stop_words
+        responses = filter_suffix(responses, self.gen_params.get('stop_words'))
+        if not batched:
+            return responses[0]
+        return responses
+
+    async def stream_chat(
+        self,
+        inputs: List[dict],
+        session_id: int = None,
+        sequence_start: bool = True,
+        sequence_end: bool = True,
+        stream: bool = True,
+        ignore_eos: bool = False,
+        skip_special_tokens: Optional[bool] = False,
+        timeout: int = 30,
+        **kwargs,
+    ):
+        """Start a new round conversation of a session. Return the chat
+        completions in stream mode.
+
+        Args:
+            inputs (List[dict]): user's inputs in this round conversation
+            session_id (int): session id
+            sequence_start (bool): start flag of a session
+            sequence_end (bool): end flag of a session
+            stream (bool): return in a streaming format if enabled
+            ignore_eos (bool): indicator for ignoring eos
+            skip_special_tokens (bool): Whether or not to remove special tokens
+                in the decoding. Default to be False.
+            timeout (int): max time to wait for response
+        Returns:
+            tuple(Status, str, int): status, text/chat completion,
+            generated token number
+        """
+        from lmdeploy.serve.openai.api_client import json_loads
+
+        gen_params = self.update_gen_params(**kwargs)
+        max_new_tokens = gen_params.pop('max_new_tokens')
+        gen_params.update(max_tokens=max_new_tokens)
+        prompt = self.template_parser(inputs)
+
+        response = ''
+        finished = False
+        stop_words = self.gen_params.get('stop_words')
+
+        pload = dict(
+            model=self.model_name,
+            prompt=prompt,
+            sequence_start=sequence_start,
+            sequence_end=sequence_end,
+            stream=stream,
+            ignore_eos=ignore_eos,
+            skip_special_tokens=skip_special_tokens,
+            timeout=timeout,
+            **gen_params)
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                    self.client.completions_v1_url,
+                    headers=self.client.headers,
+                    json=pload) as resp:
+                async for chunk in resp.content:
+                    if chunk:
+                        if chunk:
+                            decoded = chunk.decode('utf-8')
+                            if decoded == 'data: [DONE]' or not decoded.strip(
+                            ):
+                                continue
+                            if decoded[:6] == 'data: ':
+                                decoded = decoded[6:]
+                            output = json_loads(decoded)
+                        else:
+                            decoded = chunk.decode('utf-8')
+                            output = json_loads(decoded)
+                        response += output['choices'][0]['text']
+                        if not response:
+                            continue
+                        # remove stop_words
+                        for sw in stop_words:
+                            if sw in response:
+                                resp = filter_suffix(response, stop_words)
+                                finished = True
+                                break
+                        yield ModelStatusCode.STREAM_ING, response, None
+                        if finished:
+                            break
+                yield ModelStatusCode.END, response, None
+
+
+class AsyncLMDeployClient(AsyncLMDeployServer):
+    """
+
+    Args:
+        url (str): communicating address 'http://<ip>:<port>' of
+            api_server
+        model_name (str): needed when model_path is a pytorch model on
+            huggingface.co, such as "internlm-chat-7b",
+            "Qwen-7B-Chat ", "Baichuan2-7B-Chat" and so on.
+    """
+
+    def __init__(self, url: str, model_name: str, **kwargs):
+        BaseLLM.__init__(self, path=url, **kwargs)
+        from lmdeploy.serve.openai.api_client import APIClient
+        self.client = APIClient(url)
+        self.model_name = model_name
