@@ -386,12 +386,6 @@ class AsyncIPythonInterpreter(AsyncActionMixin, IPythonInterpreter):
         self._sem = asyncio.Semaphore(startup_rate)
         self._distributed_lock = distributed_lock
 
-    async def start_kernel(self):
-        kid = await self._amkm.start_kernel()
-        kn = self._amkm.get_kernel(kid)
-        kc = kn.client()
-        return kid, kn, kc
-
     async def initialize(self, session_id: str):
         session_id = str(session_id)
         while True:
@@ -405,14 +399,24 @@ class AsyncIPythonInterpreter(AsyncActionMixin, IPythonInterpreter):
                 async with self._sem:
                     if self._max_kernels is None or len(
                             self._KERNEL_CLIENTS) < self._max_kernels:
+                        kernel_id = None
                         try:
-                            kernel_id, kernel, client = await self.start_kernel(
-                            )
-                            await async_run_code(
+                            kernel_id = await self._amkm.start_kernel()
+                            kernel = self._amkm.get_kernel(kernel_id)
+                            client = kernel.client()
+                            _, error_stacktrace, stream_text = await async_run_code(
                                 kernel,
                                 START_CODE.format(self.user_data_dir),
                                 shutdown_kernel=False)
-                        except:
+                            # check if the output of START_CODE meets expectations
+                            if not (error_stacktrace is None
+                                    and stream_text == ''):
+                                raise RuntimeError
+                        except Exception as e:
+                            print(f'Starting kernel error: {e}')
+                            if kernel_id:
+                                await self._amkm.shutdown_kernel(kernel_id)
+                                self._amkm.remove_kernel(kernel_id)
                             await asyncio.sleep(1)
                             continue
                         self._KERNEL_CLIENTS[session_id] = (kernel_id, kernel,
