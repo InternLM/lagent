@@ -12,8 +12,9 @@ import sys
 import tempfile
 import traceback
 import uuid
-from typing import Optional, Tuple, Type
+from typing import ContextManager, Optional, Tuple, Type
 
+from filelock import FileLock
 from jupyter_client import AsyncKernelClient, AsyncKernelManager, AsyncMultiKernelManager
 
 from lagent.actions.base_action import AsyncActionMixin, BaseAction, tool_api
@@ -368,19 +369,22 @@ class AsyncIPythonInterpreter(AsyncActionMixin, IPythonInterpreter):
         self,
         timeout: int = 20,
         user_data_dir: str = 'ENV',
-        work_dir='./work_dir/tmp_dir',
+        work_dir=os.path.join(tempfile.gettempdir(), 'tmp_dir'),
         max_kernels: Optional[int] = None,
         reuse_kernel: bool = True,
-        startup_rate: bool = 16,
+        startup_rate: bool = 10,
+        connection_dir: str = tempfile.gettempdir(),
+        distributed_lock: ContextManager = FileLock(
+            os.path.join(tempfile.gettempdir(), '.jupyter_kernel.lock')),
         description: Optional[dict] = None,
         parser: Type[BaseParser] = JsonParser,
     ):
         super().__init__(timeout, user_data_dir, work_dir, description, parser)
-        self._amkm = AsyncMultiKernelManager(
-            connection_dir=tempfile.gettempdir())
+        self._amkm = AsyncMultiKernelManager(connection_dir=connection_dir)
         self._max_kernels = max_kernels
         self._reuse_kernel = reuse_kernel
         self._sem = asyncio.Semaphore(startup_rate)
+        self._distributed_lock = distributed_lock
 
     async def start_kernel(self):
         kid = await self._amkm.start_kernel()
@@ -397,21 +401,23 @@ class AsyncIPythonInterpreter(AsyncActionMixin, IPythonInterpreter):
                 self._KERNEL_CLIENTS[
                     session_id] = await self._UNBOUND_KERNEL_CLIENTS.get()
                 return self._KERNEL_CLIENTS[session_id]
-            async with self._sem:
-                if self._max_kernels is None or len(
-                        self._KERNEL_CLIENTS) < self._max_kernels:
-                    try:
-                        kernel_id, kernel, client = await self.start_kernel()
-                        await async_run_code(
-                            kernel,
-                            START_CODE.format(self.user_data_dir),
-                            shutdown_kernel=False)
-                    except:
-                        await asyncio.sleep(1)
-                        continue
-                    self._KERNEL_CLIENTS[session_id] = (kernel_id, kernel,
-                                                        client)
-                    return kernel_id, kernel, client
+            with self._distributed_lock:
+                async with self._sem:
+                    if self._max_kernels is None or len(
+                            self._KERNEL_CLIENTS) < self._max_kernels:
+                        try:
+                            kernel_id, kernel, client = await self.start_kernel(
+                            )
+                            await async_run_code(
+                                kernel,
+                                START_CODE.format(self.user_data_dir),
+                                shutdown_kernel=False)
+                        except:
+                            await asyncio.sleep(1)
+                            continue
+                        self._KERNEL_CLIENTS[session_id] = (kernel_id, kernel,
+                                                            client)
+                        return kernel_id, kernel, client
             await asyncio.sleep(3)
 
     async def reset(self, session_id: str):
