@@ -8,19 +8,11 @@ from lagent.llms import BaseLLM
 from lagent.memory import MemoryManager
 from lagent.prompts.parsers import StrParser
 from lagent.prompts.prompt_template import PromptTemplate
-from lagent.registry import (
-    AGENT_REGISTRY,
-    AGGREGATOR_REGISTRY,
-    HOOK_REGISTRY,
-    LLM_REGISTRY,
-    PARSER_REGISTRY,
-    AutoRegister,
-    ObjectFactory,
-)
+from lagent.registry import AGGREGATOR_REGISTRY, HOOK_REGISTRY, LLM_REGISTRY, PARSER_REGISTRY, ObjectFactory
 from lagent.schema import AgentMessage
 
 
-class Agent(metaclass=AutoRegister(AGENT_REGISTRY)):
+class Agent:
     """Agent is the basic unit of the system. It is responsible for
     communicating with the LLM, managing the memory, and handling the
     message aggregation and parsing. It can also be extended with hooks
@@ -127,8 +119,8 @@ class Agent(metaclass=AutoRegister(AGENT_REGISTRY)):
             'name': self.name,
             'llm': self.llm,
             'template': self.template,
-            'memory': self.memory.get(session_id).save_state()
-            if self.memory else None,
+            'memory':
+            self.memory.get(session_id).save_state() if self.memory else None,
             'output_format': self.output_format,
             'description': self.description,
         }
