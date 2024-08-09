@@ -83,7 +83,7 @@ class Agent(metaclass=AutoRegister(AGENT_REGISTRY)):
         # message.receiver = self.name
         for hook in self._hooks.values():
             message = copy.deepcopy(message)
-            result = hook.before_agent(self, message)
+            result = hook.before_agent(self, message, session_id)
             if result:
                 message = result
 
@@ -100,7 +100,7 @@ class Agent(metaclass=AutoRegister(AGENT_REGISTRY)):
         self.update_memory(response_message, session_id=session_id)
         for hook in self._hooks.values():
             response_message = copy.deepcopy(response_message)
-            result = hook.after_agent(self, response_message)
+            result = hook.after_agent(self, response_message, session_id)
             if result:
                 response_message = result
         return response_message
@@ -112,7 +112,7 @@ class Agent(metaclass=AutoRegister(AGENT_REGISTRY)):
             self.name,
             self.template,
         )
-        llm_response = self.llm.chat(formatted_messages, session_id, **kwargs)
+        llm_response = self.llm.chat(formatted_messages, **kwargs)
 
         return llm_response
 
@@ -158,7 +158,7 @@ class AsyncAgent(Agent):
                        **kwargs) -> AgentMessage:
         for hook in self._hooks.values():
             message = copy.deepcopy(message)
-            result = hook.before_agent(self, message)
+            result = hook.before_agent(self, message, session_id)
             if result:
                 message = result
 
@@ -175,7 +175,7 @@ class AsyncAgent(Agent):
         self.update_memory(response_message, session_id=session_id)
         for hook in self._hooks.values():
             response_message = copy.deepcopy(response_message)
-            result = hook.after_agent(self, response_message)
+            result = hook.after_agent(self, response_message, session_id)
             if result:
                 response_message = result
         return response_message

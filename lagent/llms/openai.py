@@ -23,8 +23,6 @@ class GPTAPI(BaseAPILLM):
 
     Args:
         model_type (str): The name of OpenAI's model.
-        query_per_second (int): The maximum queries allowed per second
-            between two consecutive calls of the API. Defaults to 1.
         retry (int): Number of retires if the API call fails. Defaults to 2.
         key (str or List[str]): OpenAI key(s). In particular, when it
             is set to "ENV", the key will be fetched from the environment
@@ -303,6 +301,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
     async def chat(
         self,
         inputs: Union[List[dict], List[List[dict]]],
+        session_ids: Union[int, List[int]] = None,
         **gen_params,
     ) -> Union[str, List[str]]:
         """Generate responses given the contexts.

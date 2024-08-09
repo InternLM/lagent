@@ -3,8 +3,8 @@ from typing import Dict, List, Union
 
 from pydantic import BaseModel, Field
 
-from lagent.actions import ActionExecutor, BaseAction
-from lagent.agents.agent import Agent
+from lagent.actions import ActionExecutor, AsyncActionExecutor, BaseAction
+from lagent.agents.agent import Agent, AsyncAgent
 from lagent.llms import BaseLLM
 from lagent.prompts.parsers.json_parser import JSONParser
 from lagent.prompts.prompt_template import PromptTemplate
@@ -69,6 +69,52 @@ class ReAct(Agent):
         return message
 
 
+class AsyncReAct(AsyncAgent):
+
+    def __init__(self,
+                 llm: Union[BaseLLM, Dict],
+                 actions: Union[BaseAction, List[BaseAction]],
+                 template: Union[PromptTemplate, str] = None,
+                 memory: Dict = dict(type='Memory'),
+                 output_format: Dict = dict(type='JsonParser'),
+                 aggregator: Dict = dict(type='DefaultAggregator'),
+                 hooks: List = [dict(type='ActionPreprocessor')],
+                 max_turn: int = 5,
+                 **kwargs):
+        self.max_turn = max_turn
+
+        actions = dict(
+            type=AsyncActionExecutor,
+            actions=actions,
+            hooks=hooks,
+        )
+
+        self.actions: AsyncActionExecutor = ObjectFactory.create(
+            actions, TOOL_REGISTRY)
+        select_agent = dict(
+            type=AsyncAgent,
+            llm=llm,
+            template=template.format(
+                action_info=json.dumps(self.actions.description()),
+                output_format=output_format.format()),
+            output_format=output_format,
+            memory=memory,
+            aggregator=aggregator,
+            hooks=hooks,
+        )
+        self.select_agent = ObjectFactory.create(select_agent, AGENT_REGISTRY)
+        super().__init__(**kwargs)
+
+    async def forward(self, message: AgentMessage, **kwargs) -> AgentMessage:
+        for _ in range(self.max_turn):
+            message = await self.select_agent(message)
+            if 'conclusion' in message.content or 'conclusion' in message.formatted:
+                return message
+            message = await self.actions(message)
+
+        return message
+
+
 if __name__ == '__main__':
     from lagent.llms import GPTAPI
 
@@ -95,8 +141,9 @@ if __name__ == '__main__':
     llm = dict(
         type=GPTAPI,
         model_type='gpt-4o-2024-05-13',
-        query_per_second=50,
+        key=None,
         max_new_tokens=4096,
+        proxies=dict(),
         retry=1000)
 
     agent = ReAct(
