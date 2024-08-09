@@ -68,7 +68,7 @@ class GoogleSearch(BaseAction):
             tool_return.errmsg = response
             tool_return.state = ActionStatusCode.HTTP_ERROR
         elif status_code == 200:
-            parsed_res = self._parse_results(response)
+            parsed_res = self._parse_results(response, k)
             tool_return.result = [dict(type='text', content=str(parsed_res))]
             tool_return.state = ActionStatusCode.SUCCESS
         else:
@@ -76,7 +76,7 @@ class GoogleSearch(BaseAction):
             tool_return.state = ActionStatusCode.API_ERROR
         return tool_return
 
-    def _parse_results(self, results: dict) -> Union[str, List[str]]:
+    def _parse_results(self, results: dict, k: int) -> Union[str, List[str]]:
         """Parse the search results from Serper API.
 
         Args:
@@ -111,7 +111,7 @@ class GoogleSearch(BaseAction):
                 snippets.append(f'{title} {attribute}: {value}.')
 
         for result in results[self.result_key_for_type[
-                self.search_type]][:self.k]:
+                self.search_type]][:k]:
             if 'snippet' in result:
                 snippets.append(result['snippet'])
             for attribute, value in result.get('attributes', {}).items():
