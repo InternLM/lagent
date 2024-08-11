@@ -5,9 +5,11 @@ from .lmdeploy_wrapper import LMDeployClient, LMDeployPipeline, LMDeployServer
 from .meta_template import INTERNLM2_META
 from .openai import GPTAPI
 from .vllm_wrapper import VllmModel
+from .ollama import OllamaAPI
 
 __all__ = [
     'BaseModel', 'BaseAPIModel', 'GPTAPI', 'LMDeployClient',
     'LMDeployPipeline', 'LMDeployServer', 'HFTransformer',
-    'HFTransformerCasualLM', 'INTERNLM2_META', 'HFTransformerChat', 'VllmModel'
+    'HFTransformerCasualLM', 'INTERNLM2_META', 'HFTransformerChat', 'VllmModel',
+    'OllamaAPI'
 ]
