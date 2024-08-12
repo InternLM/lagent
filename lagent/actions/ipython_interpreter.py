@@ -380,7 +380,12 @@ class AsyncIPythonInterpreter(AsyncActionMixin, IPythonInterpreter):
         parser: Type[BaseParser] = JsonParser,
     ):
         super().__init__(timeout, user_data_dir, work_dir, description, parser)
-        self._amkm = AsyncMultiKernelManager(connection_dir=connection_dir)
+        from traitlets.config import Config
+
+        c = Config()
+        c.KernelManager.transport = 'ipc'
+        self._amkm = AsyncMultiKernelManager(
+            config=c, connection_dir=connection_dir)
         self._max_kernels = max_kernels
         self._reuse_kernel = reuse_kernel
         self._sem = asyncio.Semaphore(startup_rate)
