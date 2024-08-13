@@ -37,8 +37,7 @@ class AsyncAgentRayActor:
         cls_name = load_class_from_string(cls_name, python_path) if isinstance(
             cls_name, str) else cls_name
         AsyncAgentActor = ray.remote(num_gpus=num_gpus)(cls_name)
-        self.agent_actor = AsyncAgentActor.options(max_concurrency=100).remote(
-            **config)
+        self.agent_actor = AsyncAgentActor.remote(**config)
 
     async def __call__(self, *message: AgentMessage, session_id=0, **kwargs):
         response = await self.agent_actor.__call__.remote(
