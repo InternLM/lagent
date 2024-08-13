@@ -12,10 +12,10 @@ import sys
 import tempfile
 import traceback
 import uuid
-from typing import ContextManager, Optional, Tuple, Type
+from typing import Optional, Tuple, Type
 
-from filelock import FileLock
 from jupyter_client import AsyncKernelClient, AsyncKernelManager, AsyncMultiKernelManager
+from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
 
 from lagent.actions.base_action import AsyncActionMixin, BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
@@ -87,6 +87,12 @@ async def async_run_code(
             logger.info("Sending interrupt to kernel")
             await km.interrupt_kernel()
 
+        @retry(
+            retry=retry_if_result(lambda ret: ret[-1].strip(
+            ) == 'KeyboardInterrupt' if isinstance(ret, tuple) else False),
+            stop=stop_after_attempt(3),
+            wait=wait_fixed(1),
+            retry_error_callback=lambda state: state.outcome.result())
         async def run():
             execute_result = None
             error_traceback = None
@@ -372,10 +378,8 @@ class AsyncIPythonInterpreter(AsyncActionMixin, IPythonInterpreter):
         work_dir=os.path.join(tempfile.gettempdir(), 'tmp_dir'),
         max_kernels: Optional[int] = None,
         reuse_kernel: bool = True,
-        startup_rate: bool = 10,
+        startup_rate: bool = 32,
         connection_dir: str = tempfile.gettempdir(),
-        distributed_lock: ContextManager = FileLock(
-            os.path.join(tempfile.gettempdir(), '.jupyter_kernel.lock')),
         description: Optional[dict] = None,
         parser: Type[BaseParser] = JsonParser,
     ):
@@ -389,7 +393,7 @@ class AsyncIPythonInterpreter(AsyncActionMixin, IPythonInterpreter):
         self._max_kernels = max_kernels
         self._reuse_kernel = reuse_kernel
         self._sem = asyncio.Semaphore(startup_rate)
-        self._distributed_lock = distributed_lock
+        self._lock = asyncio.Lock()
 
     async def initialize(self, session_id: str):
         session_id = str(session_id)
@@ -400,34 +404,44 @@ class AsyncIPythonInterpreter(AsyncActionMixin, IPythonInterpreter):
                 self._KERNEL_CLIENTS[
                     session_id] = await self._UNBOUND_KERNEL_CLIENTS.get()
                 return self._KERNEL_CLIENTS[session_id]
-            with self._distributed_lock:
-                async with self._sem:
-                    if self._max_kernels is None or len(
-                            self._KERNEL_CLIENTS) < self._max_kernels:
-                        kernel_id = None
-                        try:
-                            kernel_id = await self._amkm.start_kernel()
-                            kernel = self._amkm.get_kernel(kernel_id)
-                            client = kernel.client()
-                            _, error_stacktrace, stream_text = await async_run_code(
-                                kernel,
-                                START_CODE.format(self.user_data_dir),
-                                shutdown_kernel=False)
-                            # check if the output of START_CODE meets expectations
-                            if not (error_stacktrace is None
-                                    and stream_text == ''):
-                                raise RuntimeError
-                        except Exception as e:
-                            print(f'Starting kernel error: {e}')
-                            if kernel_id:
-                                await self._amkm.shutdown_kernel(kernel_id)
-                                self._amkm.remove_kernel(kernel_id)
-                            await asyncio.sleep(1)
-                            continue
+            async with self._sem:
+                if self._max_kernels is None or len(
+                        self._KERNEL_CLIENTS
+                ) + self._UNBOUND_KERNEL_CLIENTS.qsize() < self._max_kernels:
+                    kernel_id = None
+                    try:
+                        kernel_id = await self._amkm.start_kernel()
+                        kernel = self._amkm.get_kernel(kernel_id)
+                        client = kernel.client()
+                        _, error_stacktrace, stream_text = await async_run_code(
+                            kernel,
+                            START_CODE.format(self.user_data_dir),
+                            shutdown_kernel=False)
+                        # check if the output of START_CODE meets expectations
+                        if not (error_stacktrace is None
+                                and stream_text == ''):
+                            raise RuntimeError
+                    except Exception as e:
+                        print(f'Starting kernel error: {e}')
+                        if kernel_id:
+                            await self._amkm.shutdown_kernel(kernel_id)
+                            self._amkm.remove_kernel(kernel_id)
+                        await asyncio.sleep(1)
+                        continue
+                    if self._max_kernels is None:
                         self._KERNEL_CLIENTS[session_id] = (kernel_id, kernel,
                                                             client)
                         return kernel_id, kernel, client
-            await asyncio.sleep(3)
+                    async with self._lock:
+                        if len(self._KERNEL_CLIENTS
+                               ) + self._UNBOUND_KERNEL_CLIENTS.qsize(
+                               ) < self._max_kernels:
+                            self._KERNEL_CLIENTS[session_id] = (kernel_id,
+                                                                kernel, client)
+                            return kernel_id, kernel, client
+                    await self._amkm.shutdown_kernel(kernel_id)
+                    self._amkm.remove_kernel(kernel_id)
+            await asyncio.sleep(1)
 
     async def reset(self, session_id: str):
         session_id = str(session_id)
