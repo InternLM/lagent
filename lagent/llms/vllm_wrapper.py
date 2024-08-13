@@ -138,13 +138,17 @@ class AsyncVllmModel(AsyncBaseLLM):
             max_tokens=max_new_tokens,
             stop=stop_words,
             **gen_params)
-        response = []
-        for sid, inp in zip(session_ids, prompt):
+
+        async def _inner_generate(uid, text):
             resp, generator = '', self.model.generate(
-                inp, sampling_params=sampling_config, request_id=sid)
+                text, sampling_params=sampling_config, request_id=uid)
             async for out in generator:
                 resp = out.outputs[0].text
-            response.append(resp)
+            return resp
+
+        response = await asyncio.gather(*[
+            _inner_generate(sid, inp) for sid, inp in zip(session_ids, prompt)
+        ])
         # remove stop_words
         response = filter_suffix(response, self.gen_params.get('stop_words'))
         if batched:

@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Optional, Union
 
 import aiohttp
@@ -512,12 +513,11 @@ class AsyncLMDeployPipeline(AsyncLLMMixin, LMDeployPipeline):
         gen_config = GenerationConfig(
             skip_special_tokens=skip_special_tokens, **gen_params)
 
-        response = []
-        for sid, inp in zip(session_ids, prompt):
-            resp = Response('', 0, 0, sid)
+        async def _inner_generate(uid, text):
+            resp = Response('', 0, 0, uid)
             async for out in self.model.generate(
-                    inp,
-                    sid,
+                    text,
+                    uid,
                     gen_config,
                     stream_response=True,
                     sequence_start=True,
@@ -534,8 +534,11 @@ class AsyncLMDeployPipeline(AsyncLLMMixin, LMDeployPipeline):
                     if resp.logprobs is None:
                         resp.logprobs = []
                     resp.logprobs.extend(out.logprobs)
-            response.append(resp)
+            return resp
 
+        response = await asyncio.gather(*[
+            _inner_generate(sid, inp) for sid, inp in zip(session_ids, prompt)
+        ])
         response = [resp.text for resp in response]
         # remove stop_words
         response = filter_suffix(response, self.gen_params.get('stop_words'))
