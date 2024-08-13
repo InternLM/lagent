@@ -8,8 +8,6 @@ from .base_llm import BaseLLM
 
 logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
-
 
 class HFTransformer(BaseLLM):
     """Model wrapper around HuggingFace general models.
