@@ -13,14 +13,17 @@ from lagent.schema import AgentMessage
 
 class HTTPAgentClient:
 
-    def __init__(self, host='127.0.0.1', port=8090):
+    def __init__(self, host='127.0.0.1', port=8090, timeout=None):
         self.host = host
         self.port = port
+        self.timeout = timeout
 
     @property
     def is_alive(self):
         try:
-            resp = requests.get(f'http://{self.host}:{self.port}/health_check')
+            resp = requests.get(
+                f'http://{self.host}:{self.port}/health_check',
+                timeout=self.timeout)
             return resp.status_code == 200
         except:
             return False
@@ -34,7 +37,8 @@ class HTTPAgentClient:
                 'message': message.model_dump(),
                 'session_id': session_id
             },
-            headers={'Content-Type': 'application/json'})
+            headers={'Content-Type': 'application/json'},
+            timeout=self.timeout)
         resp = response.json()
         if response.status_code != 200:
             return resp
@@ -42,7 +46,8 @@ class HTTPAgentClient:
 
     def state_dict(self, session_id: int = 0):
         resp = requests.get(
-            f'http://{self.host}:{self.port}/memory/{session_id}')
+            f'http://{self.host}:{self.port}/memory/{session_id}',
+            timeout=self.timeout)
         return resp.json()
 
 
@@ -91,7 +96,8 @@ class AsyncHTTPAgentMixin:
     async def __call__(self, message: AgentMessage, session_id: int = 0):
         if isinstance(message, str):
             message = AgentMessage(sender='user', content=message)
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(self.timeout)) as session:
             async with session.post(
                     f'http://{self.host}:{self.port}/chat_completion',
                     json={
