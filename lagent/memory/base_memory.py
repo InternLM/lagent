@@ -26,10 +26,12 @@ class Memory(metaclass=AutoRegister(MEMORY_REGISTRY)):
         return memory
 
     def add(self, memories: Union[List[Dict], Dict, None]) -> None:
-        if isinstance(memories, AgentMessage):
-            self.memory.append(memories)
-        elif isinstance(memories, (list, tuple)):
-            self.memory.extend(memories)
+        for memory in memories if isinstance(memories,
+                                             (list, tuple)) else [memories]:
+            if isinstance(memory, str):
+                memory = AgentMessage(sender='user', content=memory)
+            if isinstance(memory, AgentMessage):
+                self.memory.append(memory)
 
     def delete(self, index: Union[List, int]) -> None:
         if isinstance(index, int):
@@ -41,7 +43,7 @@ class Memory(metaclass=AutoRegister(MEMORY_REGISTRY)):
     def load(
         self,
         memories: Union[str, Dict, List],
-        overwrite: bool = False,
+        overwrite: bool = True,
     ) -> None:
         if overwrite:
             self.memory = []
@@ -56,5 +58,5 @@ class Memory(metaclass=AutoRegister(MEMORY_REGISTRY)):
     def save(self) -> Union[Dict, List]:
         memory = []
         for m in self.memory:
-            memory.append(json.loads(m.model_dump_json()))
+            memory.append(m.model_dump())
         return memory

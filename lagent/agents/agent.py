@@ -1,4 +1,5 @@
 import copy
+import warnings
 from collections import OrderedDict
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -110,31 +111,40 @@ class Agent:
 
     def __setattr__(self, __name: str, __value: Any) -> None:
         if isinstance(__value, Agent):
-            getattr(self, '_agents', OrderedDict())[__name] = __value
+            _agents = getattr(self, '_agents', OrderedDict())
+            _agents[__name] = __value
+            super().__setattr__('_agents', _agents)
         super().__setattr__(__name, __value)
 
     def state_dict(self, session_id=0):
-
-        state_dict = {
-            'name': self.name,
-            'llm': self.llm,
-            'template': self.template,
-            'memory':
-            self.memory.get(session_id).save_state() if self.memory else None,
-            'output_format': self.output_format,
-            'description': self.description,
-        }
-
+        state_dict, stack = {}, [('', self)]
+        while stack:
+            prefix, node = stack.pop()
+            key = prefix + 'memory'
+            if session_id not in node.memory.memory_map:
+                raise KeyError(f'No session id {session_id} in {key}')
+            state_dict[key] = node.memory.get(
+                session_id).save() if node.memory else None
+            if hasattr(node, '_agents'):
+                for name, value in reversed(node._agents.items()):
+                    stack.append((prefix + name + '.', value))
         return state_dict
 
     def load_state_dict(self, state_dict: Dict, session_id=0):
-        self.name = state_dict['name']
-        self.llm = state_dict['llm']
-        self.template = state_dict['template']
-        self.memory = self.memory.get(session_id).load_state(
-            state_dict['memory']) if state_dict['memory'] else None
-        self.output_format = state_dict['output_format']
-        self.description = state_dict['description']
+        _state_dict = self.state_dict()
+        missing_keys = set(_state_dict) - set(state_dict)
+        if missing_keys:
+            raise KeyError(f'Missing keys: {missing_keys}')
+        extra_keys = set(state_dict) - set(_state_dict)
+        if extra_keys:
+            warnings.warn(f'Mismatch keys which are not used: {extra_keys}')
+        for key in _state_dict:
+            obj = self
+            for attr in key.split('.')[:-1]:
+                obj = getattr(obj, attr)
+            if session_id not in obj.memory.memory_map:
+                obj.memory.create_instance(session_id)
+            obj.memory.memory_map[session_id].load(state_dict[key])
 
     def register_hook(self, hook: Callable):
         handle = RemovableHandle(self._hooks)
