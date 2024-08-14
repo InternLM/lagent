@@ -5,6 +5,7 @@ from .arxiv_search import ArxivSearch
 from .base_action import TOOL_REGISTRY, BaseAction, tool_api
 from .bing_browser import BingBrowser
 from .bing_map import BINGMap
+from .brave_search import BraveSearch
 from .builtin_actions import FinishAction, InvalidAction, NoAction
 from .google_scholar_search import GoogleScholar
 from .google_search import GoogleSearch
@@ -21,7 +22,7 @@ __all__ = [
     'GoogleScholar', 'IPythonInterpreter', 'IPythonInteractive',
     'IPythonInteractiveManager', 'PythonInterpreter', 'PPT', 'BaseParser',
     'JsonParser', 'TupleParser', 'tool_api', 'list_tools', 'get_tool_cls',
-    'get_tool', 'BingBrowser'
+    'get_tool', 'BingBrowser','BraveSearch'
 ]
 
 
