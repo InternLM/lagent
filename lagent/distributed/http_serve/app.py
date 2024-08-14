@@ -3,6 +3,7 @@ import importlib
 import json
 import logging
 import sys
+import time
 
 import uvicorn
 from fastapi import Body, FastAPI, HTTPException
@@ -51,6 +52,10 @@ class AgentAPIServer:
         self.run(host, port)
 
     def setup_routes(self):
+
+        @self.app.get('/health_check')
+        def heartbeat():
+            return {'status': 'success', 'timestamp': time.time()}
 
         @self.app.post('/chat_completion')
         async def process_message(message: AgentMessage,
