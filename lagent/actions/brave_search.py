@@ -29,12 +29,6 @@ class BraveSearch(BaseAction):
             action's inputs and outputs. Defaults to :class:`JsonParser`.
         enable (bool): Whether the action is enabled. Defaults to ``True``.
     """
-    # result_key_for_type = {
-    #     'news': 'news',
-    #     'places': 'places',
-    #     'images': 'images',
-    #     'search': 'organic',
-    # }
 
     def __init__(self,
                  api_key: Optional[str] = None,
