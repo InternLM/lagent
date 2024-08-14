@@ -3,10 +3,9 @@ import importlib
 import json
 import logging
 import sys
-from typing import List, Union
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from lagent.schema import AgentMessage
@@ -17,7 +16,7 @@ def load_class_from_string(class_path: str, path=None):
     if path:
         if path not in sys.path:
             path_in_sys = True
-            sys.path.insert(0, path)  # Temporarily add the path to sys.path
+            sys.path.insert(0, path)
 
     try:
         module_name, class_name = class_path.rsplit('.', 1)
@@ -26,13 +25,15 @@ def load_class_from_string(class_path: str, path=None):
         return cls
     finally:
         if path and path_in_sys:
-            sys.path.remove(
-                path)  # Ensure to clean up by removing the path from sys.path
+            sys.path.remove(path)
 
 
-class AsyncAgentAPIServer:
+class AgentAPIServer:
 
-    def __init__(self, config: dict, host: str = '0.0.0.0', port: int = 8090):
+    def __init__(self,
+                 config: dict,
+                 host: str = '127.0.0.1',
+                 port: int = 8090):
         self.app = FastAPI(docs_url='/')
         self.app.add_middleware(
             CORSMiddleware,
@@ -52,26 +53,37 @@ class AsyncAgentAPIServer:
     def setup_routes(self):
 
         @self.app.post('/chat_completion')
-        async def process_message(*message: Union[AgentMessage,
-                                                  List[AgentMessage]],
-                                  session_id: str = Query('0')):
+        async def process_message(message: AgentMessage,
+                                  session_id: int = Body(0)):
             try:
-                # Ensure the agent call is correctly awaited and results are returned properly.
-                result = await self.agent(*message, session_id=session_id)
+                result = await self.agent(message, session_id=session_id)
                 return result
             except Exception as e:
                 logging.error(f'Error processing message: {str(e)}')
                 raise HTTPException(
                     status_code=500, detail='Internal Server Error')
 
-    def run(self, host='0.0.0.0', port=8090):
+        @self.app.get('/memory/{session_id}')
+        def get_memory(session_id: int = 0):
+            try:
+                result = self.agent.state_dict(session_id)
+                return result
+            except KeyError:
+                raise HTTPException(
+                    status_code=404, detail="Session ID not found")
+            except Exception as e:
+                logging.error(f'Error processing message: {str(e)}')
+                raise HTTPException(
+                    status_code=500, detail='Internal Server Error')
+
+    def run(self, host='127.0.0.1', port=8090):
         logging.info(f'Starting server at {host}:{port}')
         uvicorn.run(self.app, host=host, port=port)
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Async Agent API Server')
-    parser.add_argument('--host', type=str, default='0.0.0.0')
+    parser.add_argument('--host', type=str, default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8090)
     parser.add_argument(
         '--config',
@@ -86,4 +98,4 @@ def parse_args():
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     args = parse_args()
-    AsyncAgentAPIServer(args.config, host=args.host, port=args.port)
+    AgentAPIServer(args.config, host=args.host, port=args.port)
