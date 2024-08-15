@@ -139,7 +139,7 @@ class SENSENOVA_API(BaseAPIModel):
 
         resp = ''
         finished = False
-        stop_words = gen_params.get('stop_words', [])
+        stop_words = gen_params.get('stop_words') or []
         messages = self.template_parser._prompt2api(inputs)
         for text in self._stream_chat(messages, **gen_params):
             # TODO 测试 resp = text 还是 resp += text
