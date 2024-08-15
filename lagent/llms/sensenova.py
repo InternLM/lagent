@@ -15,9 +15,12 @@ from .base_api import BaseAPIModel
 
 warnings.simplefilter('default')
 
-OPENAI_API_BASE = 'https://api.openai.com/v1/chat/completions'
 SENSENOVA_API_BASE = "https://api.sensenova.cn/v1/llm/chat-completions"
 
+sensechat_models = {
+    'SenseChat-5': 131072,
+    'SenseChat-5-Cantonese': 32768
+}
 
 class SENSENOVA_API(BaseAPIModel):
     """Model wrapper around SenseTime's models.
@@ -29,13 +32,8 @@ class SENSENOVA_API(BaseAPIModel):
         retry (int): Number of retires if the API call fails. Defaults to 2.
         key (str or List[str]): SenseTime key(s). In particular, when it
             is set to "ENV", the key will be fetched from the environment
-            variable $SENSENOVA_API_KEY, as how openai defaults to be. If it's a
-            list, the keys will be used in round-robin manner. Defaults to
-            'ENV'.
-        org (str or List[str], optional): OpenAI organization(s). If not
-            specified, OpenAI uses the default organization bound to each API
-            key. If specified, the orgs will be posted with each request in
-            round-robin manner. Defaults to None.
+            variable $SENSENOVA_API_KEY. If it's a list, the keys will be 
+            used in round-robin manner. Defaults to 'ENV'.
         meta_template (Dict, optional): The model's meta prompt
             template if needed, in case the requirement of injecting or
             wrapping of any meta instructions.
@@ -53,14 +51,12 @@ class SENSENOVA_API(BaseAPIModel):
                  retry: int = 2,
                  json_mode: bool = False,
                  key: Union[str, List[str]] = 'ENV',
-                 org: Optional[Union[str, List[str]]] = None,
                  meta_template: Optional[Dict] = [
                      dict(role='system', api_role='system'),
                      dict(role='user', api_role='user'),
                      dict(role='assistant', api_role='assistant'),
                      dict(role='environment', api_role='system')
                  ],
-                 openai_api_base: str = OPENAI_API_BASE,
                  sensenova_api_base: str = SENSENOVA_API_BASE,
                  proxies: Optional[Dict] = None,
                  **gen_params):
@@ -74,12 +70,9 @@ class SENSENOVA_API(BaseAPIModel):
         self.logger = getLogger(__name__)
 
         if isinstance(key, str):
-            if self.model_type.lower().startswith('sense'):
-                # First, apply for SenseNova's ak and sk from SenseTime staff
-                # Then, generated SENSENOVA_API_KEY using lagent.utils.gen_key.auto_gen_jwt_token(ak, sk)
-                self.keys = [os.getenv('SENSENOVA_API_KEY') if key == 'ENV' else key]
-            else:    
-                self.keys = [os.getenv('OPENAI_API_KEY') if key == 'ENV' else key]
+            # First, apply for SenseNova's ak and sk from SenseTime staff
+            # Then, generated SENSENOVA_API_KEY using lagent.utils.gen_key.auto_gen_jwt_token(ak, sk)
+            self.keys = [os.getenv('SENSENOVA_API_KEY') if key == 'ENV' else key]
         else:
             self.keys = key
 
@@ -88,15 +81,7 @@ class SENSENOVA_API(BaseAPIModel):
         self.invalid_keys = set()
 
         self.key_ctr = 0
-        if isinstance(org, str):
-            self.orgs = [org]
-        else:
-            self.orgs = org
-        self.org_ctr = 0
-        if self.model_type.lower().startswith('sense'):
-            self.url = sensenova_api_base
-        else:
-            self.url = openai_api_base
+        self.url = sensenova_api_base
         self.model_type = model_type
         self.proxies = proxies
         self.json_mode = json_mode
@@ -159,10 +144,8 @@ class SENSENOVA_API(BaseAPIModel):
         # mapping to role that openai supports
         messages = self.template_parser._prompt2api(inputs)
         for text in self._stream_chat(messages, **gen_params):
-            if self.model_type.lower().startswith('qwen'):
-                resp = text
-            else:
-                resp += text
+            # TODO 测试 resp = text 还是 resp += text
+            resp += text
             if not resp:
                 continue
             # remove stop_words
@@ -214,13 +197,6 @@ class SENSENOVA_API(BaseAPIModel):
                 key = self.keys[self.key_ctr]
                 header['Authorization'] = f'Bearer {key}'
 
-            if self.orgs:
-                with Lock():
-                    self.org_ctr += 1
-                    if self.org_ctr == len(self.orgs):
-                        self.org_ctr = 0
-                header['OpenAI-Organization'] = self.orgs[self.org_ctr]
-
             response = dict()
             try:
                 raw_response = requests.post(
@@ -252,7 +228,7 @@ class SENSENOVA_API(BaseAPIModel):
                 print(str(error))
             max_num_retries += 1
 
-        raise RuntimeError('Calling OpenAI failed after retrying for '
+        raise RuntimeError('Calling SenseTime failed after retrying for '
                            f'{max_num_retries} times. Check the logs for '
                            'details.')
 
@@ -268,39 +244,33 @@ class SENSENOVA_API(BaseAPIModel):
         """
 
         def streaming(raw_response):
-            for chunk in raw_response.iter_lines(
-                    chunk_size=8192, decode_unicode=False, delimiter=b'\n'):
+            buffer = ""
+            for chunk in raw_response.iter_lines():
                 if chunk:
-                    decoded = chunk.decode('utf-8')
-                    if decoded == 'data: [DONE]':
-                        return
-                    if decoded[:5] == 'data:':
-                        decoded = decoded[5:]
-                        if decoded[0] == ' ':
-                            decoded = decoded[1:]
-                    else:
-                        print(decoded)
-                        continue
                     try:
-                        response = json.loads(decoded)
-                        if 'code' in response and response['code'] == -20003:
-                            # Context exceeds maximum length
-                            yield ''
-                            return
-                        if self.model_type.lower().startswith('qwen'):
-                            choice = response['output']['choices'][0]
-                            yield choice['message']['content']
-                            if choice['finish_reason'] == 'stop':
-                                return
+                        decoded_chunk = chunk.decode('utf-8')
+                        # print(f"Decoded chunk: {decoded_chunk}")
+
+                        if decoded_chunk == "data:[DONE]":
+                            # print("Stream ended")
+                            break
+
+                        if decoded_chunk.startswith("data:"):
+                            json_str = decoded_chunk[5:]
+                            chunk_data = json.loads(json_str)
+
+                            if 'data' in chunk_data and 'choices' in chunk_data['data']:
+                                choice = chunk_data['data']['choices'][0]
+                                if 'delta' in choice:
+                                    content = choice['delta']
+                                    yield content
                         else:
-                            choice = response['choices'][0]
-                            if choice['finish_reason'] == 'stop':
-                                return
-                            yield choice['delta']['content']
-                    except Exception as exc:
-                        print(
-                            f'response {decoded} lead to exception of {str(exc)}'
-                        )
+                            print(f"Unexpected format: {decoded_chunk}")
+
+                    except json.JSONDecodeError as e:
+                        print(f"JSON parsing error: {e}")
+                    except Exception as e:
+                        print(f"An error occurred while processing the chunk: {e}")
 
         assert isinstance(messages, list)
 
@@ -326,12 +296,6 @@ class SENSENOVA_API(BaseAPIModel):
 
             key = self.keys[self.key_ctr]
             header['Authorization'] = f'Bearer {key}'
-
-            if self.orgs:
-                self.org_ctr += 1
-                if self.org_ctr == len(self.orgs):
-                    self.org_ctr = 0
-                header['OpenAI-Organization'] = self.orgs[self.org_ctr]
 
             response = dict()
             try:
@@ -363,7 +327,7 @@ class SENSENOVA_API(BaseAPIModel):
                 print(str(error))
             max_num_retries += 1
 
-        raise RuntimeError('Calling OpenAI failed after retrying for '
+        raise RuntimeError('Calling SenseTime failed after retrying for '
                            f'{max_num_retries} times. Check the logs for '
                            'details.')
 
@@ -376,7 +340,7 @@ class SENSENOVA_API(BaseAPIModel):
         Generates the request data for different model types.
 
         Args:
-            model_type (str): The type of the model (e.g., 'gpt', 'internlm', 'qwen').
+            model_type (str): The type of the model (e.g., 'sense').
             messages (list): The list of messages to be sent to the model.
             gen_params (dict): The generation parameters.
             json_mode (bool): Flag to determine if the response format should be JSON.
@@ -407,12 +371,7 @@ class SENSENOVA_API(BaseAPIModel):
 
         # Model-specific processing
         data = {}
-        if model_type.lower().startswith('gpt'):
-            if 'top_k' in gen_params:
-                warnings.warn(
-                    '`top_k` parameter is deprecated in OpenAI APIs.',
-                    DeprecationWarning)
-                gen_params.pop('top_k')
+        if model_type.lower().startswith('sense'):
             gen_params.pop('skip_special_tokens', None)
             gen_params.pop('session_id', None)
             data = {
@@ -423,32 +382,6 @@ class SENSENOVA_API(BaseAPIModel):
             }
             if json_mode:
                 data['response_format'] = {'type': 'json_object'}
-        elif model_type.lower().startswith('internlm'):
-            data = {
-                'model': model_type,
-                'messages': messages,
-                'n': 1,
-                **gen_params
-            }
-            if json_mode:
-                data['response_format'] = {'type': 'json_object'}
-        elif model_type.lower().startswith('qwen'):
-            header['X-DashScope-SSE'] = 'enable'
-            gen_params.pop('skip_special_tokens', None)
-            gen_params.pop('session_id', None)
-            if 'frequency_penalty' in gen_params:
-                gen_params['repetition_penalty'] = gen_params.pop(
-                    'frequency_penalty')
-            gen_params['result_format'] = 'message'
-            data = {
-                'model': model_type,
-                'input': {
-                    'messages': messages
-                },
-                'parameters': {
-                    **gen_params
-                }
-            }
         else:
             raise NotImplementedError(
                 f'Model type {model_type} is not supported')
@@ -466,5 +399,5 @@ class SENSENOVA_API(BaseAPIModel):
         """
         import tiktoken
         self.tiktoken = tiktoken
-        enc = self.tiktoken.encoding_for_model(self.model_type)
+        enc = self.tiktoken.encoding_for_model("gpt-4o")
         return enc.encode(prompt)
