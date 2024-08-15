@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Union
 
 import requests
 
+from typing import List, Dict, Optional, Union, Generator, Tuple
 from lagent.schema import ModelStatusCode
 from lagent.utils.util import filter_suffix
 from .base_api import BaseAPIModel
@@ -120,15 +121,15 @@ class SENSENOVA_API(BaseAPIModel):
         self,
         inputs: List[dict],
         **gen_params,
-    ) -> str:
+    ) -> Generator[Tuple[ModelStatusCode, str, Optional[str]], None, None]:
         """Generate responses given the contexts.
 
         Args:
             inputs (List[dict]): a list of messages
             gen_params: additional generation configuration
 
-        Returns:
-            str: generated string
+        Yields:
+            Tuple[ModelStatusCode, str, Optional[str]]: Status code, generated string, and optional metadata
         """
         assert isinstance(inputs, list)
         if 'max_tokens' in gen_params:
@@ -138,10 +139,7 @@ class SENSENOVA_API(BaseAPIModel):
 
         resp = ''
         finished = False
-        stop_words = gen_params.get('stop_words')
-        if stop_words is None:
-            stop_words = []
-        # mapping to role that openai supports
+        stop_words = gen_params.get('stop_words', [])
         messages = self.template_parser._prompt2api(inputs)
         for text in self._stream_chat(messages, **gen_params):
             # TODO 测试 resp = text 还是 resp += text
