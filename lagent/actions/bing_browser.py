@@ -149,6 +149,162 @@ class BingSearch(BaseSearch):
 
         return self._filter_results(raw_results)
 
+class BraveSearch(BaseSearch):
+    def __init__(self,
+                 api_key: str,
+                 region: str = 'ALL',
+                 language: str = 'zh-hans',
+                 extra_snippests: bool = True,
+                 topk: int = 3,
+                 black_list: List[str] = [
+                     'enoN',
+                     'youtube.com',
+                     'bilibili.com',
+                     'researchgate.net',
+                 ],
+                 **kwargs):
+        self.api_key = api_key
+        self.market = region
+        self.proxy = kwargs.get('proxy')
+        self.language = language
+        self.extra_snippests = extra_snippests
+        self.search_type = kwargs.get('search_type', 'web')
+        self.kwargs=kwargs
+        super().__init__(topk, black_list)
+
+    @cached(cache=TTLCache(maxsize=100, ttl=600))
+    def search(self, query: str, max_retry: int = 3) -> dict:
+        for attempt in range(max_retry):
+            try:
+                response = self._call_brave_api(query)
+                return self._parse_response(response)
+            except Exception as e:
+                logging.exception(str(e))
+                warnings.warn(
+                    f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                time.sleep(random.randint(2, 5))
+        raise Exception(
+            'Failed to get search results from Brave Search after retries.')
+    
+    def _call_brave_api(self, query: str) -> dict:
+        endpoint = f'https://api.search.brave.com/res/v1/{self.search_type}/search'
+        params = {'q': query, 'country':self.market, 'search_lang':self.language, 'extra_snippets':self.extra_snippests, 'count':self.topk,
+                  **{
+                key: value
+                for key, value in self.kwargs.items() if value is not None
+            },
+            }
+        headers = {"X-Subscription-Token": self.api_key or '', "Accept": "application/json"}
+        response = requests.get(
+            endpoint, headers=headers, params=params, proxies=self.proxy)
+        response.raise_for_status()
+        return response.json()
+    
+    def _parse_response(self, response: dict) -> dict:
+        if self.search_type=="web":
+            filtered_result=response.get("web", {}).get("results", [])
+        else:
+            filtered_result=response.get("results", {})
+        raw_results = []
+
+        for item in filtered_result:
+            raw_results.append((
+                    item.get("url",""),
+                    " ".join(
+                        filter(
+                            None, [item.get("description"), *item.get("extra_snippets", [])]
+                        )
+                    ),
+                    item.get("title",""),
+                ))
+        return self._filter_results(raw_results)
+    
+class GoogleSearch(BaseSearch):
+
+    result_key_for_type = {
+        'news': 'news',
+        'places': 'places',
+        'images': 'images',
+        'search': 'organic',
+    }
+
+    def __init__(self,
+                 api_key: str,
+                 topk: int = 3,
+                 black_list: List[str] = [
+                     'enoN',
+                     'youtube.com',
+                     'bilibili.com',
+                     'researchgate.net',
+                 ],
+                 **kwargs):
+        self.api_key = api_key
+        self.proxy = kwargs.get('proxy')
+        self.search_type = kwargs.get('search_type', 'search')
+        self.kwargs=kwargs
+        super().__init__(topk, black_list)
+    
+    @cached(cache=TTLCache(maxsize=100, ttl=600))
+    def search(self, query: str, max_retry: int = 3) -> dict:
+        for attempt in range(max_retry):
+            try:
+                response = self._call_serper_api(query)
+                return self._parse_response(response)
+            except Exception as e:
+                logging.exception(str(e))
+                warnings.warn(
+                    f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                time.sleep(random.randint(2, 5))
+        raise Exception(
+            'Failed to get search results from Google Serper Search after retries.')
+    
+    def _call_serper_api(self, query: str) -> dict:
+        endpoint = f'https://google.serper.dev/{self.search_type}'
+        params = {
+            'q': query,
+            'num': self.topk,
+            **{
+                key: value
+                for key, value in self.kwargs.items() if value is not None
+            },
+        }
+        headers = {"X-API-KEY": self.api_key or '',"Content-Type": "application/json"}
+        response = requests.get(
+            endpoint, headers=headers, params=params, proxies=self.proxy)
+        response.raise_for_status()
+        return response.json()
+
+    def _parse_response(self, response: dict) -> dict:
+        raw_results = []
+
+        if response.get('answerBox'):
+            answer_box = response.get('answerBox', {})
+            if answer_box.get('answer'):
+                raw_results.append(("",answer_box.get('answer'),""))
+            elif answer_box.get('snippet'):
+                raw_results.append(("",answer_box.get('snippet').replace('\n', ' '),""))
+            elif answer_box.get('snippetHighlighted'):
+                raw_results.append(("",answer_box.get('snippetHighlighted'),""))
+
+        if response.get('knowledgeGraph'):
+            kg = response.get('knowledgeGraph', {})
+            description = kg.get('description', '')
+            attributes = '. '.join(f'{attribute}: {value}' for attribute, value in kg.get('attributes', {}).items())
+            raw_results.append((kg.get("descriptionLink", ""), 
+                                f"{description}. {attributes}" if attributes else description, 
+                                f"{kg.get('title', '')}: {kg.get('type', '')}."))
+        
+        for result in response[self.result_key_for_type[
+                self.search_type]][:self.topk]:
+            description = result.get('snippet', '')
+            attributes = '. '.join(f'{attribute}: {value}' for attribute, value in result.get('attributes', {}).items())
+            raw_results.append((result.get('link', '') ,
+                                f'{description}. {attributes}' if attributes else description, 
+                                result.get('title', '')))
+        
+        return self._filter_results(raw_results)
+        
+
 
 class ContentFetcher:
 
