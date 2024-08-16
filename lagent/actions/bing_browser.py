@@ -52,7 +52,7 @@ class DuckDuckGoSearch(BaseSearch):
                  ],
                  **kwargs):
         self.proxy = kwargs.get('proxy')
-        self.timeout = kwargs.get('timeout', 10)
+        self.timeout = kwargs.get('timeout', 30)
         super().__init__(topk, black_list)
 
     @cached(cache=TTLCache(maxsize=100, ttl=600))
@@ -70,12 +70,23 @@ class DuckDuckGoSearch(BaseSearch):
         raise Exception(
             'Failed to get search results from DuckDuckGo after retries.')
 
+    async def _async_call_ddgs(self, query: str, **kwargs) -> dict:
+        ddgs = DDGS(**kwargs)
+        try:
+            response = await asyncio.wait_for(
+                asyncio.to_thread(ddgs.text, query.strip("'"), max_results=10),
+                timeout=self.timeout)
+            return response
+        except asyncio.TimeoutError:
+            logging.exception('Request to DDGS timed out.')
+            raise
+
     def _call_ddgs(self, query: str, **kwargs) -> dict:
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
-            asyncio.set_event_loop(loop)
-            ddgs = DDGS(**kwargs)
-            response = ddgs.text(query.strip("'"), max_results=10)
+            response = loop.run_until_complete(
+                self._async_call_ddgs(query, **kwargs))
             return response
         finally:
             loop.close()
