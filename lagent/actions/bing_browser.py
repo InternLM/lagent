@@ -72,10 +72,13 @@ class DuckDuckGoSearch(BaseSearch):
 
     def _call_ddgs(self, query: str, **kwargs) -> dict:
         loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        ddgs = DDGS(**kwargs)
-        response = ddgs.text(query.strip("'"), max_results=10)
-        return response
+        try:
+            asyncio.set_event_loop(loop)
+            ddgs = DDGS(**kwargs)
+            response = ddgs.text(query.strip("'"), max_results=10)
+            return response
+        finally:
+            loop.close()
 
     def _parse_response(self, response: dict) -> dict:
         raw_results = []
