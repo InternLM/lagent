@@ -151,6 +151,23 @@ class BingSearch(BaseSearch):
 
 
 class BraveSearch(BaseSearch):
+    """
+    Wrapper around the Brave Search API.
+
+    To use, you should pass your Brave Search API key to the constructor.
+
+    Args:
+        api_key (str): API KEY to use Brave Search API.
+            You can create a free API key at https://api.search.brave.com/app/keys.
+        search_type (str): Brave Search API supports ['web', 'news', 'images', 'videos'],
+            currently only supports 'news' and 'web'.
+        topk (int): The number of search results returned in response from API search results.
+        region (str): The country code string. Specifies the country where the search results come from.
+        language (str): The language code string. Specifies the preferred language for the search results.
+        extra_snippets (bool): Allows retrieving up to 5 additional snippets, which are alternative excerpts from the search results.
+        **kwargs: Any other parameters related to the Brave Search API. Find more details at
+            https://api.search.brave.com/app/documentation/web-search/get-started.
+    """
 
     def __init__(self,
                  api_key: str,
@@ -231,6 +248,20 @@ class BraveSearch(BaseSearch):
 
 
 class GoogleSearch(BaseSearch):
+    """
+    Wrapper around the Serper.dev Google Search API.
+
+    To use, you should pass your serper API key to the constructor.
+
+    Args:
+        api_key (str): API KEY to use serper google search API.
+            You can create a free API key at https://serper.dev.
+        search_type (str): Serper API supports ['search', 'images', 'news',
+            'places'] types of search, currently we only support 'search' and 'news'.
+        topk (int): The number of search results returned in response from api search results.
+        **kwargs: Any other parameters related to the Serper API. Find more details at
+            https://serper.dev/playground
+    """
 
     result_key_for_type = {
         'news': 'news',
