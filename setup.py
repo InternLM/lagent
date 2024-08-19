@@ -89,7 +89,7 @@ if __name__ == '__main__':
         long_description = file.read()
 
     setup(
-        name='xlagent',
+        name='lagent',
         packages=find_packages(),
         include_package_data=True,
         version=get_version(),
