@@ -15,9 +15,9 @@ from class_registry import AutoRegister, ClassRegistry
 from griffe import Docstring
 
 try:
-    from griffe.enumerations import DocstringSectionKind
-except ImportError:
     from griffe import DocstringSectionKind
+except ImportError:
+    from griffe.enumerations import DocstringSectionKind
 
 from ..schema import ActionReturn, ActionStatusCode
 from .parser import BaseParser, JsonParser, ParseError
