@@ -8,7 +8,6 @@ json5
 jsonschema
 jupyter
 jupyter_client
-phx-class-registry
 requests
 stdlib_list==0.10.0
 streamlit

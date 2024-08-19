@@ -1,11 +1,9 @@
-import json
 from typing import Callable, Dict, List, Optional, Union
 
-from lagent.registry import MEMORY_REGISTRY, AutoRegister
 from lagent.schema import AgentMessage
 
 
-class Memory(metaclass=AutoRegister(MEMORY_REGISTRY)):
+class Memory:
 
     def __init__(self, recent_n=None) -> None:
         self.memory: List[AgentMessage] = []

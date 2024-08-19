@@ -1,6 +1,6 @@
 from typing import Dict
 
-from lagent.registry import MEMORY_REGISTRY, ObjectFactory
+from ..utils import create_object
 from .base_memory import Memory
 
 
@@ -8,12 +8,10 @@ class MemoryManager:
 
     def __init__(self, cfg) -> None:
         self.cfg = cfg
-        self.memory_map: Dict[str, Memory] = {
-        }  # Maps client IDs to Memory instances
+        self.memory_map: Dict[str, Memory] = {}
 
     def create_instance(self, session_id):
-        self.memory_map[session_id] = ObjectFactory.create(
-            self.cfg, MEMORY_REGISTRY)
+        self.memory_map[session_id] = create_object(self.cfg)
 
     def get_memory(self, session_id=0, **kwargs) -> list:
         return self.memory_map[session_id].get_memory(**kwargs)

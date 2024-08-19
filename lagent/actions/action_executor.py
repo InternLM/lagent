@@ -3,12 +3,12 @@ from collections import OrderedDict
 from typing import Callable, Dict, List, Union
 
 from lagent.actions.base_action import BaseAction
+from lagent.actions.builtin_actions import FinishAction, InvalidAction, NoAction
 from lagent.hooks import Hook, RemovableHandle
-from lagent.registry import HOOK_REGISTRY, TOOL_REGISTRY, ObjectFactory
 from lagent.schema import ActionReturn, ActionValidCode, AgentMessage, FunctionCall
+from lagent.utils import create_object
 
 
-@TOOL_REGISTRY.register
 class ActionExecutor:
     """The action executor class.
 
@@ -27,30 +27,29 @@ class ActionExecutor:
     def __init__(
         self,
         actions: Union[BaseAction, List[BaseAction], Dict, List[Dict]],
-        invalid_action: BaseAction = dict(type='InvalidAction'),
-        no_action: BaseAction = dict(type='NoAction'),
-        finish_action: BaseAction = dict(type='FinishAction'),
+        invalid_action: BaseAction = dict(type=InvalidAction),
+        no_action: BaseAction = dict(type=NoAction),
+        finish_action: BaseAction = dict(type=FinishAction),
         finish_in_action: bool = False,
         hooks: List[Dict] = None,
     ):
 
         if not isinstance(actions, list):
             actions = [actions]
-        finish_action = ObjectFactory.create(finish_action, TOOL_REGISTRY)
+        finish_action = create_object(finish_action)
         if finish_in_action:
             actions.append(finish_action)
         for i, action in enumerate(actions):
-            actions[i] = ObjectFactory.create(action, TOOL_REGISTRY)
+            actions[i] = create_object(action)
         self.actions = {action.name: action for action in actions}
 
-        self.invalid_action = ObjectFactory.create(invalid_action,
-                                                   TOOL_REGISTRY)
-        self.no_action = ObjectFactory.create(no_action, TOOL_REGISTRY)
+        self.invalid_action = create_object(invalid_action)
+        self.no_action = create_object(no_action)
         self.finish_action = finish_action
         self._hooks: Dict[int, Hook] = OrderedDict()
         if hooks:
             for hook in hooks:
-                hook = ObjectFactory.create(hook, HOOK_REGISTRY)
+                hook = create_object(hook)
                 self.register_hook(hook)
 
     def description(self) -> List[Dict]:
@@ -73,7 +72,7 @@ class ActionExecutor:
         return list(self.actions.keys())
 
     def __setitem__(self, name: str, action: Union[BaseAction, Dict]):
-        action = ObjectFactory.create(action, TOOL_REGISTRY)
+        action = create_object(action)
         self.actions[action.name] = action
 
     def __delitem__(self, name: str):
@@ -135,7 +134,6 @@ class ActionExecutor:
         return handle
 
 
-@TOOL_REGISTRY.register
 class AsyncActionExecutor(ActionExecutor):
 
     async def forward(self, name, parameters, **kwargs) -> ActionReturn:

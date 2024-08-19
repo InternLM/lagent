@@ -5,11 +5,14 @@ from pydantic import BaseModel, Field
 
 from lagent.actions import ActionExecutor, AsyncActionExecutor, BaseAction
 from lagent.agents.agent import Agent, AsyncAgent
+from lagent.agents.aggregator import DefaultAggregator
+from lagent.hooks import ActionPreprocessor
 from lagent.llms import BaseLLM
+from lagent.memory import Memory
 from lagent.prompts.parsers.json_parser import JSONParser
 from lagent.prompts.prompt_template import PromptTemplate
-from lagent.registry import AGENT_REGISTRY, TOOL_REGISTRY, ObjectFactory
 from lagent.schema import AgentMessage
+from lagent.utils import create_object
 
 select_action_template = """你是一个可以调用外部工具的助手，可以使用的工具包括：
 {action_info}
@@ -29,10 +32,10 @@ class ReAct(Agent):
                  llm: Union[BaseLLM, Dict],
                  actions: Union[BaseAction, List[BaseAction]],
                  template: Union[PromptTemplate, str] = None,
-                 memory: Dict = dict(type='Memory'),
-                 output_format: Dict = dict(type='JsonParser'),
-                 aggregator: Dict = dict(type='DefaultAggregator'),
-                 hooks: List = [dict(type='ActionPreprocessor')],
+                 memory: Dict = dict(type=Memory),
+                 output_format: Dict = dict(type=JSONParser),
+                 aggregator: Dict = dict(type=DefaultAggregator),
+                 hooks: List = [dict(type=ActionPreprocessor)],
                  max_turn: int = 5,
                  **kwargs):
         self.max_turn = max_turn
@@ -43,8 +46,7 @@ class ReAct(Agent):
             hooks=hooks,
         )
 
-        self.actions: ActionExecutor = ObjectFactory.create(
-            actions, TOOL_REGISTRY)
+        self.actions: ActionExecutor = create_object(actions)
         select_agent = dict(
             type=Agent,
             llm=llm,
@@ -56,7 +58,7 @@ class ReAct(Agent):
             aggregator=aggregator,
             hooks=hooks,
         )
-        self.select_agent = ObjectFactory.create(select_agent, AGENT_REGISTRY)
+        self.select_agent = create_object(select_agent)
         super().__init__(**kwargs)
 
     def forward(self, message: AgentMessage, **kwargs) -> AgentMessage:
@@ -75,10 +77,10 @@ class AsyncReAct(AsyncAgent):
                  llm: Union[BaseLLM, Dict],
                  actions: Union[BaseAction, List[BaseAction]],
                  template: Union[PromptTemplate, str] = None,
-                 memory: Dict = dict(type='Memory'),
-                 output_format: Dict = dict(type='JsonParser'),
-                 aggregator: Dict = dict(type='DefaultAggregator'),
-                 hooks: List = [dict(type='ActionPreprocessor')],
+                 memory: Dict = dict(type=Memory),
+                 output_format: Dict = dict(type=JSONParser),
+                 aggregator: Dict = dict(type=DefaultAggregator),
+                 hooks: List = [dict(type=ActionPreprocessor)],
                  max_turn: int = 5,
                  **kwargs):
         self.max_turn = max_turn
@@ -89,8 +91,7 @@ class AsyncReAct(AsyncAgent):
             hooks=hooks,
         )
 
-        self.actions: AsyncActionExecutor = ObjectFactory.create(
-            actions, TOOL_REGISTRY)
+        self.actions: AsyncActionExecutor = create_object(actions)
         select_agent = dict(
             type=AsyncAgent,
             llm=llm,
@@ -102,7 +103,7 @@ class AsyncReAct(AsyncAgent):
             aggregator=aggregator,
             hooks=hooks,
         )
-        self.select_agent = ObjectFactory.create(select_agent, AGENT_REGISTRY)
+        self.select_agent = create_object(select_agent)
         super().__init__(**kwargs)
 
     async def forward(self, message: AgentMessage, **kwargs) -> AgentMessage:

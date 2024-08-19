@@ -1,11 +1,15 @@
 import warnings
 from typing import Dict, List, Union
 
-from lagent.actions import ActionExecutor, AsyncActionExecutor
+from lagent.actions import ActionExecutor, AsyncActionExecutor, AsyncIPythonInterpreter, IPythonInteractive
 from lagent.agents.agent import Agent, AsyncAgent
+from lagent.agents.aggregator import InternLMToolAggregator
+from lagent.hooks import InternLMActionProcessor
 from lagent.llms import BaseLLM
-from lagent.registry import AGENT_REGISTRY, ObjectFactory
+from lagent.memory import Memory
+from lagent.prompts.parsers import InternLMToolParser
 from lagent.schema import AgentMessage, AgentStatusCode
+from lagent.utils import create_object
 
 
 class AgentForInternLM(Agent):
@@ -15,10 +19,10 @@ class AgentForInternLM(Agent):
         llm: Union[BaseLLM, Dict],
         plugins: Union[dict, List[dict]] = None,
         interpreter: dict = None,
-        memory: Dict = dict(type='Memory'),
-        output_format: Dict = dict(type='InternLMToolParser'),
-        aggregator: Dict = dict(type='InternLMToolAggregator'),
-        action_hooks: List = [dict(type='InternLMActionProcessor')],
+        memory: Dict = dict(type=Memory),
+        output_format: Dict = dict(type=InternLMToolParser),
+        aggregator: Dict = dict(type=InternLMToolAggregator),
+        action_hooks: List = [dict(type=InternLMActionProcessor)],
         max_turn: int = 4,
         **kwargs,
     ):
@@ -30,7 +34,7 @@ class AgentForInternLM(Agent):
             aggregator=aggregator,
             hooks=kwargs.pop('hooks', None),
         )
-        self.agent = ObjectFactory.create(agent, AGENT_REGISTRY)
+        self.agent = create_object(agent)
         self.plugin_executor = plugins and ActionExecutor(
             plugins, hooks=action_hooks)
         self.interpreter_executor = interpreter and ActionExecutor(
@@ -85,18 +89,18 @@ class MathCoder(AgentForInternLM):
         self,
         llm: Union[BaseLLM, Dict],
         interpreter: dict = dict(
-            type='IPythonInteractive', timeout=20, max_out_len=8192),
-        memory: Dict = dict(type='Memory'),
-        output_format: Dict = dict(type='InternLMToolParser'),
+            type=IPythonInteractive, timeout=20, max_out_len=8192),
+        memory: Dict = dict(type=Memory),
+        output_format: Dict = dict(type=InternLMToolParser),
         aggregator: Dict = dict(
-            type='InternLMToolAggregator',
+            type=InternLMToolAggregator,
             interpreter_prompt=
             ('Integrate step-by-step reasoning and Python code to solve math problems '
              'using the following guidelines:\n'
              '- Analyze the question and write jupyter code to solve the problem;\n'
              r"- Present the final result in LaTeX using a '\boxed{{}}' without any "
              'units. \n')),
-        action_hooks: List = [dict(type='InternLMActionProcessor')],
+        action_hooks: List = [dict(type=InternLMActionProcessor)],
         max_turn: int = 6,
         **kwargs,
     ):
@@ -119,10 +123,10 @@ class AsyncAgentForInternLM(AsyncAgent):
         llm: Union[BaseLLM, Dict],
         plugins: Union[dict, List[dict]] = None,
         interpreter: dict = None,
-        memory: Dict = dict(type='Memory'),
-        output_format: Dict = dict(type='InternLMToolParser'),
-        aggregator: Dict = dict(type='InternLMToolAggregator'),
-        action_hooks: List = [dict(type='InternLMActionProcessor')],
+        memory: Dict = dict(type=Memory),
+        output_format: Dict = dict(type=InternLMToolParser),
+        aggregator: Dict = dict(type=InternLMToolAggregator),
+        action_hooks: List = [dict(type=InternLMActionProcessor)],
         max_turn: int = 4,
         **kwargs,
     ):
@@ -134,7 +138,7 @@ class AsyncAgentForInternLM(AsyncAgent):
             aggregator=aggregator,
             hooks=kwargs.pop('hooks', None),
         )
-        self.agent = ObjectFactory.create(agent, AGENT_REGISTRY)
+        self.agent = create_object(agent)
         self.plugin_executor = plugins and AsyncActionExecutor(
             plugins, hooks=action_hooks)
         self.interpreter_executor = interpreter and AsyncActionExecutor(
@@ -189,18 +193,18 @@ class AsyncMathCoder(AsyncAgentForInternLM):
     def __init__(
         self,
         llm: Union[BaseLLM, Dict],
-        interpreter: dict = dict(type='AsyncIPythonInterpreter'),
-        memory: Dict = dict(type='Memory'),
-        output_format: Dict = dict(type='InternLMToolParser'),
+        interpreter: dict = dict(type=AsyncIPythonInterpreter),
+        memory: Dict = dict(type=Memory),
+        output_format: Dict = dict(type=InternLMToolParser),
         aggregator: Dict = dict(
-            type='InternLMToolAggregator',
+            type=InternLMToolAggregator,
             interpreter_prompt=
             ('Integrate step-by-step reasoning and Python code to solve math problems '
              'using the following guidelines:\n'
              '- Analyze the question and write jupyter code to solve the problem;\n'
              r"- Present the final result in LaTeX using a '\boxed{{}}' without any "
              'units. \n')),
-        action_hooks: List = [dict(type='InternLMActionProcessor')],
+        action_hooks: List = [dict(type=InternLMActionProcessor)],
         max_turn: int = 6,
         **kwargs,
     ):
@@ -226,9 +230,7 @@ class AsyncMathCoder(AsyncAgentForInternLM):
 
 
 if __name__ == '__main__':
-    from lagent.agents.aggregator import InternLMToolAggregator
     from lagent.llms import GPTAPI
-    from lagent.prompts.parsers.tool_parser import InternLMToolParser
     from lagent.prompts.protocols.tool_protocol import InternLMToolProtocol
 
     interpreter_prompt = (

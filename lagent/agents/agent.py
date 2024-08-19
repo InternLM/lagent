@@ -6,11 +6,11 @@ from typing import Any, Callable, Dict, List, Optional, Union
 from lagent.agents.aggregator import DefaultAggregator
 from lagent.hooks import Hook, RemovableHandle
 from lagent.llms import BaseLLM
-from lagent.memory import MemoryManager
+from lagent.memory import Memory, MemoryManager
 from lagent.prompts.parsers import StrParser
 from lagent.prompts.prompt_template import PromptTemplate
-from lagent.registry import AGGREGATOR_REGISTRY, HOOK_REGISTRY, LLM_REGISTRY, PARSER_REGISTRY, ObjectFactory
 from lagent.schema import AgentMessage
+from lagent.utils import create_object
 
 
 class Agent:
@@ -37,27 +37,25 @@ class Agent:
         self,
         llm: Union[BaseLLM, Dict] = None,
         template: Union[PromptTemplate, str] = None,
-        memory: Dict = dict(type='Memory'),
+        memory: Dict = dict(type=Memory),
         output_format: Optional[Dict] = None,
-        aggregator: Dict = dict(type='DefaultAggregator'),
+        aggregator: Dict = dict(type=DefaultAggregator),
         name: Optional[str] = None,
         description: Optional[str] = None,
         hooks: Optional[Union[List[Dict], Dict]] = None,
     ):
         self.name = name or self.__class__.__name__
-        self.llm: BaseLLM = ObjectFactory.create(llm, LLM_REGISTRY)
+        self.llm: BaseLLM = create_object(llm)
 
         self.memory: MemoryManager = MemoryManager(memory) if memory else None
-        self.output_format: StrParser = ObjectFactory.create(
-            output_format, PARSER_REGISTRY)
+        self.output_format: StrParser = create_object(output_format)
         self.template = template
         self.description = description
-        self.aggregator: DefaultAggregator = ObjectFactory.create(
-            aggregator, AGGREGATOR_REGISTRY)
+        self.aggregator: DefaultAggregator = create_object(aggregator)
         self._hooks: Dict[int, Hook] = OrderedDict()
         if hooks:
             for hook in hooks:
-                hook = ObjectFactory.create(hook, HOOK_REGISTRY)
+                hook = create_object(hook)
                 self.register_hook(hook)
 
     def update_memory(self, message, session_id=0):

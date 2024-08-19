@@ -14,7 +14,6 @@ except ImportError:
 from griffe import Docstring
 from griffe.enumerations import DocstringSectionKind
 
-from lagent.registry import TOOL_REGISTRY, AutoRegister
 from ..schema import ActionReturn, ActionStatusCode
 from .parser import BaseParser, JsonParser, ParseError
 
@@ -264,7 +263,7 @@ class ToolMeta(ABCMeta):
         return super().__new__(mcs, name, base, attrs)
 
 
-class BaseAction(metaclass=AutoRegister(TOOL_REGISTRY, ToolMeta)):
+class BaseAction(metaclass=ToolMeta):
     """Base class for all actions.
 
     Args:

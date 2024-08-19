@@ -1,9 +1,7 @@
 from itertools import count
 
-from lagent.registry import HOOK_REGISTRY, AutoRegister
 
-
-class Hook(metaclass=AutoRegister(HOOK_REGISTRY)):
+class Hook:
 
     def before_agent(
         self,

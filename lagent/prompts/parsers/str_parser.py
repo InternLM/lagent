@@ -1,9 +1,7 @@
 from typing import Any
 
-from lagent.registry import PARSER_REGISTRY, AutoRegister
 
-
-class StrParser(metaclass=AutoRegister(PARSER_REGISTRY)):
+class StrParser:
 
     def __init__(
         self,

@@ -3,11 +3,10 @@ import re
 from typing import Optional
 
 from lagent.prompts.protocols import InternLMToolProtocol
-from lagent.registry import PARSER_REGISTRY, AutoRegister
 from lagent.schema import AgentStatusCode
 
 
-class InternLMToolParser(metaclass=AutoRegister(PARSER_REGISTRY)):
+class InternLMToolParser:
 
     def __init__(self,
                  finish_pattern: Optional[str] = None,

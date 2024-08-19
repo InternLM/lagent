@@ -2,7 +2,7 @@ import json
 from copy import deepcopy
 from typing import Dict, List
 
-from lagent.registry import TOOL_REGISTRY, ObjectFactory
+from ...utils import create_object
 
 API_PREFIX = (
     "This is the subfunction for tool '{tool_name}', you can use this tool. "
@@ -29,7 +29,7 @@ def get_plugin_prompt(actions,
                       api_desc_template=API_PREFIX):
     plugin_descriptions = []
     for action in actions if isinstance(actions, list) else [actions]:
-        action = ObjectFactory.create(action, TOOL_REGISTRY)
+        action = create_object(action)
         action_desc = deepcopy(action.description)
         if action.is_toolkit:
             for api in action_desc['api_list']:
