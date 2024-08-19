@@ -12,7 +12,12 @@ except ImportError:
     from typing_extensions import Annotated
 
 from class_registry import AutoRegister, ClassRegistry
-from griffe import Docstring, DocstringSectionKind
+from griffe import Docstring
+
+try:
+    from griffe.enumerations import DocstringSectionKind
+except ImportError:
+    from griffe import DocstringSectionKind
 
 from ..schema import ActionReturn, ActionStatusCode
 from .parser import BaseParser, JsonParser, ParseError
