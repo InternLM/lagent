@@ -1,6 +1,5 @@
 arxiv
 distro
-duckduckgo_search==6.2.8b1
 filelock
 func_timeout
 griffe
