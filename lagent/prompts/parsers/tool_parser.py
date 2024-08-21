@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Any, Callable, List
+from typing import Any, Callable, List, Optional
 
 from lagent.prompts.parsers import StrParser
 from lagent.schema import AgentStatusCode
@@ -85,10 +85,12 @@ class PluginParser(ToolParser):
 class MixedToolParser(StrParser):
 
     def __init__(self,
+                 tool_type: Optional[str] = None,
                  template='',
                  parsers: List[ToolParser] = None,
                  **format_field):
         self.parsers = {}
+        self.tool_type = tool_type
         for parser in parsers or []:
             parser = create_object(parser)
             self.parsers[parser.tool_type] = parser
@@ -98,7 +100,10 @@ class MixedToolParser(StrParser):
         inst = []
         content = super().format_instruction().strip()
         if content:
-            inst.append(dict(role='system', content=content))
+            msg = dict(role='system', content=content)
+            if self.tool_type:
+                msg['name'] = self.tool_type
+            inst.append(msg)
         for name, parser in self.parsers.items():
             content = parser.format_instruction().strip()
             if content:
