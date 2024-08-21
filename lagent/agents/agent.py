@@ -64,7 +64,7 @@ class Agent:
 
     def parse_response(self, response: str) -> str:
         if self.output_format:
-            return self.output_format.parse(response)
+            return self.output_format.parse_response(response)
         return response
 
     def __call__(self,
@@ -101,6 +101,7 @@ class Agent:
         formatted_messages = self.aggregator.aggregate(
             self.memory.get(session_id),
             self.name,
+            self.output_format,
             self.template,
         )
         llm_response = self.llm.chat(formatted_messages, **kwargs)
@@ -188,6 +189,7 @@ class AsyncAgent(Agent):
         formatted_messages = self.aggregator.aggregate(
             self.memory.get(session_id),
             self.name,
+            self.output_format,
             self.template,
         )
         llm_response = await self.llm.chat(formatted_messages, session_id,

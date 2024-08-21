@@ -1,5 +1,5 @@
 import json
-from typing import Dict, List, Union
+from typing import Callable, Dict, List, Union
 
 from pydantic import BaseModel, Field
 
@@ -36,23 +36,24 @@ class ReAct(Agent):
                  output_format: Dict = dict(type=JSONParser),
                  aggregator: Dict = dict(type=DefaultAggregator),
                  hooks: List = [dict(type=ActionPreprocessor)],
+                 finish_condition: Callable[[AgentMessage], bool] = lambda m:
+                 'conclusion' in m.content or 'conclusion' in m.formatted,
                  max_turn: int = 5,
                  **kwargs):
         self.max_turn = max_turn
-
+        self.finish_condition = finish_condition
         actions = dict(
             type=ActionExecutor,
             actions=actions,
             hooks=hooks,
         )
-
         self.actions: ActionExecutor = create_object(actions)
         select_agent = dict(
             type=Agent,
             llm=llm,
             template=template.format(
                 action_info=json.dumps(self.actions.description()),
-                output_format=output_format.format()),
+                output_format=output_format.format_instruction()),
             output_format=output_format,
             memory=memory,
             aggregator=aggregator,
@@ -64,10 +65,9 @@ class ReAct(Agent):
     def forward(self, message: AgentMessage, **kwargs) -> AgentMessage:
         for _ in range(self.max_turn):
             message = self.select_agent(message)
-            if 'conclusion' in message.content or 'conclusion' in message.formatted:
+            if self.finish_condition(message):
                 return message
             message = self.actions(message)
-
         return message
 
 
@@ -81,23 +81,24 @@ class AsyncReAct(AsyncAgent):
                  output_format: Dict = dict(type=JSONParser),
                  aggregator: Dict = dict(type=DefaultAggregator),
                  hooks: List = [dict(type=ActionPreprocessor)],
+                 finish_condition: Callable[[AgentMessage], bool] = lambda m:
+                 'conclusion' in m.content or 'conclusion' in m.formatted,
                  max_turn: int = 5,
                  **kwargs):
         self.max_turn = max_turn
-
+        self.finish_condition = finish_condition
         actions = dict(
             type=AsyncActionExecutor,
             actions=actions,
             hooks=hooks,
         )
-
         self.actions: AsyncActionExecutor = create_object(actions)
         select_agent = dict(
             type=AsyncAgent,
             llm=llm,
             template=template.format(
                 action_info=json.dumps(self.actions.description()),
-                output_format=output_format.format()),
+                output_format=output_format.format_instruction()),
             output_format=output_format,
             memory=memory,
             aggregator=aggregator,
@@ -109,10 +110,9 @@ class AsyncReAct(AsyncAgent):
     async def forward(self, message: AgentMessage, **kwargs) -> AgentMessage:
         for _ in range(self.max_turn):
             message = await self.select_agent(message)
-            if 'conclusion' in message.content or 'conclusion' in message.formatted:
+            if self.finish_condition(message):
                 return message
             message = await self.actions(message)
-
         return message
 
 

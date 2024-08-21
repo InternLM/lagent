@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from lagent.schema import ActionReturn, ActionStatusCode, FunctionCall
 from .hook import Hook
 
@@ -45,6 +47,7 @@ class InternLMActionProcessor(ActionPreprocessor):
         self.code_parameter = code_parameter
 
     def before_action(self, executor, message, session_id):
+        message = deepcopy(message)
         assert isinstance(message.formatted, dict) and set(
             message.formatted) == {'tool_type', 'thought', 'action', 'status'}
         if isinstance(message.formatted['action'], str):

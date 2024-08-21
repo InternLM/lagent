@@ -31,13 +31,10 @@ class JSONParser(StrParser):
         fields_metadata = {}
         for field_name, field in model.model_fields.items():
             fields_metadata[field_name] = {
-                'annotation':
-                field.annotation,
-                'default':
-                field.default
+                'annotation': field.annotation,
+                'default': field.default
                 if field.default is not PydanticUndefined else '<required>',
-                'comment':
-                field.description if field.description else ''
+                'comment': field.description if field.description else ''
             }
 
             # 类型检查，以支持 BaseModel 的子类
@@ -105,7 +102,7 @@ class JSONParser(StrParser):
 
         return '{\n' + '\n'.join(formatted_lines) + '\n}'
 
-    def parse(self, data: str) -> Union[dict, BaseModel]:
+    def parse_response(self, data: str) -> Union[dict, BaseModel]:
         # Remove comments
         data_no_comments = '\n'.join(
             line for line in data.split('\n')
@@ -182,5 +179,5 @@ if __name__ == '__main__':
     }
     '''
     print(parser.format())
-    result = parser.parse(data)
+    result = parser.parse_response(data)
     print(result)

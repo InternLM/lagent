@@ -1,6 +1,7 @@
 from typing import Dict, List
 
 from lagent.memory import Memory
+from lagent.prompts import StrParser
 
 
 class DefaultAggregator:
@@ -8,6 +9,7 @@ class DefaultAggregator:
     def aggregate(self,
                   messages: Memory,
                   name: str,
+                  parser: StrParser = None,
                   system_instruction: str = None) -> List[Dict[str, str]]:
         _message = []
         messages = messages.get_memory()

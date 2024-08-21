@@ -8,11 +8,10 @@ class StrParser:
         template: str = '',
         **format_field,
     ):
-
         self.template = template
         self.format_field = format_field
 
-    def format(self) -> str:
+    def format_instruction(self) -> Any:
         format_data = {
             key: self.format_to_string(value)
             for key, value in self.format_field.items()
@@ -22,5 +21,8 @@ class StrParser:
     def format_to_string(self, format_model: Any) -> str:
         return format_model
 
-    def parse(self, data: str) -> str:
+    def format_response(self, parsed: dict) -> str:
+        raise NotImplementedError
+
+    def parse_response(self, data: str) -> str:
         return data

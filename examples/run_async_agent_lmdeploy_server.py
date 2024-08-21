@@ -4,10 +4,9 @@ import time
 
 from datasets import load_dataset
 
-from lagent.agents.stream import AsyncAgentForInternLM, AsyncMathCoder
+from lagent.agents.stream import AsyncAgentForInternLM, AsyncMathCoder, get_plugin_prompt
 from lagent.llms import INTERNLM2_META
 from lagent.llms.lmdeploy_wrapper import AsyncLMDeployClient, AsyncLMDeployServer
-from lagent.prompts.protocols.tool_protocol import get_plugin_prompt
 
 # set up the loop
 loop = asyncio.new_event_loop()

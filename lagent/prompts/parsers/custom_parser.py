@@ -14,8 +14,8 @@ class CustomFormatParser(StrParser):
         for field_name, field in model.model_fields.items():
             fields_metadata[field_name] = {
                 'annotation': field.annotation,
-                'default':
-                field.default if field.default is not None else '<required>',
+                'default': field.default
+                if field.default is not None else '<required>',
                 'comment': field.description if field.description else ''
             }
         return fields_metadata
@@ -32,7 +32,7 @@ class CustomFormatParser(StrParser):
             formatted_str += f'<{field_name} type="{field_annotation}">{metadata["default"] if metadata["default"] != "<required>" else ""}</{field_name}>\n'
         return formatted_str
 
-    def parse(self, data: str) -> Union[dict, BaseModel]:
+    def parse_response(self, data: str) -> Union[dict, BaseModel]:
         pattern = re.compile(r'(<!--\s*(.*?)\s*-->)?\s*<(\w+)[^>]*>(.*?)</\3>',
                              re.DOTALL)
         matches = pattern.findall(data)
@@ -88,5 +88,5 @@ if __name__ == '__main__':
     <age type="int">30</age>
     '''
 
-    result = parser.parse(response)
+    result = parser.parse_response(response)
     print(result)

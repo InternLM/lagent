@@ -18,7 +18,8 @@ loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 model = dict(
     type=AsyncLMDeployPipeline,
-    path='',
+    path=
+    '/cpfs02/llm/shared/public/zhaoqian/ckpt/7B/240623/P-volc_internlm2_5_boost1_7B_FT_merge_boost_bbh_v2',
     meta_template=INTERNLM2_META,
     model_name='internlm-chat',
     tp=1,
@@ -36,7 +37,7 @@ problems = [item['problem'] for item in ds.select(range(5000))]
 coder = dict(
     type='lagent.agents.stream.AsyncMathCoder',
     llm=model,
-    interpreter=dict(type='AsyncIPythonInterpreter', max_kernels=400),
+    interpreter=dict(type='AsyncIPythonInterpreter', max_kernels=300),
 )
 tic = time.time()
 

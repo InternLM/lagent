@@ -1,89 +1,102 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from lagent.agents.aggregator.default_aggregator import DefaultAggregator
 from lagent.memory.base_memory import Memory
-from lagent.prompts.protocols import InternLMToolProtocol
+from lagent.prompts.parsers.tool_parser import MixedToolParser, ToolParser
 from lagent.schema import AgentStatusCode
 
 
 class InternLMToolAggregator(DefaultAggregator):
 
     def __init__(self,
-                 meta_prompt: str = None,
-                 interpreter_prompt: str = None,
-                 plugin_prompt: str = None,
-                 few_shot: Optional[List] = None,
-                 protocol=InternLMToolProtocol(),
-                 remove_message_name: bool = False,
-                 **kwargs):
-        self.meta_prompt = meta_prompt
-        self.interpreter_prompt = interpreter_prompt
-        self.plugin_prompt = plugin_prompt
+                 environment_role='environment',
+                 environment_begin='',
+                 environment_end='',
+                 few_shot: Optional[List[List[dict]]] = None):
+        self.environment_role = environment_role
+        self.environment_begin = environment_begin
+        self.environment_end = environment_end
         self.few_shot = few_shot or []
-        self.protocol = protocol
-        self.remove_message_name = remove_message_name
-        super().__init__(**kwargs)
 
     def aggregate(self,
                   messages: Memory,
                   name: str,
+                  parser: Union[ToolParser, MixedToolParser],
                   system_instruction: str = None) -> List[Dict[str, str]]:
         _message = []
         messages = messages.get_memory()
         if system_instruction:
             _message.append(
                 dict(role='system', content=str(system_instruction)))
-        if self.meta_prompt:
-            _message.append(dict(role='system', content=self.meta_prompt))
-        if self.interpreter_prompt:
-            _message.append(
-                dict(
-                    role='system',
-                    content=self.interpreter_prompt,
-                    name='interpreter'))
-        if self.plugin_prompt:
-            _message.append(
-                dict(role='system', content=self.plugin_prompt, name='plugin'))
-        for few_shot in self.few_shot:
-            _message += self.protocol.format_sub_role(few_shot)
+        parser_instruction = parser.format_instruction()
+        if isinstance(parser_instruction, str):
+            parser_instruction = dict(
+                role='system', content=parser_instruction)
+        if isinstance(parser_instruction, dict):
+            parser_instruction = [parser_instruction]
+        _message.extend(parser_instruction)
 
-        inner_steps = []
+        for shot in self.few_shot:
+            i = 0
+            while i < len(shot):
+                msg = shot[i]
+                if msg['role'] in ['assistant', 'user', 'system']:
+                    _message.append(msg)
+                elif msg['role'] == self.environment_role:
+                    if not msg['content'].startswith(self.environment_begin):
+                        msg['content'] = self.environment_begin + msg['content']
+                    if not msg['content'].endswith(self.environment_end):
+                        msg['content'] += self.environment_end
+                    _message.append(msg)
+                elif msg['role'] in ['thought', 'language']:
+                    if i < len(shot) - 1 and shot[i + 1]['role'] == 'tool':
+                        _message.append(
+                            dict(
+                                role='assistant',
+                                content=parser.format_response(
+                                    dict(
+                                        tool_type=shot[i + 1]['name'],
+                                        thought=msg['content'],
+                                        action=shot[i + 1]['content'],
+                                        status=None))))
+                        i += 1
+                    else:
+                        _message.append(
+                            dict(
+                                role='assistant',
+                                content=parser.format_response(
+                                    dict(
+                                        tool_type=None,
+                                        thought=msg['content'],
+                                        action=None,
+                                        status=None))))
+                else:
+                    raise KeyError(f'Unkown role: {msg["role"]}')
+                i += 1
+
+        tool_type = None
         for message in messages:
             if message.sender == name:
                 if isinstance(message.formatted, dict):
-                    formatted = message.formatted
-                    if formatted[
-                            'status'] == AgentStatusCode.SESSION_INVALID_ARG:
+                    parsed = message.formatted
+                    if parsed['status'] == AgentStatusCode.SESSION_INVALID_ARG:
                         continue
-                    inner_steps.append(
-                        dict(role='language', content=formatted['thought']))
-                    if formatted['tool_type']:
-                        inner_steps.append(
-                            dict(
-                                role='tool',
-                                content=formatted['action'],
-                                name=formatted['tool_type']))
+                    _message.append(
+                        dict(
+                            role='assistant',
+                            content=parser.format_response(parsed)))
+                    tool_type = parsed['tool_type']
                 else:
-                    inner_steps.append(
+                    _message.append(
                         dict(role='assistant', content=str(message.content)))
             elif message.sender == 'user':
-                inner_steps.append(dict(role='user', content=message.content))
+                _message.append(dict(role='user', content=message.content))
             else:
-                execute_cfg = self.protocol.execute
-                assert isinstance(execute_cfg, dict)
-                content = execute_cfg['begin'] + message.content + execute_cfg[
-                    'end']
-                execute_role = execute_cfg.get(
-                    'fallback_role',
-                    execute_cfg.get('role', execute_cfg['role']))
-                inner_steps.append(
-                    dict(
-                        role=execute_role,
-                        content=content,
-                        name=inner_steps[-1].get('name')
-                        if inner_steps else None))
-        _message += self.protocol.format_sub_role(inner_steps)
-        if self.remove_message_name:
-            for msg in _message:
-                msg.pop('name', None)
+                msg = dict(
+                    role=self.environment_role,
+                    content=self.environment_begin + message.content +
+                    self.environment_end)
+                if tool_type:
+                    msg['name'] = tool_type
+                _message.append(msg)
         return _message

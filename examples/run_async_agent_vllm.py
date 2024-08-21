@@ -4,12 +4,10 @@ import time
 
 from datasets import load_dataset
 
-from lagent.agents.aggregator import InternLMToolAggregator
 from lagent.agents.stream import AsyncAgentForInternLM, AsyncMathCoder
 from lagent.llms import INTERNLM2_META
 from lagent.llms.vllm_wrapper import AsyncVllmModel
-from lagent.prompts.parsers import InternLMToolParser
-from lagent.prompts.protocols.tool_protocol import InternLMToolProtocol, get_plugin_prompt
+from lagent.prompts.parsers import ToolParser
 
 # set up the loop
 loop = asyncio.new_event_loop()
@@ -32,27 +30,20 @@ print('-' * 80, 'interpreter', '-' * 80)
 ds = load_dataset('lighteval/MATH', split='test')
 problems = [item['problem'] for item in ds.select(range(50))]
 
-protocol = InternLMToolProtocol(
-    tool=dict(
-        begin='{start_token}{name}\n',
-        start_token='\n',
-        name_map=dict(plugin='<|plugin|>', interpreter='```python'),
-        belong='assistant',
-        end='\n```\n',
-    ),
-    execute=dict(role='execute', begin='', end='', fallback_role='system'))
 coder = AsyncMathCoder(
     llm=model,
-    interpreter=dict(type='AsyncIPythonInterpreter', max_kernels=200),
-    output_format=InternLMToolParser(protocol=protocol),
-    aggregator=InternLMToolAggregator(
-        interpreter_prompt=
+    interpreter=dict(
+        type='lagent.actions.AsyncIPythonInterpreter', max_kernels=200),
+    output_format=ToolParser(
+        'interpreter',
+        template=
         ('Integrate step-by-step reasoning and Python code to solve math problems '
          'using the following guidelines:\n'
          '- Analyze the question and write jupyter code to solve the problem;\n'
          r"- Present the final result in LaTeX using a '\boxed{{}}' without any "
          'units. \n'),
-        protocol=protocol))
+        begin='\n```python\n',
+        end='\n```\n'))
 
 tic = time.time()
 coros = [coder(query, session_id=i) for i, query in enumerate(problems)]
