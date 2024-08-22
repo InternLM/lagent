@@ -30,10 +30,10 @@ class ToolParser(StrParser):
         if not match:
             return dict(
                 tool_type=None,
-                thought=data.strip(),
+                thought=data,
                 action=None,
                 status=AgentStatusCode.END)
-        thought, action = match.group(1).strip(), match.group(2).strip()
+        thought, action = match.group(1), match.group(2).strip()
         status = AgentStatusCode.STREAM_ING
         if self.validate:
             try:
@@ -98,22 +98,22 @@ class MixedToolParser(StrParser):
 
     def format_instruction(self) -> List[dict]:
         inst = []
-        content = super().format_instruction().strip()
-        if content:
+        content = super().format_instruction()
+        if content.strip():
             msg = dict(role='system', content=content)
             if self.tool_type:
                 msg['name'] = self.tool_type
             inst.append(msg)
         for name, parser in self.parsers.items():
-            content = parser.format_instruction().strip()
-            if content:
+            content = parser.format_instruction()
+            if content.strip():
                 inst.append(dict(role='system', content=content, name=name))
         return inst
 
     def parse_response(self, data: str) -> dict:
         res = dict(
             tool_type=None,
-            thought=data.strip(),
+            thought=data,
             action=None,
             status=AgentStatusCode.END)
         for name, parser in self.parsers.items():

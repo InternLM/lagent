@@ -88,8 +88,10 @@ async def async_run_code(
             await km.interrupt_kernel()
 
         @retry(
-            retry=retry_if_result(lambda ret: ret[-1].strip(
-            ) == 'KeyboardInterrupt' if isinstance(ret, tuple) else False),
+            retry=retry_if_result(lambda ret: ret[-1].strip() in [
+                'KeyboardInterrupt',
+                f"Kernel didn't respond in {wait_for_ready_timeout} seconds",
+            ] if isinstance(ret, tuple) else False),
             stop=stop_after_attempt(3),
             wait=wait_fixed(1),
             retry_error_callback=lambda state: state.outcome.result())
