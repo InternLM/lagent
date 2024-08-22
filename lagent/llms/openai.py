@@ -286,11 +286,12 @@ class GPTAPI(BaseAPIModel):
                             choice = response['choices'][0]
                             if choice['finish_reason'] == 'stop':
                                 return
-                            yield choice['delta']['content']
+                            yield choice['delta'].get('content', '')
                     except Exception as exc:
                         print(
                             f'response {decoded} lead to exception of {str(exc)}'
                         )
+                        raise
 
         assert isinstance(messages, list)
 
