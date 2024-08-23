@@ -5,6 +5,16 @@ from lagent.llms.base_llm import AsyncBaseLLM, BaseLLM
 from lagent.utils.util import filter_suffix
 
 
+def asdict_completion(output):
+    return {
+        key: getattr(output, key)
+        for key in [
+            'text', 'token_ids', 'cumulative_logprob', 'logprobs',
+            'finish_reason', 'stop_reason'
+        ]
+    }
+
+
 class VllmModel(BaseLLM):
     """
     A wrapper of vLLM model.
@@ -35,6 +45,7 @@ class VllmModel(BaseLLM):
                  inputs: Union[str, List[str]],
                  do_preprocess: bool = None,
                  skip_special_tokens: bool = False,
+                 return_dict: bool = False,
                  **kwargs):
         """Return the chat completions in non-stream mode.
 
@@ -64,12 +75,16 @@ class VllmModel(BaseLLM):
             stop=stop_words,
             **gen_params)
         response = self.model.generate(prompt, sampling_params=sampling_config)
-        response = [resp.outputs[0].text for resp in response]
+        texts = [resp.outputs[0].text for resp in response]
         # remove stop_words
-        response = filter_suffix(response, self.gen_params.get('stop_words'))
+        texts = filter_suffix(texts, self.gen_params.get('stop_words'))
+        for resp, text in zip(response, texts):
+            resp.outputs[0].text = text
         if batched:
-            return response
-        return response[0]
+            return [asdict_completion(resp.outputs[0])
+                    for resp in response] if return_dict else texts
+        return asdict_completion(
+            response[0].outputs[0]) if return_dict else texts[0]
 
 
 class AsyncVllmModel(AsyncBaseLLM):
@@ -104,6 +119,7 @@ class AsyncVllmModel(AsyncBaseLLM):
                        session_ids: Union[int, List[int]] = None,
                        do_preprocess: bool = None,
                        skip_special_tokens: bool = False,
+                       return_dict: bool = False,
                        **kwargs):
         """Return the chat completions in non-stream mode.
 
@@ -143,14 +159,18 @@ class AsyncVllmModel(AsyncBaseLLM):
             resp, generator = '', self.model.generate(
                 text, sampling_params=sampling_config, request_id=uid)
             async for out in generator:
-                resp = out.outputs[0].text
+                resp = out.outputs[0]
             return resp
 
         response = await asyncio.gather(*[
             _inner_generate(sid, inp) for sid, inp in zip(session_ids, prompt)
         ])
+        texts = [resp.text for resp in response]
         # remove stop_words
-        response = filter_suffix(response, self.gen_params.get('stop_words'))
+        texts = filter_suffix(texts, self.gen_params.get('stop_words'))
+        for resp, text in zip(response, texts):
+            resp.text = text
         if batched:
-            return response
-        return response[0]
+            return [asdict_completion(resp)
+                    for resp in response] if return_dict else texts
+        return asdict_completion(response[0]) if return_dict else texts[0]

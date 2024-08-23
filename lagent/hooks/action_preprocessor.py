@@ -49,7 +49,8 @@ class InternLMActionProcessor(ActionPreprocessor):
     def before_action(self, executor, message, session_id):
         message = deepcopy(message)
         assert isinstance(message.formatted, dict) and set(
-            message.formatted) == {'tool_type', 'thought', 'action', 'status'}
+            message.formatted).issuperset(
+                {'tool_type', 'thought', 'action', 'status'})
         if isinstance(message.formatted['action'], str):
             # encapsulate code interpreter arguments
             action_name = next(iter(executor.actions))

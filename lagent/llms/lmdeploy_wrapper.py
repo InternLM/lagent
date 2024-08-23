@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import asdict
 from typing import List, Optional, Union
 
 import aiohttp
@@ -239,6 +240,7 @@ class LMDeployPipeline(BaseLLM):
                  inputs: Union[str, List[str]],
                  do_preprocess: bool = None,
                  skip_special_tokens: bool = False,
+                 return_dict: bool = False,
                  **kwargs):
         """Return the chat completions in non-stream mode.
 
@@ -263,12 +265,15 @@ class LMDeployPipeline(BaseLLM):
             skip_special_tokens=skip_special_tokens, **gen_params)
         response = self.model.batch_infer(
             prompt, gen_config=gen_config, do_preprocess=do_preprocess)
-        response = [resp.text for resp in response]
+        texts = [resp.text for resp in response]
         # remove stop_words
-        response = filter_suffix(response, self.gen_params.get('stop_words'))
+        texts = filter_suffix(texts, self.gen_params.get('stop_words'))
+        for resp, text in zip(response, texts):
+            resp.text = text
         if batched:
-            return response
-        return response[0]
+            return [asdict(resp)
+                    for resp in response] if return_dict else texts
+        return asdict(response[0]) if return_dict else texts[0]
 
 
 class LMDeployServer(BaseLLM):
@@ -484,6 +489,7 @@ class AsyncLMDeployPipeline(AsyncLLMMixin, LMDeployPipeline):
                        session_ids: Union[int, List[int]] = None,
                        do_preprocess: bool = None,
                        skip_special_tokens: bool = False,
+                       return_dict: bool = False,
                        **kwargs):
         """Return the chat completions in non-stream mode.
 
@@ -539,12 +545,15 @@ class AsyncLMDeployPipeline(AsyncLLMMixin, LMDeployPipeline):
         response = await asyncio.gather(*[
             _inner_generate(sid, inp) for sid, inp in zip(session_ids, prompt)
         ])
-        response = [resp.text for resp in response]
+        texts = [resp.text for resp in response]
         # remove stop_words
-        response = filter_suffix(response, self.gen_params.get('stop_words'))
+        texts = filter_suffix(texts, self.gen_params.get('stop_words'))
+        for resp, text in zip(response, texts):
+            resp.text = text
         if batched:
-            return response
-        return response[0]
+            return [asdict(resp)
+                    for resp in response] if return_dict else texts
+        return asdict(response[0]) if return_dict else texts[0]
 
 
 class AsyncLMDeployServer(AsyncLLMMixin, LMDeployServer):
