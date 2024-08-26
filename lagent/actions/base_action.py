@@ -13,7 +13,11 @@ except ImportError:
 
 from class_registry import AutoRegister, ClassRegistry
 from griffe import Docstring
-from griffe.enumerations import DocstringSectionKind
+
+try:
+    from griffe import DocstringSectionKind
+except ImportError:
+    from griffe.enumerations import DocstringSectionKind
 
 from ..schema import ActionReturn, ActionStatusCode
 from .parser import BaseParser, JsonParser, ParseError
