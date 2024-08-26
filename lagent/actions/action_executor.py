@@ -162,7 +162,10 @@ class AsyncActionExecutor(ActionExecutor):
                        **kwargs) -> AgentMessage:
         # message.receiver = self.name
         for hook in self._hooks.values():
-            result = hook.before_action(self, message, session_id)
+            if inspect.iscoroutinefunction(hook.before_action):
+                result = await hook.before_action(self, message, session_id)
+            else:
+                result = hook.before_action(self, message, session_id)
             if result:
                 message = result
 
@@ -185,7 +188,11 @@ class AsyncActionExecutor(ActionExecutor):
             )
 
         for hook in self._hooks.values():
-            result = hook.after_action(self, response_message, session_id)
+            if inspect.iscoroutinefunction(hook.after_action):
+                result = await hook.after_action(self, response_message,
+                                                 session_id)
+            else:
+                result = hook.after_action(self, response_message, session_id)
             if result:
                 response_message = result
         return response_message
