@@ -15,6 +15,7 @@ from duckduckgo_search import DDGS
 
 from lagent.actions import BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
+from lagent.actions.tencent_search import TencentSearch  # noqa: F401
 
 
 class BaseSearch:
