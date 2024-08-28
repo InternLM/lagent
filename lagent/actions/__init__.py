@@ -9,8 +9,9 @@ from .ipython_interactive import AsyncIPythonInteractive, IPythonInteractive
 from .ipython_interpreter import AsyncIPythonInterpreter, IPythonInterpreter
 from .ipython_manager import IPythonInteractiveManager
 from .parser import BaseParser, JsonParser, TupleParser
-from .ppt import PPT
+from .ppt import PPT, AsyncPPT
 from .python_interpreter import AsyncPythonInterpreter, PythonInterpreter
+from .web_browser import AsyncWebBrowser, WebBrowser
 
 __all__ = [
     'BaseAction', 'ActionExecutor', 'AsyncActionExecutor', 'InvalidAction',
@@ -19,5 +20,6 @@ __all__ = [
     'AsyncGoogleScholar', 'IPythonInterpreter', 'AsyncIPythonInterpreter',
     'IPythonInteractive', 'AsyncIPythonInteractive',
     'IPythonInteractiveManager', 'PythonInterpreter', 'AsyncPythonInterpreter',
-    'PPT', 'BaseParser', 'JsonParser', 'TupleParser', 'tool_api'
+    'PPT', 'AsyncPPT', 'WebBrowser', 'AsyncWebBrowser', 'BaseParser',
+    'JsonParser', 'TupleParser', 'tool_api'
 ]

@@ -1,8 +1,9 @@
+import asyncio
 import importlib
 import inspect
 import sys
 from functools import partial
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Iterable, List, Optional, Union
 
 
 def load_class_from_string(class_path: str, path=None):
@@ -23,6 +24,10 @@ def load_class_from_string(class_path: str, path=None):
 
 
 def create_object(config: Union[Dict, Any] = None):
+    """Create an instance based on the configuration where 'type' is a 
+    preserved key to indicate the class (path). When accepting non-dictionary 
+    input, the function degenerates to an identity.
+    """
     if config is None or not isinstance(config, dict):
         return config
     assert isinstance(config, dict) and 'type' in config
@@ -37,6 +42,19 @@ def create_object(config: Union[Dict, Any] = None):
         assert callable(obj_type)
         obj = partial(obj_type, **config)
     return obj
+
+
+async def async_as_completed(futures: Iterable[asyncio.Future]):
+    """A asynchronous wrapper for `asyncio.as_completed`"""
+    loop = asyncio.get_event_loop()
+    wrappers = []
+    for fut in futures:
+        assert isinstance(fut, asyncio.Future)
+        wrapper = loop.create_future()
+        fut.add_done_callback(wrapper.set_result)
+        wrappers.append(wrapper)
+    for next_completed in asyncio.as_completed(wrappers):
+        yield await next_completed
 
 
 def filter_suffix(response: Union[str, List[str]],
