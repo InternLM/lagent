@@ -7,6 +7,7 @@ import time
 import warnings
 from datetime import datetime
 from http.client import HTTPSConnection
+from typing import List
 
 from cachetools import TTLCache, cached
 
@@ -29,7 +30,13 @@ class TencentSearch(BaseSearch):
                  tsn: int = None,
                  insite: str = None,
                  category: str = None,
-                 vrid: str = None):
+                 vrid: str = None,
+                 black_list: List[str] = [
+                     'enoN',
+                     'youtube.com',
+                     'bilibili.com',
+                     'researchgate.net',
+                 ]):
         self.secret_id = secret_id
         self.secret_key = secret_key
         self.api_key = api_key
@@ -41,7 +48,7 @@ class TencentSearch(BaseSearch):
         self.insite = insite
         self.category = category
         self.vrid = vrid
-        super().__init__(topk, black_list=None)
+        super().__init__(topk, black_list=black_list)
 
     @cached(cache=TTLCache(maxsize=100, ttl=600))
     def search(self, query: str, max_retry: int = 3) -> dict:
@@ -75,7 +82,6 @@ class TencentSearch(BaseSearch):
             params['Vrid'] = self.vrid
         payload = json.dumps(params)
         algorithm = 'TC3-HMAC-SHA256'
-
         timestamp = int(time.time())
         date = datetime.utcfromtimestamp(timestamp).strftime('%Y-%m-%d')
 
@@ -123,20 +129,28 @@ class TencentSearch(BaseSearch):
             'X-TC-Timestamp': timestamp,
             'X-TC-Version': self.version
         }
-        # if region:
-        #     headers["X-TC-Region"] = region
+        # if self.region:
+        #     headers["X-TC-Region"] = self.region
         if self.api_key:
             headers['X-TC-Token'] = self.api_key
 
         req = HTTPSConnection(self.host)
         req.request('POST', '/', headers=headers, body=payload.encode('utf-8'))
         resp = req.getresponse()
-        return resp.read()
+        try:
+            resp = json.loads(resp.read().decode('utf-8'))
+        except Exception as e:
+            logging.warning(str(e))
+            import ast
+            resp = ast.literal_eval(resp)
+        return resp.get('Response', dict())
 
     def _parse_response(self, response: dict) -> dict:
         raw_results = []
         for item in response.get('Pages', []):
-            display = json.loads(item['display'])
-            raw_results.append(
-                (display['url'], display['content'], display['title']))
+            display = json.loads(item['Display'])
+            if not display['url']:
+                continue
+            raw_results.append((display['url'], display['content']
+                                or display['abstract_info'], display['title']))
         return self._filter_results(raw_results)
