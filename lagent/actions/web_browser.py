@@ -185,8 +185,8 @@ class BingSearch(BaseSearch):
                     endpoint,
                     headers=headers,
                     params=params,
-                    proxy=self.proxy.get('http')
-                    or self.proxy.get('https')) as resp:
+                    proxy=self.proxy and
+                (self.proxy.get('http') or self.proxy.get('https'))) as resp:
                 return await resp.json()
 
     def _parse_response(self, response: dict) -> dict:
@@ -325,8 +325,8 @@ class BraveSearch(BaseSearch):
                     endpoint,
                     headers=headers,
                     params=params,
-                    proxy=self.proxy.get('http')
-                    or self.proxy.get('https')) as resp:
+                    proxy=self.proxy and
+                (self.proxy.get('http') or self.proxy.get('https'))) as resp:
                 return await resp.json()
 
     def _parse_response(self, response: dict) -> dict:
@@ -456,8 +456,8 @@ class GoogleSearch(BaseSearch):
                     endpoint,
                     headers=headers,
                     params=params,
-                    proxy=self.proxy.get('http')
-                    or self.proxy.get('https')) as resp:
+                    proxy=self.proxy and
+                (self.proxy.get('http') or self.proxy.get('https'))) as resp:
                 return await resp.json()
 
     def _parse_response(self, response: dict) -> dict:
@@ -549,13 +549,12 @@ class WebBrowser(BaseAction):
                  topk: int = 20,
                  description: Optional[dict] = None,
                  parser: Type[BaseParser] = JsonParser,
-                 enable: bool = True,
                  **kwargs):
         self.searcher = eval(searcher_type)(
             black_list=black_list, topk=topk, **kwargs)
         self.fetcher = ContentFetcher(timeout=timeout)
         self.search_results = None
-        super().__init__(description, parser, enable)
+        super().__init__(description, parser)
 
     @tool_api
     def search(self, query: Union[str, List[str]]) -> dict:
