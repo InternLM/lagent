@@ -26,8 +26,8 @@ class InternLMToolAggregator(DefaultAggregator):
         _message = []
         messages = messages.get_memory()
         if system_instruction:
-            _message.append(
-                dict(role='system', content=str(system_instruction)))
+            _message.extend(
+                self.aggregate_system_intruction(system_instruction))
         tool_instruction = parser.format_instruction()
         if isinstance(tool_instruction, str):
             tool_instruction = dict(role='system', content=tool_instruction)

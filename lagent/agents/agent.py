@@ -36,7 +36,7 @@ class Agent:
     def __init__(
         self,
         llm: Union[BaseLLM, Dict] = None,
-        template: Union[PromptTemplate, str] = None,
+        template: Union[PromptTemplate, str, dict, List[dict]] = None,
         memory: Dict = dict(type=Memory),
         output_format: Optional[Dict] = None,
         aggregator: Dict = dict(type=DefaultAggregator),
