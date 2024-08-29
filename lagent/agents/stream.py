@@ -66,6 +66,7 @@ class AgentForInternLM(Agent):
         llm: Union[BaseLLM, Dict],
         plugins: Union[dict, List[dict]] = None,
         interpreter: dict = None,
+        template: Union[str, dict, List[dict]] = None,
         memory: Dict = dict(type=Memory),
         output_format: Dict = dict(
             type=MixedToolParser,
@@ -85,6 +86,7 @@ class AgentForInternLM(Agent):
         agent = dict(
             type=Agent,
             llm=llm,
+            template=template,
             output_format=output_format,
             memory=memory,
             aggregator=aggregator,
@@ -147,6 +149,7 @@ class MathCoder(AgentForInternLM):
         llm: Union[BaseLLM, Dict],
         interpreter: dict = dict(
             type=IPythonInteractive, timeout=20, max_out_len=8192),
+        template: Union[str, dict, List[dict]] = None,
         memory: Dict = dict(type=Memory),
         output_format: Dict = dict(
             type=InterpreterParser,
@@ -168,6 +171,7 @@ class MathCoder(AgentForInternLM):
         super().__init__(
             llm=llm,
             interpreter=interpreter,
+            template=template,
             memory=memory,
             output_format=output_format,
             aggregator=aggregator,
@@ -184,6 +188,7 @@ class AsyncAgentForInternLM(AsyncAgent):
         llm: Union[BaseLLM, Dict],
         plugins: Union[dict, List[dict]] = None,
         interpreter: dict = None,
+        template: Union[str, dict, List[dict]] = None,
         memory: Dict = dict(type=Memory),
         output_format: Dict = dict(
             type=MixedToolParser,
@@ -203,6 +208,7 @@ class AsyncAgentForInternLM(AsyncAgent):
         agent = dict(
             type=AsyncAgent,
             llm=llm,
+            template=template,
             output_format=output_format,
             memory=memory,
             aggregator=aggregator,
@@ -265,6 +271,7 @@ class AsyncMathCoder(AsyncAgentForInternLM):
         self,
         llm: Union[BaseLLM, Dict],
         interpreter: dict = dict(type=AsyncIPythonInterpreter),
+        template: Union[str, dict, List[dict]] = None,
         memory: Dict = dict(type=Memory),
         output_format: Dict = dict(
             type=InterpreterParser,
@@ -286,6 +293,7 @@ class AsyncMathCoder(AsyncAgentForInternLM):
         super().__init__(
             llm=llm,
             interpreter=interpreter,
+            template=template,
             memory=memory,
             output_format=output_format,
             aggregator=aggregator,
