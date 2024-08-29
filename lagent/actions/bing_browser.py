@@ -379,6 +379,28 @@ class GoogleSearch(BaseSearch):
 
 class TencentSearch(BaseSearch):
     """Wrapper around the tencentclound Search API.
+
+    To use, you should pass your secret_id and secret_key to the constructor.
+
+    Args:
+        secret_id (str): Your Tencent Cloud secret ID for accessing the API.
+            For more details, refer to the documentation: https://cloud.tencent.com/document/product/598/40488.
+        secret_key (str): Your Tencent Cloud secret key for accessing the API.
+        api_key (str, optional): Additional API key, if required.
+        action (str): The action for this interface, use `SearchCommon`.
+        version (str): The API version, use `2020-12-29`.
+        service (str): The service name, use `tms`.
+        host (str): The API host, use `tms.tencentcloudapi.com`.
+        topk (int): The maximum number of search results to return.
+        tsn (int): Time filter for search results. Valid values:
+            1 (within 1 day), 2 (within 1 week), 3 (within 1 month),
+            4 (within 1 year), 5 (within 6 months), 6 (within 3 years).
+        insite (str): Specify a site to search within (supports only a single site).
+            If not specified, the entire web is searched. Example: `zhihu.com`.
+        category (str): Vertical category for filtering results. Optional values include:
+            `baike` (encyclopedia), `weather`, `calendar`, `medical`, `news`, `train`, `star` (horoscope).
+        vrid (str): Result card type(s). Different `vrid` values represent different types of result cards.
+            Supports multiple values separated by commas. Example: `30010255`.
     """
 
     def __init__(self,
@@ -433,8 +455,8 @@ class TencentSearch(BaseSearch):
             return hmac.new(key, msg.encode('utf-8'), hashlib.sha256).digest()
 
         params = dict(Query=query)
-        if self.topk:
-            params['Cnt'] = self.topk
+        # if self.topk:
+        #     params['Cnt'] = self.topk
         if self.tsn:
             params['Tsn'] = self.tsn
         if self.insite:
