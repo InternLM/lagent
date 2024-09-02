@@ -2,7 +2,7 @@ arxiv
 distro
 filelock
 func_timeout
-griffe
+griffe<1.0
 json5
 jsonschema
 jupyter
