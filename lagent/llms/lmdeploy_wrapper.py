@@ -724,7 +724,7 @@ class AsyncLMDeployServer(AsyncLLMMixin, LMDeployServer):
                         # remove stop_words
                         for sw in stop_words:
                             if sw in response:
-                                resp = filter_suffix(response, stop_words)
+                                response = filter_suffix(response, stop_words)
                                 finished = True
                                 break
                         yield ModelStatusCode.STREAM_ING, response, None
