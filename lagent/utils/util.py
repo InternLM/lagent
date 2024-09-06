@@ -3,7 +3,7 @@ import importlib
 import inspect
 import sys
 from functools import partial
-from typing import Any, Dict, Iterable, List, Optional, Union
+from typing import Any, Dict, Generator, Iterable, List, Optional, Union
 
 
 def load_class_from_string(class_path: str, path=None):
@@ -85,3 +85,15 @@ def filter_suffix(response: Union[str, List[str]],
     if not batched:
         return processed[0]
     return processed
+
+
+class GeneratorWithReturn:
+    """Generator wrapper to capture the return value."""
+
+    def __init__(self, generator: Generator):
+        self.generator = generator
+        self.ret = None
+
+    def __iter__(self):
+        self.ret = yield from self.generator
+        return self.ret
