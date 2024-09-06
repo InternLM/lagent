@@ -61,6 +61,8 @@ def get_plugin_prompt(actions, api_desc_template=API_PREFIX):
 
 class AgentForInternLM(Agent):
 
+    _INTERNAL_AGENT_CLS = Agent
+
     def __init__(
         self,
         llm: Union[BaseLLM, Dict],
@@ -84,7 +86,7 @@ class AgentForInternLM(Agent):
         **kwargs,
     ):
         agent = dict(
-            type=Agent,
+            type=self._INTERNAL_AGENT_CLS,
             llm=llm,
             template=template,
             output_format=output_format,
@@ -121,10 +123,10 @@ class AgentForInternLM(Agent):
                 message = executor(message, session_id=session_id)
         return message
 
-    def get_steps(self, session_id):
+    def get_steps(self, session_id=0):
         steps, tool_type = [], None
         for msg in self.agent.memory.get_memory(session_id):
-            if msg.formatted:
+            if msg.sender == self.agent.name:
                 steps.append(
                     dict(role='language', content=msg.formatted['thought']))
                 if msg.formatted['tool_type']:
@@ -183,6 +185,8 @@ class MathCoder(AgentForInternLM):
 
 class AsyncAgentForInternLM(AsyncAgent):
 
+    _INTERNAL_AGENT_CLS = AsyncAgent
+
     def __init__(
         self,
         llm: Union[BaseLLM, Dict],
@@ -206,7 +210,7 @@ class AsyncAgentForInternLM(AsyncAgent):
         **kwargs,
     ):
         agent = dict(
-            type=AsyncAgent,
+            type=self._INTERNAL_AGENT_CLS,
             llm=llm,
             template=template,
             output_format=output_format,
@@ -244,10 +248,10 @@ class AsyncAgentForInternLM(AsyncAgent):
                 message = await executor(message, session_id=session_id)
         return message
 
-    def get_steps(self, session_id):
+    def get_steps(self, session_id=0):
         steps, tool_type = [], None
         for msg in self.agent.memory.get_memory(session_id):
-            if msg.formatted:
+            if msg.sender == self.agent.name:
                 steps.append(
                     dict(role='language', content=msg.formatted['thought']))
                 if msg.formatted['tool_type']:

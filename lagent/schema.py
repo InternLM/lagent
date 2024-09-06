@@ -102,3 +102,4 @@ class AgentMessage(BaseModel):
     formatted: Optional[Any] = None
     type: Optional[str] = None
     receiver: Optional[str] = None
+    stream_state: Union[ModelStatusCode, AgentStatusCode] = AgentStatusCode.END
