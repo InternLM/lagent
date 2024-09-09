@@ -707,17 +707,13 @@ class AsyncLMDeployServer(AsyncLLMMixin, LMDeployServer):
                     json=pload) as resp:
                 async for chunk in resp.content:
                     if chunk:
-                        if chunk:
-                            decoded = chunk.decode('utf-8')
-                            if decoded == 'data: [DONE]' or not decoded.strip(
-                            ):
-                                continue
-                            if decoded[:6] == 'data: ':
-                                decoded = decoded[6:]
-                            output = json_loads(decoded)
-                        else:
-                            decoded = chunk.decode('utf-8')
-                            output = json_loads(decoded)
+                        decoded = chunk.decode('utf-8')
+                        if not decoded.strip() or decoded.rstrip(
+                        ) == 'data: [DONE]':
+                            continue
+                        if decoded[:6] == 'data: ':
+                            decoded = decoded[6:]
+                        output = json_loads(decoded)
                         response += output['choices'][0]['text']
                         if not response:
                             continue
