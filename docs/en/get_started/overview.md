@@ -11,7 +11,7 @@ Lagent is an open source LLM agent framework, which enables people to efficientl
 Lagent consists of 3 main parts, agents, llms, and actions.
 
 - **agents** provides agent implementation, such as ReAct, AutoGPT.
-- **llms** supports various large language models, including open-sourced models (Llama-2, InterLM) through HuggingFace models or closed-source models like GPT3.5/4.
+- **llms** supports various large language models, including open-sourced models (Llama-2, InternLM) through HuggingFace models or closed-source models like GPT3.5/4.
 - **actions** contains a series of actions, as well as an action executor to manage all actions.
 
 ## How to Use
