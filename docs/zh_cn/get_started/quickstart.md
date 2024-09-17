@@ -15,7 +15,7 @@ from lagent.llms import GPTAPI
 # 初始化 LLM，你可能需要提供 API 密钥
 llm = GPTAPI(model_type='gpt-3.5-turbo', key=['Your OPENAI_API_KEY'])
 
-# 初始化 Goolge 搜索工具，你可能需要提供 API 密钥
+# 初始化 Google 搜索工具，你可能需要提供 API 密钥
 search_tool = GoogleSearch(api_key='Your SERPER_API_KEY')
 
 # 配置 ReWOO 智能体，创建聊天机器人
