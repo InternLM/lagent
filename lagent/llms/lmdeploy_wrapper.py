@@ -631,7 +631,8 @@ class AsyncLMDeployServer(AsyncLLMMixin, LMDeployServer):
             skip_special_tokens=skip_special_tokens,
             timeout=timeout,
             **gen_params)
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(3 * 3600)) as session:
             async with session.post(
                     self.client.completions_v1_url,
                     headers=self.client.headers,
@@ -700,7 +701,8 @@ class AsyncLMDeployServer(AsyncLLMMixin, LMDeployServer):
             skip_special_tokens=skip_special_tokens,
             timeout=timeout,
             **gen_params)
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(3 * 3600)) as session:
             async with session.post(
                     self.client.completions_v1_url,
                     headers=self.client.headers,
