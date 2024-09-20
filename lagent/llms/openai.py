@@ -17,7 +17,6 @@ warnings.simplefilter('default')
 
 OPENAI_API_BASE = 'https://api.openai.com/v1/chat/completions'
 
-
 class GPTAPI(BaseAPIModel):
     """Model wrapper around OpenAI's models.
 
@@ -57,7 +56,8 @@ class GPTAPI(BaseAPIModel):
                      dict(role='system', api_role='system'),
                      dict(role='user', api_role='user'),
                      dict(role='assistant', api_role='assistant'),
-                     dict(role='environment', api_role='system')
+                     dict(role='environment', api_role='system'),
+                     dict(role='function', api_role='assistant')
                  ],
                  openai_api_base: str = OPENAI_API_BASE,
                  proxies: Optional[Dict] = None,
@@ -433,12 +433,21 @@ class GPTAPI(BaseAPIModel):
             gen_params['result_format'] = 'message'
             data = {
                 'model': model_type,
-                'input': {
-                    'messages': messages
-                },
-                'parameters': {
-                    **gen_params
-                }
+                'messages': messages,
+                **gen_params
+            }
+        elif 'llama' in model_type.lower() or 'baichuan' in model_type.lower() or 'glm' in model_type.lower():
+            header['X-DashScope-SSE'] = 'enable'
+            gen_params.pop('skip_special_tokens', None)
+            gen_params.pop('session_id', None)
+            if 'frequency_penalty' in gen_params:
+                gen_params['repetition_penalty'] = gen_params.pop(
+                    'frequency_penalty')
+            gen_params['result_format'] = 'message'
+            data = {
+                'model': model_type,
+                'messages': messages,
+                **gen_params
             }
         else:
             raise NotImplementedError(
