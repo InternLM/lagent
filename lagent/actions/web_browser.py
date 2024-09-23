@@ -524,13 +524,12 @@ class ContentFetcher:
                     raise_for_status=True,
                     timeout=aiohttp.ClientTimeout(self.timeout)) as session:
                 async with session.get(url) as resp:
-                    html = await resp.text()
-        except aiohttp.ClientError as e:
+                    html = await resp.text(errors='ignore')
+                    text = BeautifulSoup(html, 'html.parser').get_text()
+                    cleaned_text = re.sub(r'\n+', '\n', text)
+                    return True, cleaned_text
+        except Exception as e:
             return False, str(e)
-
-        text = BeautifulSoup(html, 'html.parser').get_text()
-        cleaned_text = re.sub(r'\n+', '\n', text)
-        return True, cleaned_text
 
 
 class WebBrowser(BaseAction):
@@ -607,7 +606,6 @@ class WebBrowser(BaseAction):
                 executor.submit(self.fetcher.fetch, self.search_results[select_id]['url']): select_id
                 for select_id in select_ids if select_id in self.search_results
             }
-
             for future in as_completed(future_to_id):
                 select_id = future_to_id[future]
                 try:

@@ -1,10 +1,18 @@
 import json
-import re
+
+# import re
 from typing import Any, Callable, List, Optional
 
 from lagent.prompts.parsers import StrParser
 from lagent.schema import AgentStatusCode
 from lagent.utils import create_object, load_class_from_string
+
+
+def default_plugin_validate(plugin: str):
+    plugin = plugin.strip()
+    if not (plugin.startswith('{') and plugin.endswith("}")):
+        raise json.decoder.JSONDecodeError
+    return json.loads(plugin)
 
 
 class ToolParser(StrParser):
@@ -19,21 +27,29 @@ class ToolParser(StrParser):
         super().__init__(template, begin=begin, end=end, **kwargs)
         self.template = template
         self.tool_type = tool_type
-        self.pattern = re.compile(
-            '(.*?){}(.*)({})?'.format(re.escape(begin), re.escape(end)),
-            re.DOTALL)
+        # self.pattern = re.compile(
+        #     '(.*?){}(.*)({})?'.format(re.escape(begin), re.escape(end)),
+        #     re.DOTALL)
         self.validate = load_class_from_string(validate) if isinstance(
             validate, str) else validate
 
     def parse_response(self, data: str) -> dict:
-        match = self.pattern.search(data)
-        if not match:
+        # match = self.pattern.search(data)
+        # if not match:
+        #     return dict(
+        #         tool_type=None,
+        #         thought=data,
+        #         action=None,
+        #         status=AgentStatusCode.END)
+        # thought, action = match.group(1), match.group(2).strip()
+        if self.format_field['begin'] not in data:
             return dict(
                 tool_type=None,
                 thought=data,
                 action=None,
                 status=AgentStatusCode.END)
-        thought, action = match.group(1), match.group(2).strip()
+        thought, action, *_ = data.split(self.format_field["begin"])
+        action = action.split(self.format_field['end'])[0]
         status = AgentStatusCode.STREAM_ING
         if self.validate:
             try:
@@ -77,7 +93,7 @@ class PluginParser(ToolParser):
                  template: str = '',
                  begin: str = '<|action_start|><|plugin|>\n',
                  end: str = '<|action_end|>\n',
-                 validate: Callable[[str], Any] = json.loads,
+                 validate: Callable[[str], Any] = default_plugin_validate,
                  **kwargs):
         super().__init__(tool_type, template, begin, end, validate, **kwargs)
 
