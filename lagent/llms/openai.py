@@ -253,7 +253,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
     is_api: bool = True
 
     def __init__(self,
-                 model: str = 'gpt-3.5-turbo',
+                 model_type: str = 'gpt-3.5-turbo',
                  retry: int = 2,
                  json_mode: bool = False,
                  key: Union[str, List[str]] = 'ENV',
@@ -271,7 +271,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                           DeprecationWarning)
             gen_params.pop('top_k')
         super().__init__(
-            model_type=model,
+            model_type=model_type,
             meta_template=meta_template,
             retry=retry,
             **gen_params)
@@ -294,7 +294,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
             self.orgs = org
         self.org_ctr = 0
         self.url = api_base
-        self.model_type = model
+        self.model_type = model_type
         self.proxies = proxies
         self.json_mode = json_mode
 
