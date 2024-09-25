@@ -38,7 +38,7 @@ class GPTAPI(BaseAPILLM):
         meta_template (Dict, optional): The model's meta prompt
             template if needed, in case the requirement of injecting or
             wrapping of any meta instructions.
-        openai_api_base (str): The base url of OpenAI's API. Defaults to
+        api_base (str): The base url of OpenAI's API. Defaults to
             'https://api.openai.com/v1/chat/completions'.
         gen_params: Default generation configuration which could be overridden
             on the fly of generation.
@@ -57,7 +57,7 @@ class GPTAPI(BaseAPILLM):
                      dict(role='user', api_role='user'),
                      dict(role='assistant', api_role='assistant')
                  ],
-                 openai_api_base: str = OPENAI_API_BASE,
+                 api_base: str = OPENAI_API_BASE,
                  proxies: Optional[Dict] = None,
                  **gen_params):
         if 'top_k' in gen_params:
@@ -87,7 +87,7 @@ class GPTAPI(BaseAPILLM):
         else:
             self.orgs = org
         self.org_ctr = 0
-        self.url = openai_api_base
+        self.url = api_base
         self.model_type = model_type
         self.proxies = proxies
         self.json_mode = json_mode
@@ -542,7 +542,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
         self.org_ctr = 0
         self.url = api_base
         self.model_type = model_type
-        self.proxies = proxies
+        self.proxies = proxies or {}
         self.json_mode = json_mode
 
     async def chat(
