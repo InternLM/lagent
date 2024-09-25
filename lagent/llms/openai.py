@@ -11,6 +11,8 @@ from typing import Dict, List, Optional, Union
 import aiohttp
 import requests
 
+from ..schema import ModelStatusCode
+from ..utils import filter_suffix
 from .base_api import AsyncBaseAPILLM, BaseAPILLM
 
 warnings.simplefilter('default')
@@ -118,6 +120,51 @@ class GPTAPI(BaseAPILLM):
         ret = [task.result() for task in tasks]
         return ret[0] if isinstance(inputs[0], dict) else ret
 
+    def stream_chat(
+        self,
+        inputs: List[dict],
+        **gen_params,
+    ):
+        """Generate responses given the contexts.
+
+        Args:
+            inputs (List[dict]): a list of messages
+            gen_params: additional generation configuration
+
+        Returns:
+            str: generated string
+        """
+        assert isinstance(inputs, list)
+        if 'max_tokens' in gen_params:
+            raise NotImplementedError('unsupported parameter: max_tokens')
+        gen_params = self.update_gen_params(**gen_params)
+        gen_params['stream'] = True
+
+        resp = ''
+        finished = False
+        stop_words = gen_params.get('stop_words')
+        if stop_words is None:
+            stop_words = []
+        # mapping to role that openai supports
+        messages = self.template_parser._prompt2api(inputs)
+        for text in self._stream_chat(messages, **gen_params):
+            if self.model_type.lower().startswith('qwen'):
+                resp = text
+            else:
+                resp += text
+            if not resp:
+                continue
+            # remove stop_words
+            for sw in stop_words:
+                if sw in resp:
+                    resp = filter_suffix(resp, stop_words)
+                    finished = True
+                    break
+            yield ModelStatusCode.STREAM_ING, resp, None
+            if finished:
+                break
+        yield ModelStatusCode.END, resp, None
+
     def _chat(self, messages: List[dict], **gen_params) -> str:
         """Generate completion from a list of templates.
 
@@ -210,6 +257,206 @@ class GPTAPI(BaseAPILLM):
         raise RuntimeError('Calling OpenAI failed after retrying for '
                            f'{max_num_retries} times. Check the logs for '
                            'details.')
+
+    def _stream_chat(self, messages: List[dict], **gen_params) -> str:
+        """Generate completion from a list of templates.
+
+        Args:
+            messages (List[dict]): a list of prompt dictionaries
+            gen_params: additional generation configuration
+
+        Returns:
+            str: The generated string.
+        """
+
+        def streaming(raw_response):
+            for chunk in raw_response.iter_lines(
+                    chunk_size=8192, decode_unicode=False, delimiter=b'\n'):
+                if chunk:
+                    decoded = chunk.decode('utf-8')
+                    if decoded == 'data: [DONE]':
+                        return
+                    if decoded[:5] == 'data:':
+                        decoded = decoded[5:]
+                        if decoded[0] == ' ':
+                            decoded = decoded[1:]
+                    else:
+                        print(decoded)
+                        continue
+                    try:
+                        response = json.loads(decoded)
+                        if 'code' in response and response['code'] == -20003:
+                            # Context exceeds maximum length
+                            yield ''
+                            return
+                        if self.model_type.lower().startswith('qwen'):
+                            choice = response['output']['choices'][0]
+                            yield choice['message']['content']
+                            if choice['finish_reason'] == 'stop':
+                                return
+                        else:
+                            choice = response['choices'][0]
+                            if choice['finish_reason'] == 'stop':
+                                return
+                            yield choice['delta'].get('content', '')
+                    except Exception as exc:
+                        print(
+                            f'response {decoded} lead to exception of {str(exc)}'
+                        )
+                        raise
+
+        assert isinstance(messages, list)
+
+        header, data = self.generate_request_data(
+            model_type=self.model_type,
+            messages=messages,
+            gen_params=gen_params,
+            json_mode=self.json_mode)
+
+        max_num_retries = 0
+        while max_num_retries < self.retry:
+            if len(self.invalid_keys) == len(self.keys):
+                raise RuntimeError('All keys have insufficient quota.')
+
+            # find the next valid key
+            while True:
+                self.key_ctr += 1
+                if self.key_ctr == len(self.keys):
+                    self.key_ctr = 0
+
+                if self.keys[self.key_ctr] not in self.invalid_keys:
+                    break
+
+            key = self.keys[self.key_ctr]
+            header['Authorization'] = f'Bearer {key}'
+
+            if self.orgs:
+                self.org_ctr += 1
+                if self.org_ctr == len(self.orgs):
+                    self.org_ctr = 0
+                header['OpenAI-Organization'] = self.orgs[self.org_ctr]
+
+            response = dict()
+            try:
+                raw_response = requests.post(
+                    self.url,
+                    headers=header,
+                    data=json.dumps(data),
+                    proxies=self.proxies)
+                return streaming(raw_response)
+            except requests.ConnectionError:
+                print('Got connection error, retrying...')
+                continue
+            except requests.JSONDecodeError:
+                print('JsonDecode error, got', str(raw_response.content))
+                continue
+            except KeyError:
+                if 'error' in response:
+                    if response['error']['code'] == 'rate_limit_exceeded':
+                        time.sleep(1)
+                        continue
+                    elif response['error']['code'] == 'insufficient_quota':
+                        self.invalid_keys.add(key)
+                        self.logger.warn(f'insufficient_quota key: {key}')
+                        continue
+
+                    print('Find error message in response: ',
+                          str(response['error']))
+            except Exception as error:
+                print(str(error))
+            max_num_retries += 1
+
+        raise RuntimeError('Calling OpenAI failed after retrying for '
+                           f'{max_num_retries} times. Check the logs for '
+                           'details.')
+
+    def generate_request_data(self,
+                              model_type,
+                              messages,
+                              gen_params,
+                              json_mode=False):
+        """
+        Generates the request data for different model types.
+
+        Args:
+            model_type (str): The type of the model (e.g., 'gpt', 'internlm', 'qwen').
+            messages (list): The list of messages to be sent to the model.
+            gen_params (dict): The generation parameters.
+            json_mode (bool): Flag to determine if the response format should be JSON.
+
+        Returns:
+            tuple: A tuple containing the header and the request data.
+        """
+        # Copy generation parameters to avoid modifying the original dictionary
+        gen_params = gen_params.copy()
+
+        # Hold out 100 tokens due to potential errors in token calculation
+        max_tokens = min(gen_params.pop('max_new_tokens'), 4096)
+        if max_tokens <= 0:
+            return '', ''
+
+        # Initialize the header
+        header = {
+            'content-type': 'application/json',
+        }
+
+        # Common parameters processing
+        gen_params['max_tokens'] = max_tokens
+        if 'stop_words' in gen_params:
+            gen_params['stop'] = gen_params.pop('stop_words')
+        if 'repetition_penalty' in gen_params:
+            gen_params['frequency_penalty'] = gen_params.pop(
+                'repetition_penalty')
+
+        # Model-specific processing
+        data = {}
+        if model_type.lower().startswith('gpt'):
+            if 'top_k' in gen_params:
+                warnings.warn(
+                    '`top_k` parameter is deprecated in OpenAI APIs.',
+                    DeprecationWarning)
+                gen_params.pop('top_k')
+            gen_params.pop('skip_special_tokens', None)
+            gen_params.pop('session_id', None)
+            data = {
+                'model': model_type,
+                'messages': messages,
+                'n': 1,
+                **gen_params
+            }
+            if json_mode:
+                data['response_format'] = {'type': 'json_object'}
+        elif model_type.lower().startswith('internlm'):
+            data = {
+                'model': model_type,
+                'messages': messages,
+                'n': 1,
+                **gen_params
+            }
+            if json_mode:
+                data['response_format'] = {'type': 'json_object'}
+        elif model_type.lower().startswith('qwen'):
+            header['X-DashScope-SSE'] = 'enable'
+            gen_params.pop('skip_special_tokens', None)
+            gen_params.pop('session_id', None)
+            if 'frequency_penalty' in gen_params:
+                gen_params['repetition_penalty'] = gen_params.pop(
+                    'frequency_penalty')
+            gen_params['result_format'] = 'message'
+            data = {
+                'model': model_type,
+                'input': {
+                    'messages': messages
+                },
+                'parameters': {
+                    **gen_params
+                }
+            }
+        else:
+            raise NotImplementedError(
+                f'Model type {model_type} is not supported')
+
+        return header, data
 
     def tokenize(self, prompt: str) -> list:
         """Tokenize the input prompt.
@@ -325,6 +572,51 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
         ret = await asyncio.gather(*tasks)
         return ret[0] if isinstance(inputs[0], dict) else ret
 
+    async def stream_chat(
+        self,
+        inputs: List[dict],
+        **gen_params,
+    ):
+        """Generate responses given the contexts.
+
+        Args:
+            inputs (List[dict]): a list of messages
+            gen_params: additional generation configuration
+
+        Returns:
+            str: generated string
+        """
+        assert isinstance(inputs, list)
+        if 'max_tokens' in gen_params:
+            raise NotImplementedError('unsupported parameter: max_tokens')
+        gen_params = self.update_gen_params(**gen_params)
+        gen_params['stream'] = True
+
+        resp = ''
+        finished = False
+        stop_words = gen_params.get('stop_words')
+        if stop_words is None:
+            stop_words = []
+        # mapping to role that openai supports
+        messages = self.template_parser._prompt2api(inputs)
+        async for text in self._stream_chat(messages, **gen_params):
+            if self.model_type.lower().startswith('qwen'):
+                resp = text
+            else:
+                resp += text
+            if not resp:
+                continue
+            # remove stop_words
+            for sw in stop_words:
+                if sw in resp:
+                    resp = filter_suffix(resp, stop_words)
+                    finished = True
+                    break
+            yield ModelStatusCode.STREAM_ING, resp, None
+            if finished:
+                break
+        yield ModelStatusCode.END, resp, None
+
     async def _chat(self, messages: List[dict], **gen_params) -> str:
         """Generate completion from a list of templates.
 
@@ -394,8 +686,8 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
             except aiohttp.ClientConnectionError:
                 print('Got connection error, retrying...')
                 continue
-            except requests.JSONDecodeError:
-                print('JsonDecode error, got', str(resp.content))
+            except aiohttp.ClientResponseError as e:
+                print('Response error, got', str(e))
                 continue
             try:
                 return response['choices'][0]['message']['content'].strip()
@@ -416,6 +708,210 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
         raise RuntimeError('Calling OpenAI failed after retrying for '
                            f'{max_num_retries} times. Check the logs for '
                            'details.')
+
+    async def _stream_chat(self, messages: List[dict], **gen_params) -> str:
+        """Generate completion from a list of templates.
+
+        Args:
+            messages (List[dict]): a list of prompt dictionaries
+            gen_params: additional generation configuration
+
+        Returns:
+            str: The generated string.
+        """
+
+        async def streaming(raw_response):
+            async for chunk in raw_response.content:
+                if chunk:
+                    decoded = chunk.decode('utf-8')
+                    if decoded == 'data: [DONE]':
+                        return
+                    if decoded[:5] == 'data:':
+                        decoded = decoded[5:]
+                        if decoded[0] == ' ':
+                            decoded = decoded[1:]
+                    else:
+                        print(decoded)
+                        continue
+                    try:
+                        response = json.loads(decoded)
+                        if 'code' in response and response['code'] == -20003:
+                            # Context exceeds maximum length
+                            yield ''
+                            return
+                        if self.model_type.lower().startswith('qwen'):
+                            choice = response['output']['choices'][0]
+                            yield choice['message']['content']
+                            if choice['finish_reason'] == 'stop':
+                                return
+                        else:
+                            choice = response['choices'][0]
+                            if choice['finish_reason'] == 'stop':
+                                return
+                            yield choice['delta'].get('content', '')
+                    except Exception as exc:
+                        print(
+                            f'response {decoded} lead to exception of {str(exc)}'
+                        )
+                        raise
+
+        assert isinstance(messages, list)
+
+        header, data = self.generate_request_data(
+            model_type=self.model_type,
+            messages=messages,
+            gen_params=gen_params,
+            json_mode=self.json_mode)
+
+        max_num_retries = 0
+        while max_num_retries < self.retry:
+            if len(self.invalid_keys) == len(self.keys):
+                raise RuntimeError('All keys have insufficient quota.')
+
+            # find the next valid key
+            while True:
+                self.key_ctr += 1
+                if self.key_ctr == len(self.keys):
+                    self.key_ctr = 0
+
+                if self.keys[self.key_ctr] not in self.invalid_keys:
+                    break
+
+            key = self.keys[self.key_ctr]
+            header['Authorization'] = f'Bearer {key}'
+
+            if self.orgs:
+                self.org_ctr += 1
+                if self.org_ctr == len(self.orgs):
+                    self.org_ctr = 0
+                header['OpenAI-Organization'] = self.orgs[self.org_ctr]
+
+            response = dict()
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                            self.url,
+                            headers=header,
+                            json=data,
+                            proxy=self.proxies.get(
+                                'https',
+                                self.proxies.get('http'))) as raw_response:
+                        async for msg in streaming(raw_response):
+                            yield msg
+                        return
+            except aiohttp.ClientConnectionError:
+                print('Got connection error, retrying...')
+                continue
+            except aiohttp.ClientResponseError as e:
+                print('Response error, got', str(e))
+                continue
+            except KeyError:
+                if 'error' in response:
+                    if response['error']['code'] == 'rate_limit_exceeded':
+                        time.sleep(1)
+                        continue
+                    elif response['error']['code'] == 'insufficient_quota':
+                        self.invalid_keys.add(key)
+                        self.logger.warn(f'insufficient_quota key: {key}')
+                        continue
+
+                    print('Find error message in response: ',
+                          str(response['error']))
+            except Exception as error:
+                print(str(error))
+            max_num_retries += 1
+
+        raise RuntimeError('Calling OpenAI failed after retrying for '
+                           f'{max_num_retries} times. Check the logs for '
+                           'details.')
+
+    def generate_request_data(self,
+                              model_type,
+                              messages,
+                              gen_params,
+                              json_mode=False):
+        """
+        Generates the request data for different model types.
+
+        Args:
+            model_type (str): The type of the model (e.g., 'gpt', 'internlm', 'qwen').
+            messages (list): The list of messages to be sent to the model.
+            gen_params (dict): The generation parameters.
+            json_mode (bool): Flag to determine if the response format should be JSON.
+
+        Returns:
+            tuple: A tuple containing the header and the request data.
+        """
+        # Copy generation parameters to avoid modifying the original dictionary
+        gen_params = gen_params.copy()
+
+        # Hold out 100 tokens due to potential errors in token calculation
+        max_tokens = min(gen_params.pop('max_new_tokens'), 4096)
+        if max_tokens <= 0:
+            return '', ''
+
+        # Initialize the header
+        header = {
+            'content-type': 'application/json',
+        }
+
+        # Common parameters processing
+        gen_params['max_tokens'] = max_tokens
+        if 'stop_words' in gen_params:
+            gen_params['stop'] = gen_params.pop('stop_words')
+        if 'repetition_penalty' in gen_params:
+            gen_params['frequency_penalty'] = gen_params.pop(
+                'repetition_penalty')
+
+        # Model-specific processing
+        data = {}
+        if model_type.lower().startswith('gpt'):
+            if 'top_k' in gen_params:
+                warnings.warn(
+                    '`top_k` parameter is deprecated in OpenAI APIs.',
+                    DeprecationWarning)
+                gen_params.pop('top_k')
+            gen_params.pop('skip_special_tokens', None)
+            gen_params.pop('session_id', None)
+            data = {
+                'model': model_type,
+                'messages': messages,
+                'n': 1,
+                **gen_params
+            }
+            if json_mode:
+                data['response_format'] = {'type': 'json_object'}
+        elif model_type.lower().startswith('internlm'):
+            data = {
+                'model': model_type,
+                'messages': messages,
+                'n': 1,
+                **gen_params
+            }
+            if json_mode:
+                data['response_format'] = {'type': 'json_object'}
+        elif model_type.lower().startswith('qwen'):
+            header['X-DashScope-SSE'] = 'enable'
+            gen_params.pop('skip_special_tokens', None)
+            gen_params.pop('session_id', None)
+            if 'frequency_penalty' in gen_params:
+                gen_params['repetition_penalty'] = gen_params.pop(
+                    'frequency_penalty')
+            gen_params['result_format'] = 'message'
+            data = {
+                'model': model_type,
+                'input': {
+                    'messages': messages
+                },
+                'parameters': {
+                    **gen_params
+                }
+            }
+        else:
+            raise NotImplementedError(
+                f'Model type {model_type} is not supported')
+
+        return header, data
 
     def tokenize(self, prompt: str) -> list:
         """Tokenize the input prompt.
