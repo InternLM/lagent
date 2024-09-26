@@ -167,7 +167,8 @@ class BaseAPILLM(BaseLLM):
             top_k=top_k,
             temperature=temperature,
             repetition_penalty=repetition_penalty,
-            stop_words=stop_words)
+            stop_words=stop_words,
+            skip_special_tokens=False)
 
 
 class AsyncBaseAPILLM(AsyncLLMMixin, BaseAPILLM):

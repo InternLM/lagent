@@ -176,12 +176,12 @@ class GPTAPI(BaseAPILLM):
             str: The generated string.
         """
         assert isinstance(messages, list)
-        gen_params = gen_params.copy()
 
-        # Hold out 100 tokens due to potential errors in tiktoken calculation
-        max_tokens = min(gen_params.pop('max_new_tokens'), 4096)
-        if max_tokens <= 0:
-            return ''
+        header, data = self.generate_request_data(
+            model_type=self.model_type,
+            messages=messages,
+            gen_params=gen_params,
+            json_mode=self.json_mode)
 
         max_num_retries = 0
         while max_num_retries < self.retry:
@@ -199,11 +199,7 @@ class GPTAPI(BaseAPILLM):
                         break
 
                 key = self.keys[self.key_ctr]
-
-            header = {
-                'Authorization': f'Bearer {key}',
-                'content-type': 'application/json',
-            }
+                header['Authorization'] = f'Bearer {key}'
 
             if self.orgs:
                 with Lock():
@@ -212,34 +208,21 @@ class GPTAPI(BaseAPILLM):
                         self.org_ctr = 0
                 header['OpenAI-Organization'] = self.orgs[self.org_ctr]
 
+            response = dict()
             try:
-                gen_params_new = gen_params.copy()
-                data = dict(
-                    model=self.model_type,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    n=1,
-                    stop=gen_params_new.pop('stop_words'),
-                    frequency_penalty=gen_params_new.pop('repetition_penalty'),
-                    **gen_params_new,
-                )
-                if self.json_mode:
-                    data['response_format'] = {'type': 'json_object'}
                 raw_response = requests.post(
                     self.url,
                     headers=header,
                     data=json.dumps(data),
                     proxies=self.proxies)
+                response = raw_response.json()
+                return response['choices'][0]['message']['content'].strip()
             except requests.ConnectionError:
                 print('Got connection error, retrying...')
                 continue
-            try:
-                response = raw_response.json()
             except requests.JSONDecodeError:
                 print('JsonDecode error, got', str(raw_response.content))
                 continue
-            try:
-                return response['choices'][0]['message']['content'].strip()
             except KeyError:
                 if 'error' in response:
                     if response['error']['code'] == 'rate_limit_exceeded':
@@ -252,6 +235,8 @@ class GPTAPI(BaseAPILLM):
 
                     print('Find error message in response: ',
                           str(response['error']))
+            except Exception as error:
+                print(str(error))
             max_num_retries += 1
 
         raise RuntimeError('Calling OpenAI failed after retrying for '
@@ -628,12 +613,12 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
             str: The generated string.
         """
         assert isinstance(messages, list)
-        gen_params = gen_params.copy()
 
-        # Hold out 100 tokens due to potential errors in tiktoken calculation
-        max_tokens = min(gen_params.pop('max_new_tokens'), 4096)
-        if max_tokens <= 0:
-            return ''
+        header, data = self.generate_request_data(
+            model_type=self.model_type,
+            messages=messages,
+            gen_params=gen_params,
+            json_mode=self.json_mode)
 
         max_num_retries = 0
         while max_num_retries < self.retry:
@@ -650,11 +635,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                     break
 
             key = self.keys[self.key_ctr]
-
-            header = {
-                'Authorization': f'Bearer {key}',
-                'content-type': 'application/json',
-            }
+            header['Authorization'] = f'Bearer {key}'
 
             if self.orgs:
                 self.org_ctr += 1
@@ -662,19 +643,8 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                     self.org_ctr = 0
                 header['OpenAI-Organization'] = self.orgs[self.org_ctr]
 
+            response = dict()
             try:
-                gen_params_new = gen_params.copy()
-                data = dict(
-                    model=self.model_type,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    n=1,
-                    stop=gen_params_new.pop('stop_words'),
-                    frequency_penalty=gen_params_new.pop('repetition_penalty'),
-                    **gen_params_new,
-                )
-                if self.json_mode:
-                    data['response_format'] = {'type': 'json_object'}
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                             self.url,
@@ -683,14 +653,18 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                             proxy=self.proxies.get(
                                 'https', self.proxies.get('http'))) as resp:
                         response = await resp.json()
+                        return response['choices'][0]['message'][
+                            'content'].strip()
             except aiohttp.ClientConnectionError:
                 print('Got connection error, retrying...')
                 continue
             except aiohttp.ClientResponseError as e:
                 print('Response error, got', str(e))
                 continue
-            try:
-                return response['choices'][0]['message']['content'].strip()
+            except json.JSONDecodeError:
+                print('JsonDecode error, got', await
+                      resp.text(errors='replace'))
+                continue
             except KeyError:
                 if 'error' in response:
                     if response['error']['code'] == 'rate_limit_exceeded':
@@ -703,6 +677,8 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
 
                     print('Find error message in response: ',
                           str(response['error']))
+            except Exception as error:
+                print(str(error))
             max_num_retries += 1
 
         raise RuntimeError('Calling OpenAI failed after retrying for '
