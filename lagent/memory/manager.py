@@ -23,3 +23,7 @@ class MemoryManager:
 
     def get(self, session_id=0) -> Memory:
         return self.memory_map.get(session_id, None)
+
+    def reset(self, session_id=0) -> None:
+        if session_id in self.memory_map:
+            del self.memory_map[session_id]
