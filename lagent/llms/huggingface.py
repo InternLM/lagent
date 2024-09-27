@@ -4,14 +4,12 @@ from typing import Dict, List, Optional, Union
 
 from lagent.schema import ModelStatusCode
 from .base_api import APITemplateParser
-from .base_llm import BaseModel
+from .base_llm import BaseLLM
 
 logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
 
-
-class HFTransformer(BaseModel):
+class HFTransformer(BaseLLM):
     """Model wrapper around HuggingFace general models.
 
     Adapted from Internlm (https://github.com/InternLM/InternLM/blob/main/

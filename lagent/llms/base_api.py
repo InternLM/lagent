@@ -1,9 +1,7 @@
-import threading
 import warnings
-from time import sleep
 from typing import Dict, List, Optional, Tuple, Union
 
-from .base_llm import BaseModel
+from lagent.llms.base_llm import AsyncLLMMixin, BaseLLM
 
 
 class APITemplateParser:
@@ -130,13 +128,11 @@ class APITemplateParser:
         return res
 
 
-class BaseAPIModel(BaseModel):
+class BaseAPILLM(BaseLLM):
     """Base class for API model wrapper.
 
     Args:
         model_type (str): The type of model.
-        query_per_second (int): The maximum queries allowed per second
-            between two consecutive calls of the API. Defaults to 1.
         retry (int): Number of retires if the API call fails. Defaults to 2.
         meta_template (Dict, optional): The model's meta prompt
             template if needed, in case the requirement of injecting or
@@ -147,7 +143,6 @@ class BaseAPIModel(BaseModel):
 
     def __init__(self,
                  model_type: str,
-                 query_per_second: int = 1,
                  retry: int = 2,
                  template_parser: 'APITemplateParser' = APITemplateParser,
                  meta_template: Optional[Dict] = None,
@@ -161,8 +156,6 @@ class BaseAPIModel(BaseModel):
         self.model_type = model_type
         self.meta_template = meta_template
         self.retry = retry
-        self.query_per_second = query_per_second
-        self.token_bucket = TokenBucket(query_per_second)
         if template_parser:
             self.template_parser = template_parser(meta_template)
 
@@ -177,36 +170,6 @@ class BaseAPIModel(BaseModel):
             stop_words=stop_words,
             skip_special_tokens=False)
 
-    def _wait(self):
-        """Wait till the next query can be sent.
 
-        Applicable in both single-thread and multi-thread environments.
-        """
-        return self.token_bucket.get_token()
-
-
-class TokenBucket:
-    """A token bucket for rate limiting.
-
-    Args:
-        rate (float): The rate of the token bucket.
-    """
-
-    def __init__(self, rate: float) -> None:
-        self._rate = rate
-        self._tokens = threading.Semaphore(0)
-        self.started = False
-
-    def _add_tokens(self):
-        """Add tokens to the bucket."""
-        while True:
-            if self._tokens._value < self._rate:
-                self._tokens.release()
-            sleep(1 / self._rate)
-
-    def get_token(self):
-        """Get a token from the bucket."""
-        if not self.started:
-            self.started = True
-            threading.Thread(target=self._add_tokens, daemon=True).start()
-        self._tokens.acquire()
+class AsyncBaseAPILLM(AsyncLLMMixin, BaseAPILLM):
+    pass

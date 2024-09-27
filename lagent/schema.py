@@ -1,6 +1,8 @@
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from enum import IntEnum
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
+
+from pydantic import BaseModel
 
 
 def enum_dict_factory(inputs):
@@ -13,12 +15,18 @@ def dataclass2dict(data):
     return asdict(data, dict_factory=enum_dict_factory)
 
 
+@dataclass
+class FunctionCall:
+    name: str
+    parameters: Union[Dict, str]
+
+
 class ActionStatusCode(IntEnum):
     ING = 1
     SUCCESS = 0
     HTTP_ERROR = -1000  # http error
-    ARGS_ERROR = -1001  # 参数错误
-    API_ERROR = -1002  # 不知道的API错误
+    ARGS_ERROR = -1001  # parameter error
+    API_ERROR = -1002  # unknown error
 
 
 class ActionValidCode(IntEnum):
@@ -52,9 +60,9 @@ class ActionReturn:
         return result
 
 
-# 需要集成int，如此asdict可以把AgentStatusCode 转换成 int
+# need to integrate int, so asdict can convert AgentStatusCode to int
 class ModelStatusCode(IntEnum):
-    END = 0  # end of streaming 返回本次history
+    END = 0  # end of streaming
     STREAM_ING = 1  # response is in streaming
     SERVER_ERR = -1  # triton server's error
     SESSION_CLOSED = -2  # session has been closed
@@ -64,7 +72,7 @@ class ModelStatusCode(IntEnum):
 
 
 class AgentStatusCode(IntEnum):
-    END = 0  # end of streaming 返回本次history
+    END = 0  # end of streaming
     STREAM_ING = 1  # response is in streaming
     SERVER_ERR = -1  # triton server's error
     SESSION_CLOSED = -2  # session has been closed
@@ -77,18 +85,14 @@ class AgentStatusCode(IntEnum):
     CODING = 6  # start python
     CODE_END = 7  # end python
     CODE_RETURN = 8  # python return
-    ANSWER_ING = 9  # final answer is in streaming
 
 
-@dataclass
-class AgentReturn:
-    type: str = ''
-    content: str = ''
-    state: Union[AgentStatusCode, int] = AgentStatusCode.END
-    actions: List[ActionReturn] = field(default_factory=list)
-    response: str = ''
-    inner_steps: List = field(default_factory=list)
-    nodes: Dict = None
-    adjacency_list: Dict = None
-    references: Dict = field(default_factory=dict)
-    errmsg: Optional[str] = None
+class AgentMessage(BaseModel):
+
+    content: Any
+    sender: str = 'user'
+    formatted: Optional[Any] = None
+    extra_info: Optional[Any] = None
+    type: Optional[str] = None
+    receiver: Optional[str] = None
+    stream_state: Union[ModelStatusCode, AgentStatusCode] = AgentStatusCode.END

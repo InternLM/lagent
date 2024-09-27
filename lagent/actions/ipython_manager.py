@@ -122,9 +122,8 @@ class IPythonInteractiveManager(BaseAction):
         ci_lock: str = None,
         description: Optional[dict] = None,
         parser: Type[BaseParser] = JsonParser,
-        enable: bool = True,
     ):
-        super().__init__(description, parser, enable)
+        super().__init__(description, parser)
         self.max_workers = max_workers
         self.timeout = timeout
         self.ci_lock = ci_lock

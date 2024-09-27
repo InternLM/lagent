@@ -11,7 +11,6 @@ try:
 except ImportError:
     from typing_extensions import Annotated
 
-from class_registry import AutoRegister, ClassRegistry
 from griffe import Docstring
 
 try:
@@ -23,8 +22,6 @@ from ..schema import ActionReturn, ActionStatusCode
 from .parser import BaseParser, JsonParser, ParseError
 
 logging.getLogger('griffe').setLevel(logging.ERROR)
-
-TOOL_REGISTRY = ClassRegistry('__tool_name__', unique=True)
 
 
 def tool_api(func: Optional[Callable] = None,
@@ -192,18 +189,34 @@ def tool_api(func: Optional[Callable] = None,
 
     if callable(func):
 
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            return func(self, *args, **kwargs)
+        if inspect.iscoroutinefunction(func):
+
+            @wraps(func)
+            async def wrapper(self, *args, **kwargs):
+                return await func(self, *args, **kwargs)
+
+        else:
+
+            @wraps(func)
+            def wrapper(self, *args, **kwargs):
+                return func(self, *args, **kwargs)
 
         wrapper.api_description = _parse_tool(func)
         return wrapper
 
     def decorate(func):
 
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            return func(self, *args, **kwargs)
+        if inspect.iscoroutinefunction(func):
+
+            @wraps(func)
+            async def wrapper(self, *args, **kwargs):
+                return await func(self, *args, **kwargs)
+
+        else:
+
+            @wraps(func)
+            def wrapper(self, *args, **kwargs):
+                return func(self, *args, **kwargs)
 
         wrapper.api_description = _parse_tool(func)
         return wrapper
@@ -216,7 +229,7 @@ class ToolMeta(ABCMeta):
 
     def __new__(mcs, name, base, attrs):
         is_toolkit, tool_desc = True, dict(
-            name=attrs.setdefault('__tool_name__', name),
+            name=name,
             description=Docstring(attrs.get('__doc__',
                                             '')).parse('google')[0].value)
         for key, value in attrs.items():
@@ -254,7 +267,7 @@ class ToolMeta(ABCMeta):
         return super().__new__(mcs, name, base, attrs)
 
 
-class BaseAction(metaclass=AutoRegister(TOOL_REGISTRY, ToolMeta)):
+class BaseAction(metaclass=ToolMeta):
     """Base class for all actions.
 
     Args:
@@ -262,8 +275,6 @@ class BaseAction(metaclass=AutoRegister(TOOL_REGISTRY, ToolMeta)):
             Defaults to ``None``.
         parser (:class:`Type[BaseParser]`): The parser class to process the
             action's inputs and outputs. Defaults to :class:`JsonParser`.
-        enable (:class:`bool`): Whether the action is enabled. Defaults to
-            ``True``.
 
     Examples:
 
@@ -322,14 +333,14 @@ class BaseAction(metaclass=AutoRegister(TOOL_REGISTRY, ToolMeta)):
             action = Calculator()
     """
 
-    def __init__(self,
-                 description: Optional[dict] = None,
-                 parser: Type[BaseParser] = JsonParser,
-                 enable: bool = True):
+    def __init__(
+        self,
+        description: Optional[dict] = None,
+        parser: Type[BaseParser] = JsonParser,
+    ):
         self._description = deepcopy(description or self.__tool_description__)
         self._name = self._description['name']
         self._parser = parser(self)
-        self._enable = enable
 
     def __call__(self, inputs: str, name='run') -> ActionReturn:
         fallback_args = {'inputs': inputs, 'name': name}
@@ -371,10 +382,6 @@ class BaseAction(metaclass=AutoRegister(TOOL_REGISTRY, ToolMeta)):
         return self._name
 
     @property
-    def enable(self):
-        return self._enable
-
-    @property
     def is_toolkit(self):
         return self._is_toolkit
 
@@ -387,3 +394,41 @@ class BaseAction(metaclass=AutoRegister(TOOL_REGISTRY, ToolMeta)):
         return f'{self.description}'
 
     __str__ = __repr__
+
+
+class AsyncActionMixin:
+
+    async def __call__(self, inputs: str, name='run') -> ActionReturn:
+        fallback_args = {'inputs': inputs, 'name': name}
+        if not hasattr(self, name):
+            return ActionReturn(
+                fallback_args,
+                type=self.name,
+                errmsg=f'invalid API: {name}',
+                state=ActionStatusCode.API_ERROR)
+        try:
+            inputs = self._parser.parse_inputs(inputs, name)
+        except ParseError as exc:
+            return ActionReturn(
+                fallback_args,
+                type=self.name,
+                errmsg=exc.err_msg,
+                state=ActionStatusCode.ARGS_ERROR)
+        try:
+            outputs = await getattr(self, name)(**inputs)
+        except Exception as exc:
+            return ActionReturn(
+                inputs,
+                type=self.name,
+                errmsg=str(exc),
+                state=ActionStatusCode.API_ERROR)
+        if isinstance(outputs, ActionReturn):
+            action_return = outputs
+            if not action_return.args:
+                action_return.args = inputs
+            if not action_return.type:
+                action_return.type = self.name
+        else:
+            result = self._parser.parse_outputs(outputs)
+            action_return = ActionReturn(inputs, type=self.name, result=result)
+        return action_return
