@@ -1,7 +1,6 @@
 from unittest import TestCase
 
-from lagent.actions.builtin_actions import (FinishAction, InvalidAction,
-                                            NoAction)
+from lagent.actions.builtin_actions import FinishAction, InvalidAction, NoAction
 from lagent.schema import ActionStatusCode
 
 

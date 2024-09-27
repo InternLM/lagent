@@ -11,18 +11,16 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 
 import os
-import subprocess
+import re
 import sys
 
-import pytorch_sphinx_theme
-
-sys.path.insert(0, os.path.abspath('../../'))
+sys.path.insert(0, os.path.abspath('../..'))
 
 # -- Project information -----------------------------------------------------
-
 project = 'Lagent'
 copyright = '2020-2030, InternLM'
 author = 'InternLM'
+language = 'zh_CN'
 
 # The full version, including alpha/beta/rc tags
 version_file = '../../lagent/version.py'
@@ -37,97 +35,74 @@ release = __version__
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+    'sphinx_rtd_theme',
+    'myst_nb',
+    'autoapi.extension',
+    'sphinx_markdown_tables',
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode',
-    'sphinx_markdown_tables',
-    'sphinx_copybutton',
-    'myst_parser',
-    'sphinx.ext.intersphinx',
-    'sphinx.ext.autodoc.typehints',
-    'sphinx.ext.autosummary',
-    'sphinx.ext.autosectionlabel',
-    'sphinx_tabs.tabs',
 ]
+
+nb_output_stderr = 'remove-warn'
 autodoc_typehints = 'description'
 
-autosummary_generate = True  # Turn on sphinx.ext.autosummary
-# Ignore >>> when copying code
-copybutton_prompt_text = r'>>> |\.\.\. '
-copybutton_prompt_is_regexp = True
-
-myst_enable_extensions = ['colon_fence']
+# sphinx-autoapi configuration
+autoapi_dirs = ['../../lagent']
+autoapi_options = [
+    'members',
+    'undoc-members',
+    'show-inheritance',
+    'show-module-summary',
+]
+autoapi_ignore = ['*migrations*', '*command.py', '*cli.py']
+autoapi_template_dir = '_templates/autoapi'
+autoapi_add_toctree_entry = False
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
-# The suffix(es) of source filenames.
-# You can specify multiple suffix as a list of string:
-#
-source_suffix = {
-    '.rst': 'restructuredtext',
-    '.md': 'markdown',
-}
-
-# The master toctree document.
-master_doc = 'index'
-
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = []
 
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-# html_theme = 'sphinx_rtd_theme'
-html_theme = 'pytorch_sphinx_theme'
-html_theme_path = [pytorch_sphinx_theme.get_html_theme_path()]
+html_theme = 'sphinx_rtd_theme'
 html_theme_options = {
-    'menu': [
-        {
-            'name': 'GitHub',
-            'url': 'https://github.com/InternLM/lagent'
-        },
-    ],
-    # Specify the language of shared menu
-    'menu_lang': 'cn',
+    'navigation_depth': 3,
+    'titles_only': False,
+    'style_nav_header_background': '#4fabab',
 }
-
-language = 'zh_CN'
+html_context = {
+    'display_github': True,
+    'github_host': 'github.com',
+    'github_user': 'InternLM',
+    'github_repo': 'lagent',
+    'github_version': 'main',
+    'conf_py_path': '/docs/zh_cn/',
+}
+html_title = 'Lagent'
+html_logo = '../imgs/lagent_logo.png'
+html_favicon = '../imgs/lagent_icon.png'
 
 master_doc = 'index'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
-# so a file named "default.css" will overwrite the builtin "default.css".
+# so a file named 'default.css' will overwrite the builtin 'default.css'.
 html_static_path = ['_static']
-html_css_files = [
-    'https://cdn.datatables.net/1.13.2/css/dataTables.bootstrap5.min.css',
-    'css/readthedocs.css'
-]
-html_js_files = [
-    'https://cdn.datatables.net/1.13.2/js/jquery.dataTables.min.js',
-    'https://cdn.datatables.net/1.13.2/js/dataTables.bootstrap5.min.js',
-    'js/collapsed.js',
-    'js/table.js',
-]
-
-myst_heading_anchors = 4
-
-# Configuration for intersphinx
-intersphinx_mapping = {
-    'python': ('https://docs.python.org/3', None),
-    'numpy': ('https://numpy.org/doc/stable', None),
-    'torch': ('https://pytorch.org/docs/stable/', None),
-}
 
 
-def builder_inited_handler(app):
-    subprocess.run(['./cp_origin_docs.sh'])
+def custom_skip(app, what, name, obj, skip, options):
+    if what in ['data', 'function', 'class'] and re.search('logger', name):
+        skip = True
+    return skip
 
 
-def setup(app):
-    app.connect('builder-inited', builder_inited_handler)
+def setup(sphinx):
+    sphinx.connect('autoapi-skip-member', custom_skip)

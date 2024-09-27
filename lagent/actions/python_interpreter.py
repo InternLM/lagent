@@ -1,11 +1,13 @@
+# flake8: noqa: E501
 import copy
 import io
 from contextlib import redirect_stdout
-from typing import Any, Optional
+from typing import Any, Optional, Type
 
-from func_timeout import FunctionTimedOut, func_set_timeout
+from aioify import aioify
 
-from lagent.actions.base_action import BaseAction
+from lagent.actions.base_action import AsyncActionMixin, BaseAction, tool_api
+from lagent.actions.parser import BaseParser, JsonParser
 from lagent.schema import ActionReturn, ActionStatusCode
 
 
@@ -29,72 +31,71 @@ class GenericRuntime:
         return eval(expr, self._global_vars)
 
 
-DEFAULT_DESCRIPTION = """用来执行Python代码。代码必须是一个函数，
-函数名必须得是 'solution'，代码对应你的思考过程。代码实例格式如下：
-```python
-# import 依赖包
-import xxx
-def solution():
-    # 初始化一些变量
-    variable_names_with_real_meaning = xxx
-    # 步骤一
-    mid_variable = func(variable_names_with_real_meaning)
-    # 步骤 x
-    mid_variable = func(mid_variable)
-    # 最后结果
-    final_answer =  func(mid_variable)
-    return final_answer
-```"""
-
-
 class PythonInterpreter(BaseAction):
     """A Python executor that can execute Python scripts.
 
     Args:
-        description (str): The description of the action. Defaults to
-            DEFAULT_DESCRIPTION.
-        answer_symbol (str, Optional): the answer symbol from LLM
+        answer_symbol (str, Optional): the answer symbol from LLM. Defaults to ``None``.
         answer_expr (str, Optional): the answer function name of the Python
-            script. Default to 'solution()'.
-        answer_from_stdout (boolean): whether the execution results is from
-            stdout.
-        name (str, optional): The name of the action. If None, the name will
-            be class nameDefaults to None.
-        enable (bool, optional): Whether the action is enabled. Defaults to
-            True.
-        disable_description (str, optional): The description of the action when
-            it is disabled. Defaults to None.
-        timeout (int): Upper bound of waiting time for Python script execution.
+            script. Defaults to ``'solution()'``.
+        answer_from_stdout (boolean, Optional): whether the execution results is from
+            stdout. Defaults to ``False``.
+        timeout (int, Optional): Upper bound of waiting time for Python script execution.
+            Defaults to ``20``.
+        description (dict, Optional): The description of the action. Defaults to ``None``.
+        parser (Type[BaseParser]): The parser class to process the
+            action's inputs and outputs. Defaults to :class:`JsonParser`.
     """
 
-    def __init__(self,
-                 description: str = DEFAULT_DESCRIPTION,
-                 answer_symbol: Optional[str] = None,
-                 answer_expr: Optional[str] = 'solution()',
-                 answer_from_stdout: bool = False,
-                 name: Optional[str] = None,
-                 enable: bool = True,
-                 disable_description: Optional[str] = None,
-                 timeout: int = 20) -> None:
-        super().__init__(description, name, enable, disable_description)
-
+    def __init__(
+        self,
+        answer_symbol: Optional[str] = None,
+        answer_expr: Optional[str] = 'solution()',
+        answer_from_stdout: bool = False,
+        timeout: int = 20,
+        description: Optional[dict] = None,
+        parser: Type[BaseParser] = JsonParser,
+    ) -> None:
+        super().__init__(description, parser)
         self.answer_symbol = answer_symbol
         self.answer_expr = answer_expr
         self.answer_from_stdout = answer_from_stdout
         self.timeout = timeout
 
-    def __call__(self, command: str) -> ActionReturn:
+    @tool_api
+    def run(self, command: str) -> ActionReturn:
+        """用来执行Python代码。代码必须是一个函数，函数名必须得是 'solution'，代码对应你的思考过程。代码实例格式如下：
+
+        ```python
+        # import 依赖包
+        import xxx
+        def solution():
+            # 初始化一些变量
+            variable_names_with_real_meaning = xxx
+            # 步骤一
+            mid_variable = func(variable_names_with_real_meaning)
+            # 步骤 x
+            mid_variable = func(mid_variable)
+            # 最后结果
+            final_answer =  func(mid_variable)
+            return final_answer
+        ```
+
+        Args:
+            command (:class:`str`): Python code snippet
+        """
+        from func_timeout import FunctionTimedOut, func_set_timeout
         self.runtime = GenericRuntime()
         try:
             tool_return = func_set_timeout(self.timeout)(self._call)(command)
         except FunctionTimedOut as e:
-            tool_return = ActionReturn(url=None, args=None, type=self.name)
+            tool_return = ActionReturn(type=self.name)
             tool_return.errmsg = repr(e)
             tool_return.state = ActionStatusCode.API_ERROR
         return tool_return
 
     def _call(self, command: str) -> ActionReturn:
-        tool_return = ActionReturn(url=None, args=None, type=self.name)
+        tool_return = ActionReturn(type=self.name)
         try:
             if '```python' in command:
                 command = command.split('```python')[1].split('```')[0]
@@ -124,10 +125,52 @@ class PythonInterpreter(BaseAction):
             tool_return.state = ActionStatusCode.API_ERROR
             return tool_return
         try:
-            tool_return.result = dict(text=str(res))
+            tool_return.result = [dict(type='text', content=str(res))]
             tool_return.state = ActionStatusCode.SUCCESS
         except Exception as e:
             tool_return.errmsg = repr(e)
             tool_return.type = self.name
             tool_return.state = ActionStatusCode.API_ERROR
         return tool_return
+
+
+class AsyncPythonInterpreter(AsyncActionMixin, PythonInterpreter):
+    """A Python executor that can execute Python scripts.
+
+    Args:
+        answer_symbol (str, Optional): the answer symbol from LLM. Defaults to ``None``.
+        answer_expr (str, Optional): the answer function name of the Python
+            script. Defaults to ``'solution()'``.
+        answer_from_stdout (boolean, Optional): whether the execution results is from
+            stdout. Defaults to ``False``.
+        timeout (int, Optional): Upper bound of waiting time for Python script execution.
+            Defaults to ``20``.
+        description (dict, Optional): The description of the action. Defaults to ``None``.
+        parser (Type[BaseParser]): The parser class to process the
+            action's inputs and outputs. Defaults to :class:`JsonParser`.
+    """
+
+    @tool_api
+    @aioify
+    def run(self, command: str) -> ActionReturn:
+        """用来执行Python代码。代码必须是一个函数，函数名必须得是 'solution'，代码对应你的思考过程。代码实例格式如下：
+
+        ```python
+        # import 依赖包
+        import xxx
+        def solution():
+            # 初始化一些变量
+            variable_names_with_real_meaning = xxx
+            # 步骤一
+            mid_variable = func(variable_names_with_real_meaning)
+            # 步骤 x
+            mid_variable = func(mid_variable)
+            # 最后结果
+            final_answer =  func(mid_variable)
+            return final_answer
+        ```
+
+        Args:
+            command (:class:`str`): Python code snippet
+        """
+        return super().run(command)

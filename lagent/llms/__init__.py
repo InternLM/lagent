@@ -1,14 +1,32 @@
-from lagent.utils import is_module_exist
-from .base_api import BaseAPIModel
-from .base_llm import BaseModel
-from .openai import GPTAPI
+from .base_api import AsyncBaseAPILLM, BaseAPILLM
+from .base_llm import AsyncBaseLLM, BaseLLM
+from .huggingface import HFTransformer, HFTransformerCasualLM, HFTransformerChat
+from .lmdeploy_wrapper import (AsyncLMDeployClient, AsyncLMDeployPipeline,
+                               AsyncLMDeployServer, LMDeployClient,
+                               LMDeployPipeline, LMDeployServer)
+from .meta_template import INTERNLM2_META
+from .openai import GPTAPI, AsyncGPTAPI
+from .sensenova import SensenovaAPI
+from .vllm_wrapper import AsyncVllmModel, VllmModel
 
-__all__ = ['BaseModel', 'BaseAPIModel', 'GPTAPI']
-
-if is_module_exist('transformers'):
-    from .huggingface import HFTransformer, HFTransformerCasualLM  # noqa: F401
-    __all__.extend(['HFTransformer', 'HFTransformerCasualLM'])
-
-if is_module_exist('lmdeploy'):
-    from .lmdeploy import TritonClient  # noqa: F401
-    __all__.append('TritonClient')
+__all__ = [
+    'AsyncBaseLLM',
+    'BaseLLM',
+    'AsyncBaseAPILLM',
+    'BaseAPILLM',
+    'AsyncGPTAPI',
+    'GPTAPI',
+    'LMDeployClient',
+    'AsyncLMDeployClient',
+    'LMDeployPipeline',
+    'AsyncLMDeployPipeline',
+    'LMDeployServer',
+    'AsyncLMDeployServer',
+    'HFTransformer',
+    'HFTransformerCasualLM',
+    'INTERNLM2_META',
+    'HFTransformerChat',
+    'VllmModel',
+    'AsyncVllmModel',
+    'SensenovaAPI',
+]

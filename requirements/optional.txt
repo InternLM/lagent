@@ -1,4 +1,8 @@
-lmdeploy
+google-search-results
+lmdeploy>=0.2.3
+pillow
+python-pptx
+timeout_decorator
 torch
-transformers
-streamlit
+transformers>=4.34
+vllm>=0.3.3

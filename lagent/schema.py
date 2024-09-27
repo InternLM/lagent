@@ -1,12 +1,12 @@
-from dataclasses import asdict, dataclass, field
-from enum import Enum
-from typing import Dict, List, Optional, Union
+from dataclasses import asdict, dataclass
+from enum import IntEnum
+from typing import Any, Dict, List, Optional, Union
 
-from lagent.utils import is_module_exist
+from pydantic import BaseModel
 
 
 def enum_dict_factory(inputs):
-    inputs = [(i[0], i[-1].value) if isinstance(i[-1], Enum) else i
+    inputs = [(i[0], i[-1].value) if isinstance(i[-1], IntEnum) else i
               for i in inputs]
     return dict(inputs)
 
@@ -15,15 +15,21 @@ def dataclass2dict(data):
     return asdict(data, dict_factory=enum_dict_factory)
 
 
-class ActionStatusCode(int, Enum):
+@dataclass
+class FunctionCall:
+    name: str
+    parameters: Union[Dict, str]
+
+
+class ActionStatusCode(IntEnum):
     ING = 1
     SUCCESS = 0
     HTTP_ERROR = -1000  # http error
-    ARGS_ERROR = -1001  # 参数错误
-    API_ERROR = -1002  # 不知道的API错误
+    ARGS_ERROR = -1001  # parameter error
+    API_ERROR = -1002  # unknown error
 
 
-class ActionValidCode(int, Enum):
+class ActionValidCode(IntEnum):
     FINISH = 1
     OPEN = 0
     CLOSED = -1
@@ -33,47 +39,60 @@ class ActionValidCode(int, Enum):
 
 @dataclass
 class ActionReturn:
-    args: Dict
+    args: Optional[dict] = None
     url: Optional[str] = None
     type: Optional[str] = None
-    result: Optional[str] = None
+    result: Optional[List[dict]] = None
     errmsg: Optional[str] = None
     state: Union[ActionStatusCode, int] = ActionStatusCode.SUCCESS
     thought: Optional[str] = None
     valid: Optional[ActionValidCode] = ActionValidCode.OPEN
 
+    def format_result(self) -> str:
+        """Concatenate items in result."""
+        result = []
+        for item in self.result or []:
+            if item['type'] == 'text':
+                result.append(item['content'])
+            else:
+                result.append(f"[{item['type']}]({item['content']})")
+        result = '\n'.join(result)
+        return result
 
-class AgentStatusCode(Enum):
+
+# need to integrate int, so asdict can convert AgentStatusCode to int
+class ModelStatusCode(IntEnum):
     END = 0  # end of streaming
     STREAM_ING = 1  # response is in streaming
     SERVER_ERR = -1  # triton server's error
     SESSION_CLOSED = -2  # session has been closed
     SESSION_OUT_OF_LIMIT = -3  # request length out of limit
-    CMD = 2  # return command
     SESSION_INVALID_ARG = -4  # invalid argument
-    SESSION_READY = 3  # session is ready for inference
+    SESSION_READY = 2  # session is ready for inference
 
 
-@dataclass
-class AgentReturn:
-    actions: List[ActionReturn] = field(default_factory=list)
-    response: str = ''
-    inner_steps: List = field(default_factory=list)
-    errmsg: Optional[str] = None
+class AgentStatusCode(IntEnum):
+    END = 0  # end of streaming
+    STREAM_ING = 1  # response is in streaming
+    SERVER_ERR = -1  # triton server's error
+    SESSION_CLOSED = -2  # session has been closed
+    SESSION_OUT_OF_LIMIT = -3  # request length out of limit
+    SESSION_INVALID_ARG = -4  # invalid argument
+    SESSION_READY = 2  # session is ready for inference
+    PLUGIN_START = 3  # start tool
+    PLUGIN_END = 4  # finish tool
+    PLUGIN_RETURN = 5  # finish tool
+    CODING = 6  # start python
+    CODE_END = 7  # end python
+    CODE_RETURN = 8  # python return
 
 
-if is_module_exist('lmdeploy'):
-    from lmdeploy.serve.turbomind.chatbot import StatusCode
-    STATE_MAP = {
-        StatusCode.TRITON_STREAM_END: AgentStatusCode.END,
-        StatusCode.TRITON_SERVER_ERR: AgentStatusCode.SERVER_ERR,
-        StatusCode.TRITON_SESSION_CLOSED: AgentStatusCode.SESSION_CLOSED,
-        StatusCode.TRITON_STREAM_ING: AgentStatusCode.STREAM_ING,
-        StatusCode.TRITON_SESSION_OUT_OF_LIMIT:
-        AgentStatusCode.SESSION_OUT_OF_LIMIT,
-        StatusCode.TRITON_SESSION_INVALID_ARG:
-        AgentStatusCode.SESSION_INVALID_ARG,
-        StatusCode.TRITON_SESSION_READY: AgentStatusCode.SESSION_READY
-    }
-else:
-    STATE_MAP = {}
+class AgentMessage(BaseModel):
+
+    content: Any
+    sender: str = 'user'
+    formatted: Optional[Any] = None
+    extra_info: Optional[Any] = None
+    type: Optional[str] = None
+    receiver: Optional[str] = None
+    stream_state: Union[ModelStatusCode, AgentStatusCode] = AgentStatusCode.END

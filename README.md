@@ -1,3 +1,4 @@
+<div id="top"></div>
 <div align="center">
   <img src="docs/imgs/lagent_logo.png" width="450"/>
 
@@ -6,26 +7,24 @@
 [![license](https://img.shields.io/github/license/InternLM/lagent.svg)](https://github.com/InternLM/lagent/tree/main/LICENSE)
 [![issue resolution](https://img.shields.io/github/issues-closed-raw/InternLM/lagent)](https://github.com/InternLM/lagent/issues)
 [![open issues](https://img.shields.io/github/issues-raw/InternLM/lagent)](https://github.com/InternLM/lagent/issues)
+![Visitors](https://api.visitorbadge.io/api/visitors?path=InternLM%2Flagent%20&countColor=%23263759&style=flat)
+![GitHub forks](https://img.shields.io/github/forks/InternLM/lagent)
+![GitHub Repo stars](https://img.shields.io/github/stars/InternLM/lagent)
+![GitHub contributors](https://img.shields.io/github/contributors/InternLM/lagent)
 
-English | [简体中文](README_zh-CN.md)
+English | [简体中文](README_zh-CN.md) | [日本語](README_ja_JP.md) | [हिंदी](README_in_HIN.md) | [বাংলা](README_in_beng.md) | [한국어](README_KR_Kr.md)
 
 </div>
 
 <p align="center">
-    👋 join us on <a href="https://twitter.com/intern_lm" target="_blank">Twitter</a>, <a href="https://discord.gg/xa29JuW87d" target="_blank">Discord</a> and <a href="https://r.vansin.top/?r=internwx" target="_blank">WeChat</a>
-</p>## Introduction
+    👋 join us on <a href="https://twitter.com/intern_lm" target="_blank">𝕏 (Twitter)</a>, <a href="https://discord.gg/xa29JuW87d" target="_blank">Discord</a> and <a href="https://r.vansin.top/?r=internwx" target="_blank">WeChat</a>
+</p>
 
-Lagent is a lightweight open-source framework that allows users to efficiently build large language model(LLM)-based agents. It also provides some typical tools to augment LLM. The overview of our framework is shown below:
+<div align="center">
 
-![image](https://github.com/InternLM/lagent/assets/24351120/cefc4145-2ad8-4f80-b88b-97c05d1b9d3e)
+https://github.com/InternLM/lagent/assets/24622904/3242f9bf-32d2-4907-8815-e16a75a4ac0e
 
-### Major Features
-
-- **Support multiple kinds of agents out of box.** Lagent now supports [ReAct](https://arxiv.org/abs/2210.03629), [AutoGPT](https://github.com/Significant-Gravitas/Auto-GPT) and [ReWOO](https://arxiv.org/abs/2305.18323), which can drive the large language models(LLMs) for multiple trials of reasoning and function calling.
-
-- **Extremely simple and easy to extend.** The framework is quite simple with a clear structure. With only 20 lines of code, you are able to construct your own agent. It also supports three typical tools: Python interpreter, API call, and google search.
-
-- **Support various large language models.** We support different LLMs, including API-based (GPT-3.5/4) and open-source (LLaMA 2, InternLM) models.
+</div>
 
 ## Getting Started
 
@@ -39,73 +38,58 @@ Install with pip (Recommended).
 pip install lagent
 ```
 
-Optionally, you could also build Lagent from source in case you want to modify the code:
+### Run a Web Demo
+
+You need to install Streamlit first.
 
 ```bash
-git clone https://github.com/InternLM/lagent.git
-cd lagent
-pip install -e .
-```
-
-### Run ReAct Web Demo
-
-```bash
-# You need to install streamlit first
 # pip install streamlit
-streamlit run examples/react_web_demo.py
+streamlit run examples/internlm2_agent_web_demo.py
 ```
 
-Then you can chat through the UI shown as below
-![image](https://github.com/InternLM/lagent/assets/24622904/3aebb8b4-07d1-42a2-9da3-46080c556f68)
+## What's Lagent?
 
-### Run a ReWOO agent with GPT-3.5
+Lagent is a lightweight open-source framework that allows users to efficiently build large language model(LLM)-based agents. It also provides some typical tools to augment LLM. The overview of our framework is shown below:
 
-Below is an example for running ReWOO with GPT-3.5
+![image](https://github.com/InternLM/lagent/assets/24351120/cefc4145-2ad8-4f80-b88b-97c05d1b9d3e)
 
-```python
-from lagent.agents import ReWOO
-from lagent.actions import ActionExecutor, GoogleSearch, LLMQA
-from lagent.llms import GPTAPI
+## Major Features
 
-llm = GPTAPI(model_type='gpt-3.5-turbo', key=['Your OPENAI_API_KEY'])
-search_tool = GoogleSearch(api_key='Your SERPER_API_KEY')
-llmqa_tool = LLMQA(llm)
+- Stream Output: Provides the `stream_chat` interface for streaming output, allowing cool streaming demos right at your local setup.
+- Interfacing is unified, with a comprehensive design upgrade for enhanced extensibility, including:
+  - Model: Whether it's the OpenAI API, Transformers, or LMDeploy inference acceleration framework, you can seamlessly switch between models.
+  - Action: Simple inheritance and decoration allow you to create your own personal toolkit, adaptable to both InternLM and GPT.
+  - Agent: Consistent with the Model's input interface, the transformation from model to intelligent agent only takes one step, facilitating the exploration and implementation of various agents.
+- Documentation has been thoroughly upgraded with full API documentation coverage.
 
-chatbot = ReWOO(
-    llm=llm,
-    action_executor=ActionExecutor(
-        actions=[search_tool, llmqa_tool]),
-)
+## 💻Tech Stack
 
-response = chatbot.chat('What profession does Nicholas Ray and Elia Kazan have in common')
-print(response.response)
->>> Film director.
-```
+<p>
+  <a href="">
+    <img src="https://img.shields.io/badge/Python-007ACC?style=for-the-badge&logo=python&logoColor=yellow" alt="python" />
+  </a>
 
-### Run a ReAct agent with InternLM
+### All Thanks To Our Contributors:
 
-NOTE: If you want to run a HuggingFace model, please run `pip install -e .[all]` first.
+<a href="https://github.com/InternLM/lagent/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=InternLM/lagent" />
+</a>
 
-```python
-from lagent.agents import ReAct
-from lagent.actions import ActionExecutor, GoogleSearch, PythonInterpreter
-from lagent.llms import HFTransformer
+## Citation
 
-llm = HFTransformer('internlm/internlm-chat-7b-v1_1')
-search_tool = GoogleSearch(api_key='Your SERPER_API_KEY')
-python_interpreter = PythonInterpreter()
+If you find this project useful in your research, please consider cite:
 
-chatbot = ReAct(
-    llm=llm,
-    action_executor=ActionExecutor(
-        actions=[search_tool, python_interpreter]),
-)
-
-response = chatbot.chat('若$z=-1+\sqrt{3}i$,则$\frac{z}{{z\overline{z}-1}}=\left(\ \ \right)$')
-print(response.response)
->>> $-\\frac{1}{3}+\\frac{{\\sqrt{3}}}{3}i$
+```latex
+@misc{lagent2023,
+    title={{Lagent: InternLM} a lightweight open-source framework that allows users to efficiently build large language model(LLM)-based agents},
+    author={Lagent Developer Team},
+    howpublished = {\url{https://github.com/InternLM/lagent}},
+    year={2023}
+}
 ```
 
 ## License
 
 This project is released under the [Apache 2.0 license](LICENSE).
+
+<p align="right"><a href="#top">🔼 Back to top</a></p>

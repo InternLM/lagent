@@ -1,6 +1,8 @@
-from .autogpt import AutoGPT
-from .base_agent import BaseAgent
-from .react import ReAct
-from .rewoo import ReWOO
+from .agent import Agent, AsyncAgent
+from .react import AsyncReAct, ReAct
+from .stream import AgentForInternLM, AsyncAgentForInternLM, AsyncMathCoder, MathCoder
 
-__all__ = ['BaseAgent', 'ReAct', 'AutoGPT', 'ReWOO']
+__all__ = [
+    'Agent', 'AsyncAgent', 'AgentForInternLM', 'AsyncAgentForInternLM',
+    'MathCoder', 'AsyncMathCoder', 'ReAct', 'AsyncReAct'
+]
