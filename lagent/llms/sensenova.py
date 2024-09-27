@@ -15,12 +15,12 @@ from .base_api import BaseAPILLM
 
 warnings.simplefilter('default')
 
-SENSENOVA_API_BASE = "https://api.sensenova.cn/v1/llm/chat-completions"
+SENSENOVA_API_BASE = 'https://api.sensenova.cn/v1/llm/chat-completions'
 
 sensechat_models = {'SenseChat-5': 131072, 'SenseChat-5-Cantonese': 32768}
 
 
-class SENSENOVA_API(BaseAPILLM):
+class SensenovaAPI(BaseAPILLM):
     """Model wrapper around SenseTime's models.
 
     Args:
@@ -28,7 +28,7 @@ class SENSENOVA_API(BaseAPILLM):
         retry (int): Number of retires if the API call fails. Defaults to 2.
         key (str or List[str]): SenseTime key(s). In particular, when it
             is set to "ENV", the key will be fetched from the environment
-            variable $SENSENOVA_API_KEY. If it's a list, the keys will be 
+            variable $SENSENOVA_API_KEY. If it's a list, the keys will be
             used in round-robin manner. Defaults to 'ENV'.
         meta_template (Dict, optional): The model's meta prompt
             template if needed, in case the requirement of injecting or
@@ -41,26 +41,29 @@ class SENSENOVA_API(BaseAPILLM):
 
     is_api: bool = True
 
-    def __init__(self,
-                 model_type: str = 'gpt-3.5-turbo',
-                 retry: int = 2,
-                 json_mode: bool = False,
-                 key: Union[str, List[str]] = 'ENV',
-                 meta_template: Optional[Dict] = [
-                     dict(role='system', api_role='system'),
-                     dict(role='user', api_role='user'),
-                     dict(role='assistant', api_role='assistant'),
-                     dict(role='environment', api_role='system')
-                 ],
-                 sensenova_api_base: str = SENSENOVA_API_BASE,
-                 proxies: Optional[Dict] = None,
-                 **gen_params):
+    def __init__(
+        self,
+        model_type: str = 'SenseChat-5-Cantonese',
+        retry: int = 2,
+        json_mode: bool = False,
+        key: Union[str, List[str]] = 'ENV',
+        meta_template: Optional[Dict] = [
+            dict(role='system', api_role='system'),
+            dict(role='user', api_role='user'),
+            dict(role='assistant', api_role='assistant'),
+            dict(role='environment', api_role='system'),
+        ],
+        sensenova_api_base: str = SENSENOVA_API_BASE,
+        proxies: Optional[Dict] = None,
+        **gen_params,
+    ):
 
         super().__init__(
             model_type=model_type,
             meta_template=meta_template,
             retry=retry,
-            **gen_params)
+            **gen_params,
+        )
         self.logger = getLogger(__name__)
 
         if isinstance(key, str):
@@ -168,7 +171,8 @@ class SENSENOVA_API(BaseAPILLM):
             model_type=self.model_type,
             messages=messages,
             gen_params=gen_params,
-            json_mode=self.json_mode)
+            json_mode=self.json_mode,
+        )
 
         max_num_retries = 0
         while max_num_retries < self.retry:
@@ -196,7 +200,8 @@ class SENSENOVA_API(BaseAPILLM):
                     self.url,
                     headers=header,
                     data=json.dumps(data),
-                    proxies=self.proxies)
+                    proxies=self.proxies,
+                )
                 response = raw_response.json()
                 return response['choices'][0]['message']['content'].strip()
             except requests.ConnectionError:
@@ -237,18 +242,17 @@ class SENSENOVA_API(BaseAPILLM):
         """
 
         def streaming(raw_response):
-            buffer = ""
             for chunk in raw_response.iter_lines():
                 if chunk:
                     try:
                         decoded_chunk = chunk.decode('utf-8')
                         # print(f"Decoded chunk: {decoded_chunk}")
 
-                        if decoded_chunk == "data:[DONE]":
+                        if decoded_chunk == 'data:[DONE]':
                             # print("Stream ended")
                             break
 
-                        if decoded_chunk.startswith("data:"):
+                        if decoded_chunk.startswith('data:'):
                             json_str = decoded_chunk[5:]
                             chunk_data = json.loads(json_str)
 
@@ -259,13 +263,13 @@ class SENSENOVA_API(BaseAPILLM):
                                     content = choice['delta']
                                     yield content
                         else:
-                            print(f"Unexpected format: {decoded_chunk}")
+                            print(f'Unexpected format: {decoded_chunk}')
 
                     except json.JSONDecodeError as e:
-                        print(f"JSON parsing error: {e}")
+                        print(f'JSON parsing error: {e}')
                     except Exception as e:
                         print(
-                            f"An error occurred while processing the chunk: {e}"
+                            f'An error occurred while processing the chunk: {e}'
                         )
 
         assert isinstance(messages, list)
@@ -274,7 +278,8 @@ class SENSENOVA_API(BaseAPILLM):
             model_type=self.model_type,
             messages=messages,
             gen_params=gen_params,
-            json_mode=self.json_mode)
+            json_mode=self.json_mode,
+        )
 
         max_num_retries = 0
         while max_num_retries < self.retry:
@@ -299,7 +304,8 @@ class SENSENOVA_API(BaseAPILLM):
                     self.url,
                     headers=header,
                     data=json.dumps(data),
-                    proxies=self.proxies)
+                    proxies=self.proxies,
+                )
                 return streaming(raw_response)
             except requests.ConnectionError:
                 print('Got connection error, retrying...')
@@ -394,6 +400,7 @@ class SENSENOVA_API(BaseAPILLM):
             list: token ids
         """
         import tiktoken
+
         self.tiktoken = tiktoken
-        enc = self.tiktoken.encoding_for_model("gpt-4o")
+        enc = self.tiktoken.encoding_for_model('gpt-4o')
         return enc.encode(prompt)
