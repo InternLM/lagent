@@ -12,7 +12,11 @@ except ImportError:
     from typing_extensions import Annotated
 
 from griffe import Docstring
-from griffe.enumerations import DocstringSectionKind
+
+try:
+    from griffe import DocstringSectionKind
+except ImportError:
+    from griffe.enumerations import DocstringSectionKind
 
 from ..schema import ActionReturn, ActionStatusCode
 from .parser import BaseParser, JsonParser, ParseError

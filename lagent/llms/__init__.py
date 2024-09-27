@@ -11,6 +11,7 @@ from .lmdeploy_wrapper import (
 )
 from .meta_template import INTERNLM2_META
 from .openai import GPTAPI, AsyncGPTAPI
+from .sensenova import SENSENOVA_API
 from .vllm_wrapper import AsyncVllmModel, VllmModel
 
 __all__ = [
@@ -18,5 +19,5 @@ __all__ = [
     'GPTAPI', 'LMDeployClient', 'AsyncLMDeployClient', 'LMDeployPipeline',
     'AsyncLMDeployPipeline', 'LMDeployServer', 'AsyncLMDeployServer',
     'HFTransformer', 'HFTransformerCasualLM', 'INTERNLM2_META',
-    'HFTransformerChat', 'VllmModel', 'AsyncVllmModel'
+    'HFTransformerChat', 'VllmModel', 'AsyncVllmModel', 'SENSENOVA_API'
 ]

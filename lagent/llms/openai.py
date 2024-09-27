@@ -55,21 +55,18 @@ class GPTAPI(BaseAPILLM):
                  meta_template: Optional[Dict] = [
                      dict(role='system', api_role='system'),
                      dict(role='user', api_role='user'),
-                     dict(role='assistant', api_role='assistant')
+                     dict(role='assistant', api_role='assistant'),
+                     dict(role='environment', api_role='system')
                  ],
                  api_base: str = OPENAI_API_BASE,
                  proxies: Optional[Dict] = None,
                  **gen_params):
-        if 'top_k' in gen_params:
-            warnings.warn('`top_k` parameter is deprecated in OpenAI APIs.',
-                          DeprecationWarning)
-            gen_params.pop('top_k')
+
         super().__init__(
             model_type=model_type,
             meta_template=meta_template,
             retry=retry,
             **gen_params)
-        self.gen_params.pop('top_k')
         self.logger = getLogger(__name__)
 
         if isinstance(key, str):
@@ -113,7 +110,9 @@ class GPTAPI(BaseAPILLM):
         gen_params = {**self.gen_params, **gen_params}
         with ThreadPoolExecutor(max_workers=20) as executor:
             tasks = [
-                executor.submit(self._chat, messages, **gen_params)
+                executor.submit(self._chat,
+                                self.template_parser._prompt2api(messages),
+                                **gen_params)
                 for messages in (
                     [inputs] if isinstance(inputs[0], dict) else inputs)
             ]

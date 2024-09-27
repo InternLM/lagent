@@ -120,7 +120,7 @@ class APITemplateParser:
         if merged_prompt.get('fallback_role'):
             merged_prompt = self.roles[self.roles[
                 merged_prompt['fallback_role']]]
-        res = {}
+        res = role_prompt.copy()
         res['role'] = merged_prompt['api_role']
         res['content'] = merged_prompt.get('begin', '')
         res['content'] += role_prompt.get('content', '')
