@@ -5,31 +5,26 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor
 from logging import getLogger
 from threading import Lock
-from typing import Dict, List, Optional, Union
+from typing import Dict, Generator, List, Optional, Tuple, Union
 
 import requests
 
-from typing import List, Dict, Optional, Union, Generator, Tuple
 from lagent.schema import ModelStatusCode
 from lagent.utils.util import filter_suffix
-from .base_api import BaseAPIModel
+from .base_api import BaseAPILLM
 
 warnings.simplefilter('default')
 
 SENSENOVA_API_BASE = "https://api.sensenova.cn/v1/llm/chat-completions"
 
-sensechat_models = {
-    'SenseChat-5': 131072,
-    'SenseChat-5-Cantonese': 32768
-}
+sensechat_models = {'SenseChat-5': 131072, 'SenseChat-5-Cantonese': 32768}
 
-class SENSENOVA_API(BaseAPIModel):
+
+class SENSENOVA_API(BaseAPILLM):
     """Model wrapper around SenseTime's models.
 
     Args:
         model_type (str): The name of SenseTime's model.
-        query_per_second (int): The maximum queries allowed per second
-            between two consecutive calls of the API. Defaults to 1.
         retry (int): Number of retires if the API call fails. Defaults to 2.
         key (str or List[str]): SenseTime key(s). In particular, when it
             is set to "ENV", the key will be fetched from the environment
@@ -48,7 +43,6 @@ class SENSENOVA_API(BaseAPIModel):
 
     def __init__(self,
                  model_type: str = 'gpt-3.5-turbo',
-                 query_per_second: int = 1,
                  retry: int = 2,
                  json_mode: bool = False,
                  key: Union[str, List[str]] = 'ENV',
@@ -65,7 +59,6 @@ class SENSENOVA_API(BaseAPIModel):
         super().__init__(
             model_type=model_type,
             meta_template=meta_template,
-            query_per_second=query_per_second,
             retry=retry,
             **gen_params)
         self.logger = getLogger(__name__)
@@ -73,7 +66,9 @@ class SENSENOVA_API(BaseAPIModel):
         if isinstance(key, str):
             # First, apply for SenseNova's ak and sk from SenseTime staff
             # Then, generated SENSENOVA_API_KEY using lagent.utils.gen_key.auto_gen_jwt_token(ak, sk)
-            self.keys = [os.getenv('SENSENOVA_API_KEY') if key == 'ENV' else key]
+            self.keys = [
+                os.getenv('SENSENOVA_API_KEY') if key == 'ENV' else key
+            ]
         else:
             self.keys = key
 
@@ -257,7 +252,8 @@ class SENSENOVA_API(BaseAPIModel):
                             json_str = decoded_chunk[5:]
                             chunk_data = json.loads(json_str)
 
-                            if 'data' in chunk_data and 'choices' in chunk_data['data']:
+                            if 'data' in chunk_data and 'choices' in chunk_data[
+                                    'data']:
                                 choice = chunk_data['data']['choices'][0]
                                 if 'delta' in choice:
                                     content = choice['delta']
@@ -268,7 +264,9 @@ class SENSENOVA_API(BaseAPIModel):
                     except json.JSONDecodeError as e:
                         print(f"JSON parsing error: {e}")
                     except Exception as e:
-                        print(f"An error occurred while processing the chunk: {e}")
+                        print(
+                            f"An error occurred while processing the chunk: {e}"
+                        )
 
         assert isinstance(messages, list)
 
