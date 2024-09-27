@@ -85,7 +85,6 @@ class AgentStatusCode(IntEnum):
     CODING = 6  # start python
     CODE_END = 7  # end python
     CODE_RETURN = 8  # python return
-    ANSWER_ING = 9  # final answer is in streaming
 
 
 class AgentMessage(BaseModel):

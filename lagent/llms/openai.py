@@ -61,12 +61,16 @@ class GPTAPI(BaseAPILLM):
                  api_base: str = OPENAI_API_BASE,
                  proxies: Optional[Dict] = None,
                  **gen_params):
-
+        if 'top_k' in gen_params:
+            warnings.warn('`top_k` parameter is deprecated in OpenAI APIs.',
+                          DeprecationWarning)
+            gen_params.pop('top_k')
         super().__init__(
             model_type=model_type,
             meta_template=meta_template,
             retry=retry,
             **gen_params)
+        self.gen_params.pop('top_k')
         self.logger = getLogger(__name__)
 
         if isinstance(key, str):
