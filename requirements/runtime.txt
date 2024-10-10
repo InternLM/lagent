@@ -7,8 +7,9 @@ func_timeout
 griffe==0.48.0
 json5
 jsonschema
-jupyter
-jupyter_client
+jupyter==1.0.0
+jupyter_core==5.7.2
+jupyter_client==8.6.2
 requests
 stdlib_list==0.10.0
 streamlit
