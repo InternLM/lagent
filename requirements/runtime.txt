@@ -1,4 +1,5 @@
 aioify
+aiohttp
 arxiv
 asyncache
 distro
