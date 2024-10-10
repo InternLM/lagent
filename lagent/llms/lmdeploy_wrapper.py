@@ -33,10 +33,10 @@ class TritonClient(BaseLLM):
             StatusCode.TRITON_SERVER_ERR: ModelStatusCode.SERVER_ERR,
             StatusCode.TRITON_SESSION_CLOSED: ModelStatusCode.SESSION_CLOSED,
             StatusCode.TRITON_STREAM_ING: ModelStatusCode.STREAM_ING,
-            StatusCode.TRITON_SESSION_OUT_OF_LIMIT: ModelStatusCode.
-            SESSION_OUT_OF_LIMIT,
-            StatusCode.TRITON_SESSION_INVALID_ARG: ModelStatusCode.
-            SESSION_INVALID_ARG,
+            StatusCode.TRITON_SESSION_OUT_OF_LIMIT:
+            ModelStatusCode.SESSION_OUT_OF_LIMIT,
+            StatusCode.TRITON_SESSION_INVALID_ARG:
+            ModelStatusCode.SESSION_INVALID_ARG,
             StatusCode.TRITON_SESSION_READY: ModelStatusCode.SESSION_READY
         }
         self.chatbot = Chatbot(
@@ -232,9 +232,12 @@ class LMDeployPipeline(BaseLLM):
                  **kwargs):
 
         super().__init__(path=path, **kwargs)
-        from lmdeploy import pipeline
+        from lmdeploy import TurbomindEngineConfig, pipeline
         self.model = pipeline(
-            model_path=self.path, model_name=model_name, tp=tp, **pipeline_cfg)
+            model_path=self.path,
+            model_name=model_name,
+            backend_config=TurbomindEngineConfig(tp=tp),
+            **pipeline_cfg)
 
     def generate(self,
                  inputs: Union[str, List[str]],
