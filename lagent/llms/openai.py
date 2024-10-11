@@ -221,10 +221,11 @@ class GPTAPI(BaseAPILLM):
                 response = raw_response.json()
                 return response['choices'][0]['message']['content'].strip()
             except requests.ConnectionError:
-                print('Got connection error, retrying...')
+                self.logger.error('Got connection error, retrying...')
                 continue
             except requests.JSONDecodeError:
-                print('JsonDecode error, got', str(raw_response.content))
+                self.logger.error('JsonDecode error, got ' +
+                                  str(raw_response.content))
                 continue
             except KeyError:
                 if 'error' in response:
@@ -236,8 +237,8 @@ class GPTAPI(BaseAPILLM):
                         self.logger.warn(f'insufficient_quota key: {key}')
                         continue
 
-                    print('Find error message in response: ',
-                          str(response['error']))
+                    self.logger.error('Find error message in response: ' +
+                                      str(response['error']))
             except Exception as error:
                 print(str(error))
             max_num_retries += 1
@@ -333,10 +334,11 @@ class GPTAPI(BaseAPILLM):
                     proxies=self.proxies)
                 return streaming(raw_response)
             except requests.ConnectionError:
-                print('Got connection error, retrying...')
+                self.logger.error('Got connection error, retrying...')
                 continue
             except requests.JSONDecodeError:
-                print('JsonDecode error, got', str(raw_response.content))
+                self.logger.error('JsonDecode error, got ' +
+                                  str(raw_response.content))
                 continue
             except KeyError:
                 if 'error' in response:
@@ -348,8 +350,8 @@ class GPTAPI(BaseAPILLM):
                         self.logger.warn(f'insufficient_quota key: {key}')
                         continue
 
-                    print('Find error message in response: ',
-                          str(response['error']))
+                    self.logger.error('Find error message in response: ' +
+                                      str(response['error']))
             except Exception as error:
                 print(str(error))
             max_num_retries += 1
@@ -659,14 +661,14 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                         return response['choices'][0]['message'][
                             'content'].strip()
             except aiohttp.ClientConnectionError:
-                print('Got connection error, retrying...')
+                self.logger.error('Got connection error, retrying...')
                 continue
             except aiohttp.ClientResponseError as e:
-                print('Response error, got', str(e))
+                self.logger.error('Response error, got ' + str(e))
                 continue
             except json.JSONDecodeError:
-                print('JsonDecode error, got', await
-                      resp.text(errors='replace'))
+                self.logger.error('JsonDecode error, got ' +
+                                  (await resp.text(errors='replace')))
                 continue
             except KeyError:
                 if 'error' in response:
@@ -678,8 +680,8 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                         self.logger.warn(f'insufficient_quota key: {key}')
                         continue
 
-                    print('Find error message in response: ',
-                          str(response['error']))
+                    self.logger.error('Find error message in response: ' +
+                                      str(response['error']))
             except Exception as error:
                 print(str(error))
             max_num_retries += 1
@@ -729,7 +731,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                                 return
                             yield choice['delta'].get('content', '')
                     except Exception as exc:
-                        print(
+                        self.logger.error(
                             f'response {decoded} lead to exception of {str(exc)}'
                         )
                         raise
@@ -779,10 +781,10 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                             yield msg
                         return
             except aiohttp.ClientConnectionError:
-                print('Got connection error, retrying...')
+                self.logger.error('Got connection error, retrying...')
                 continue
             except aiohttp.ClientResponseError as e:
-                print('Response error, got', str(e))
+                self.logger.error('Response error, got ' + str(e))
                 continue
             except KeyError:
                 if 'error' in response:
@@ -794,8 +796,8 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                         self.logger.warn(f'insufficient_quota key: {key}')
                         continue
 
-                    print('Find error message in response: ',
-                          str(response['error']))
+                    self.logger.error('Find error message in response: ' +
+                                      str(response['error']))
             except Exception as error:
                 print(str(error))
             max_num_retries += 1
