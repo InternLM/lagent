@@ -1,6 +1,6 @@
 # How to Use Lagent
 
-Lagent v1.0 is inspired by the design philosophy of PyTorch. This is a simple usage tutorial.
+Lagent v1.0 is inspired by the design philosophy of PyTorch. We expect that the analogy of neural network layers will make the workflow clearer and more intuitive, so users only need to focus on building layers and defining message passing between them. This is a simple usage tutorial.
 
 ## Core Ideas
 
@@ -37,19 +37,31 @@ content='急' sender='Agent' formatted=None extra_info=None type=None receiver=N
 
 ### Memory as State
 
-Both input and output messages will be added to the memory of `Agent` in each forward pass.
+Both input and output messages will be added to the memory of `Agent` in each forward pass. This is performed in `__call__` rather than `forward`. See the following pseudo code
+
+```python
+    def __call__(self, *message):
+        message = pre_hooks(message)
+        add_memory(message)
+        message = self.forward(*message)
+        add_memory(message)
+        message = post_hooks(message)
+        return message
+```
+
+Inspect the memory in two ways
 
 ```python
 memory: List[AgentMessage] = agent.memory.get_memory()
 print(memory)
-print('-' * 80)
+print('-' * 120)
 dumped_memory: Dict[str, List[dict]] = agent.state_dict()
 print(dumped_memory['memory'])
 ```
 
 ```
 [AgentMessage(content='今天天气情况', sender='user', formatted=None, extra_info=None, type=None, receiver=None, stream_state=<AgentStatusCode.END: 0>), AgentMessage(content='急', sender='Agent', formatted=None, extra_info=None, type=None, receiver=None, stream_state=<AgentStatusCode.END: 0>)]
---------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------
 [{'content': '今天天气情况', 'sender': 'user', 'formatted': None, 'extra_info': None, 'type': None, 'receiver': None, 'stream_state': <AgentStatusCode.END: 0>}, {'content': '急', 'sender': 'Agent', 'formatted': None, 'extra_info': None, 'type': None, 'receiver': None, 'stream_state': <AgentStatusCode.END: 0>}]
 ```
 
@@ -130,7 +142,7 @@ content='【多云转晴，夜间有轻微降温】' sender='Agent' formatted=No
 
 ### Flexible Response Formatting
 
-In `AgentMessage`, `formatted` is reserved to store information parsed by `output_format` after forward pass.
+In `AgentMessage`, `formatted` is reserved to store information parsed by `output_format` from the model output.
 
 ```python
     def forward(self, *message: AgentMessage, session_id=0, **kwargs) -> Union[AgentMessage, str]:
@@ -253,13 +265,14 @@ from lagent.agents.aggregator import InternLMToolAggregator
 
 class Coder(Agent):
     def __init__(self, model_path, system_prompt, max_turn=3):
+        super().__init__()
         llm = VllmModel(
             path=model_path,
             meta_template=INTERNLM2_META,
             tp=1,
             top_k=1,
             temperature=1.0,
-            stop_words=['<|im_end|>'],
+            stop_words=['\n```\n', '<|im_end|>'],
             max_new_tokens=1024,
         )
         self.agent = Agent(
@@ -274,7 +287,6 @@ class Coder(Agent):
         )
         self.executor = ActionExecutor([IPythonInteractive()], hooks=[CodeProcessor()])
         self.max_turn = max_turn
-        super().__init__()
     
     def forward(self, message: AgentMessage, session_id=0) -> AgentMessage:
         for _ in range(self.max_turn):
@@ -285,11 +297,20 @@ class Coder(Agent):
         return message
 
 coder = Coder('Qwen/Qwen2-7B-Instruct', 'Solve the problem step by step with assistance of Python code')
-query = AgentMessage(sender='user', content='Let $m$ and $n$ satisfy $mn=7$ and $m+n=8$. What is $|m-n|$?')
+query = AgentMessage(
+    sender='user',
+    content='One line is defined by\n\\[\\begin{pmatrix} 3 \\\\ -10 \\\\ 1 \\end{pmatrix} '
+    '+ t \\begin{pmatrix} 2 \\\\ -9 \\\\ -2 \\end{pmatrix}.\\]Another line is '
+    'defined by\n\\[\\begin{pmatrix} -5 \\\\ -3 \\\\ 6 \\end{pmatrix} + u '
+    '\\begin{pmatrix} 4 \\\\ -18 \\\\ -4 \\end{pmatrix}.\\]These two lines are '
+    'parallel.  Find the distance between these two lines.'
+)
 ans = coder(query)
 print(ans.content)
-print('-' * 80)
-print(coder.state_dict()['agent.memory'])
+print('-' * 120)
+for msg in coder.state_dict()['agent.memory']:
+    print('*' * 80)
+    print(f'{msg["sender"]}:\n\n{msg["content"]}')
 ```
 
 ### Multiple Agents
@@ -312,6 +333,7 @@ class PrefixedMessageHook(Hook):
 
 class Blogger(Agent):
     def __init__(self, model_path, writer_prompt, critic_prompt, critic_prefix='', max_turn=3):
+        super().__init__()
         llm = VllmModel(
             path=model_path,
             meta_template=INTERNLM2_META,
@@ -326,7 +348,6 @@ class Blogger(Agent):
             llm, critic_prompt, name='critic', hooks=[PrefixedMessageHook(critic_prefix, ['writer'])]
         )
         self.max_turn = max_turn
-        super().__init__()
     
     def forward(self, message: AgentMessage, session_id=0) -> AgentMessage:
         for _ in range(self.max_turn):
@@ -349,12 +370,12 @@ user_msg = AgentMessage(
 )
 bot_msg = blogger(user_msg)
 print(bot_msg.content)
-print('-' * 80)
+print('-' * 120)
 for msg in blogger.state_dict()['writer.memory']:
-    print('*' * 120)
+    print('*' * 80)
     print(f'{msg["sender"]}:\n\n{msg["content"]}')
-print('-' * 80)
+print('-' * 120)
 for msg in blogger.state_dict()['critic.memory']:
-    print('*' * 120)
+    print('*' * 80)
     print(f'{msg["sender"]}:\n\n{msg["content"]}')
 ```
