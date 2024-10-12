@@ -29,13 +29,15 @@ class InternLMToolAggregator(DefaultAggregator):
             _message.extend(
                 self.aggregate_system_intruction(system_instruction))
         tool_instruction = parser.format_instruction()
-        if isinstance(tool_instruction, str):
-            tool_instruction = dict(role='system', content=tool_instruction)
-            if parser.tool_type:
-                tool_instruction['name'] = parser.tool_type
-        if isinstance(tool_instruction, dict):
-            tool_instruction = [tool_instruction]
-        _message.extend(tool_instruction)
+        if tool_instruction:
+            if isinstance(tool_instruction, str):
+                tool_instruction = dict(
+                    role='system', content=tool_instruction)
+                if parser.tool_type:
+                    tool_instruction['name'] = parser.tool_type
+            if isinstance(tool_instruction, dict):
+                tool_instruction = [tool_instruction]
+            _message.extend(tool_instruction)
 
         for shot in self.few_shot:
             i = 0

@@ -299,11 +299,8 @@ class Coder(Agent):
 coder = Coder('Qwen/Qwen2-7B-Instruct', 'Solve the problem step by step with assistance of Python code')
 query = AgentMessage(
     sender='user',
-    content='One line is defined by\n\\[\\begin{pmatrix} 3 \\\\ -10 \\\\ 1 \\end{pmatrix} '
-    '+ t \\begin{pmatrix} 2 \\\\ -9 \\\\ -2 \\end{pmatrix}.\\]Another line is '
-    'defined by\n\\[\\begin{pmatrix} -5 \\\\ -3 \\\\ 6 \\end{pmatrix} + u '
-    '\\begin{pmatrix} 4 \\\\ -18 \\\\ -4 \\end{pmatrix}.\\]These two lines are '
-    'parallel.  Find the distance between these two lines.'
+    content='Find the projection of $\\mathbf{a}$ onto $\\mathbf{b} = '
+    '\\begin{pmatrix} 1 \\\\ -3 \\end{pmatrix}$ if $\\mathbf{a} \\cdot \\mathbf{b} = 2.$'
 )
 ans = coder(query)
 print(ans.content)
