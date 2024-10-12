@@ -240,7 +240,7 @@ class GPTAPI(BaseAPILLM):
                     self.logger.error('Find error message in response: ' +
                                       str(response['error']))
             except Exception as error:
-                print(str(error))
+                self.logger.error(str(error))
             max_num_retries += 1
 
         raise RuntimeError('Calling OpenAI failed after retrying for '
@@ -353,7 +353,7 @@ class GPTAPI(BaseAPILLM):
                     self.logger.error('Find error message in response: ' +
                                       str(response['error']))
             except Exception as error:
-                print(str(error))
+                self.logger.error(str(error))
             max_num_retries += 1
 
         raise RuntimeError('Calling OpenAI failed after retrying for '
@@ -683,7 +683,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                     self.logger.error('Find error message in response: ' +
                                       str(response['error']))
             except Exception as error:
-                print(str(error))
+                self.logger.error(str(error))
             max_num_retries += 1
 
         raise RuntimeError('Calling OpenAI failed after retrying for '
@@ -799,7 +799,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                     self.logger.error('Find error message in response: ' +
                                       str(response['error']))
             except Exception as error:
-                print(str(error))
+                self.logger.error(str(error))
             max_num_retries += 1
 
         raise RuntimeError('Calling OpenAI failed after retrying for '
