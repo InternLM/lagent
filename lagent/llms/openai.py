@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import time
+import copy
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from logging import getLogger
@@ -60,6 +61,7 @@ class GPTAPI(BaseAPILLM):
                  ],
                  api_base: str = OPENAI_API_BASE,
                  proxies: Optional[Dict] = None,
+                 extra_header: Optional[Dict] = None,
                  **gen_params):
         if 'top_k' in gen_params:
             warnings.warn('`top_k` parameter is deprecated in OpenAI APIs.',
@@ -72,6 +74,12 @@ class GPTAPI(BaseAPILLM):
             **gen_params)
         self.gen_params.pop('top_k')
         self.logger = getLogger(__name__)
+        self.default_header = {
+            'content-type': 'application/json',
+        }
+        if extra_header:
+            self.default_header.update(extra_header)
+            
 
         if isinstance(key, str):
             self.keys = [os.getenv('OPENAI_API_KEY') if key == 'ENV' else key]
@@ -386,9 +394,7 @@ class GPTAPI(BaseAPILLM):
             return '', ''
 
         # Initialize the header
-        header = {
-            'content-type': 'application/json',
-        }
+        header = copy.deepcopy(self.default_header)
 
         # Common parameters processing
         gen_params['max_tokens'] = max_tokens
