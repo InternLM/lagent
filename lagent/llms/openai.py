@@ -467,7 +467,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
     """Model wrapper around OpenAI's models.
 
     Args:
-        model (str): The name of OpenAI's model.
+        model_type (str): The name of OpenAI's model.
         retry (int): Number of retires if the API call fails. Defaults to 2.
         key (str or List[str]): OpenAI key(s). In particular, when it
             is set to "ENV", the key will be fetched from the environment

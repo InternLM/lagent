@@ -1,6 +1,6 @@
 # How to Use Lagent
 
-Lagent v1.0 is inspired by the design philosophy of PyTorch. We expect that the analogy of neural network layers will make the workflow clearer and more intuitive, so users only need to focus on building layers and defining message passing between them. This is a simple usage tutorial.
+Lagent v1.0 is inspired by the design philosophy of PyTorch. We expect that the analogy of neural network layers will make the workflow clearer and more intuitive, so users only need to focus on creating layers and defining message passing between them in a Pythonic way. This is a simple tutorial to get you quickly started with building multi-agent applications.
 
 ## Core Ideas
 
@@ -12,7 +12,7 @@ Agents use `AgentMessage` for communication.
 from typing import Dict, List
 from lagent.agents import Agent
 from lagent.schema import AgentMessage
-from lagent.llms import VllModel, INTERNLM2_META
+from lagent.llms import VllmModel, INTERNLM2_META
 
 llm = VllmModel(
     path='Qwen/Qwen2-7B-Instruct',
@@ -84,6 +84,7 @@ agent.memory.reset()
             self.output_format,
             self.template,
         )
+        llm_response = self.llm.chat(formatted_messages, **kwargs)
         ...
 ```
 
@@ -249,12 +250,24 @@ content='3969.0' sender='ActionExecutor' formatted=None extra_info=None type=Non
 
 **For convenience, Lagent provides `InternLMActionProcessor` which is adapted to messages formatted by `ToolParser` as mentioned above.**
 
+### Dual Interfaces
+
+Lagent adopts dual interface design, where almost every component(LLMs, actions, action executors...) has the corresponding asynchronous variant by prefixing its identifier with 'Async'. It is recommended to use synchronous agents for debugging and asynchronous ones for large-scale inference to make the most of idle CPU and GPU resources.
+
+However, make sure the internal consistency of agents, i.e. asynchronous agents should be equipped with asynchronous LLMs and asynchronous action executors that drive asynchronous tools.
+
+```python
+from lagent.llms import VllmModel, AsyncVllmModel, LMDeployPipeline, AsyncLMDeployPipeline
+from lagent.actions import ActionExecutor, AsyncActionExecutor, WebBrowser, AsyncWebBrowser
+from lagent.agents import Agent, AsyncAgent, AgentForInternLM, AsyncAgentForInternLM
+```
+
 ---
 
 ## Practice
 
 - **Try to implement `forward` instead of `__call__` of subclasses unless neccesary.**
-- **Always include the `session_id` argument explicitly, which is designed for isolation of memory and LLM requests in concurrency.**
+- **Always include the `session_id` argument explicitly, which is designed for isolation of memory, LLM requests and tool invocation(e.g. maintain multiple independent IPython environments) in concurrency.**
 
 ### Single Agent
 
@@ -312,9 +325,15 @@ for msg in coder.state_dict()['agent.memory']:
 
 ### Multiple Agents
 
-Blogging agents that improve writing quality by self-refinement
+Asynchronous blogging agents that improve writing quality by self-refinement ([original AutoGen example](https://microsoft.github.io/autogen/0.2/docs/topics/prompting-and-reasoning/reflection/))
 
 ```python
+import asyncio
+import os
+from lagent.llms import AsyncGPTAPI
+from lagent.agents import AsyncAgent
+os.environ['OPENAI_API_KEY'] = 'YOUR_API_KEY'
+
 class PrefixedMessageHook(Hook):
     def __init__(self, prefix: str, senders: list = None):
         self.prefix = prefix
@@ -328,51 +347,142 @@ class PrefixedMessageHook(Hook):
                 messages[i] = message
         return messages
 
-class Blogger(Agent):
+class AsyncBlogger(AsyncAgent):
     def __init__(self, model_path, writer_prompt, critic_prompt, critic_prefix='', max_turn=3):
         super().__init__()
-        llm = VllmModel(
-            path=model_path,
-            meta_template=INTERNLM2_META,
-            tp=1,
-            top_k=1,
-            temperature=1.0,
-            stop_words=['<|im_end|>'],
-            max_new_tokens=1024,
-        )
-        self.writer = Agent(llm, writer_prompt, name='writer')
-        self.critic = Agent(
+        llm = AsyncGPTAPI(model_type=model_path, retry=5, max_new_tokens=2048)
+        self.writer = AsyncAgent(llm, writer_prompt, name='writer')
+        self.critic = AsyncAgent(
             llm, critic_prompt, name='critic', hooks=[PrefixedMessageHook(critic_prefix, ['writer'])]
         )
         self.max_turn = max_turn
     
-    def forward(self, message: AgentMessage, session_id=0) -> AgentMessage:
+    async def forward(self, message: AgentMessage, session_id=0) -> AgentMessage:
         for _ in range(self.max_turn):
-            message = self.writer(message, session_id=session_id)
-            message = self.critic(message, session_id=session_id)
-        return self.writer(message, session_id=session_id)
+            message = await self.writer(message, session_id=session_id)
+            message = await self.critic(message, session_id=session_id)
+        return await self.writer(message, session_id=session_id)
 
-blogger = Blogger(
-    'Qwen/Qwen2-7B-Instruct',
-    writer_prompt="You are an writing assistant tasked to write engaging blogpost. You try generate the best blogpost possible for the user's request. "
-    "If the user provides critique, respond with a revised version of your previous attempts",
+blogger = AsyncBlogger(
+    'gpt-4o-2024-05-13',
+    writer_prompt="You are an writing assistant tasked to write engaging blogpost. You try to generate the best blogpost possible for the user's request. "
+    "If the user provides critique, then respond with a revised version of your previous attempts",
     critic_prompt="Generate critique and recommendations on the writing. Provide detailed recommendations, including requests for length, depth, style, etc..",
     critic_prefix='Reflect and provide critique on the following writing. \n\n',
 )
+user_prompt = (
+    "Write an engaging blogpost on the recent updates in {topic}. "
+    "The blogpost should be engaging and understandable for general audience. "
+    "Should have more than 3 paragraphes but no longer than 1000 words.")
+bot_msgs = asyncio.get_event_loop().run_until_complete(
+    asyncio.gather(
+        *[
+            blogger(AgentMessage(sender='user', content=user_prompt.format(topic=topic)), session_id=i)
+            for i, topic in enumerate(['AI', 'Biotechnology', 'New Energy', 'Video Games', 'Pop Music'])
+        ]
+    )
+)
+print(bot_msgs[0].content)
+print('-' * 120)
+for msg in blogger.state_dict(session_id=0)['writer.memory']:
+    print('*' * 80)
+    print(f'{msg["sender"]}:\n\n{msg["content"]}')
+print('-' * 120)
+for msg in blogger.state_dict(session_id=0)['critic.memory']:
+    print('*' * 80)
+    print(f'{msg["sender"]}:\n\n{msg["content"]}')
+```
+
+A multi-agent workflow that performs information retrieval, data collection and chart plotting ([original LangGraph example](https://vijaykumarkartha.medium.com/multiple-ai-agents-creating-multi-agent-workflows-using-langgraph-and-langchain-0587406ec4e6))
+
+<div align="center">
+    <img src="https://miro.medium.com/v2/resize:fit:1400/format:webp/1*ffzadZCKXJT7n4JaRVFvcQ.jpeg" width="850" />
+</div>
+
+```python
+import json
+from lagent.actions import IPythonInterpreter, WebBrowser, ActionExecutor
+from lagent.agents.stream import get_plugin_prompt
+from lagent.llms import GPTAPI
+from lagent.hooks import InternLMActionProcessor
+
+TOOL_TEMPLATE = (
+    "You are a helpful AI assistant, collaborating with other assistants."
+    " Use the provided tools to progress towards answering the question."
+    " If you are unable to fully answer, that's OK, another assistant with different tools "
+    " will help where you left off. Execute what you can to make progress."
+    " If you or any of the other assistants have the final answer or deliverable,"
+    " prefix your response with {finish_pattern} so the team knows to stop."
+    " You have access to the following tools:\n{tool_description}.\\\\n**{system_prompt}**"
+)
+
+class DataVisualizer(Agent):
+    def __init__(self, model_path, research_prompt, chart_prompt, finish_pattern="Final Answer", max_turn=10):
+        super().__init__()
+        llm = GPTAPI(model_path, key='YOUR_OPENAI_API_KEY', retry=5, max_new_tokens=1024, stop_words=["```\n"])
+        interpreter, browser = IPythonInterpreter(), WebBrowser("BingSearch", api_key="YOUR_BING_API_KEY")
+        self.researcher = Agent(
+            llm,
+            TOOL_TEMPLATE.format(
+                finish_pattern=finish_pattern,
+                tool_description=get_plugin_prompt(browser) + 
+                '\nInvoke a tool in this format: ```json\n{"name": {{tool name}}, "parameters": {{keyword arguments}}}\n```\n',
+                system_prompt=research_prompt,
+            ),
+            output_format=ToolParser(
+                "browser",
+                begin="```json\n",
+                end="\n```\n",
+                validate=lambda x: json.loads(x.rstrip('\n`')),
+            ),
+            aggregator=InternLMToolAggregator(),
+            name="researcher",
+        )
+        self.charter = Agent(
+            llm,
+            TOOL_TEMPLATE.format(
+                finish_pattern=finish_pattern,
+                tool_description=interpreter.name + '\nInvoke a tool in this format: ```python\n{{code}}\n```\n',
+                system_prompt=chart_prompt,
+            ),
+            output_format=ToolParser(
+                "interpreter",
+                begin="```python\n",
+                end="\n```\n",
+                validate=lambda x: x.rstrip('\n`'),
+            ),
+            aggregator=InternLMToolAggregator(),
+            name="charter",
+        )
+        self.executor = ActionExecutor([interpreter, browser], hooks=[InternLMActionProcessor()])
+        self.finish_pattern = finish_pattern
+        self.max_turn = max_turn
+
+    def forward(self, message, session_id=0):
+        for _ in range(self.max_turn):
+            message = self.researcher(message, session_id=session_id, stop_words=["```\n", "```python"]) # override llm stop words
+            while message.formatted["tool_type"]:
+                message = self.executor(message, session_id=session_id)
+                message = self.researcher(message, session_id=session_id, stop_words=["```\n", "```python"])
+            if self.finish_pattern in message.content:
+                return message
+            message = self.charter(message)
+            while message.formatted["tool_type"]:
+                message = self.executor(message, session_id=session_id)
+                message = self.charter(message, session_id=session_id)
+            if self.finish_pattern in message.content:
+                return message
+        return message
+
+visualizer = DataVisualizer(
+    "gpt-4o-2024-05-13",
+    research_prompt="You should provide accurate data for the chart generator to use.",
+    chart_prompt="Any charts you display will be visible by the user.",
+)
 user_msg = AgentMessage(
     sender='user',
-    content="Write an engaging blogpost on the recent updates in AI. "
-    "The blogpost should be engaging and understandable for general audience. "
-    "Should have more than 3 paragraphes but no longer than 500 words."
-)
-bot_msg = blogger(user_msg)
+    content="Fetch the China's GDP over the past 5 years, then draw a line graph of it. Once you code it up, finish.")
+bot_msg = visualizer(user_msg)
 print(bot_msg.content)
-print('-' * 120)
-for msg in blogger.state_dict()['writer.memory']:
-    print('*' * 80)
-    print(f'{msg["sender"]}:\n\n{msg["content"]}')
-print('-' * 120)
-for msg in blogger.state_dict()['critic.memory']:
-    print('*' * 80)
-    print(f'{msg["sender"]}:\n\n{msg["content"]}')
+json.dump(visualizer.state_dict(), open('visualizer.json', 'w'), ensure_ascii=False, indent=4)
 ```
