@@ -23,16 +23,13 @@ import site
 
 
 def load_official_openai():
-    # 获取所有 site-packages 目录
     site_packages = site.getsitepackages()
 
     for sp in site_packages:
         openai_init = os.path.join(sp, 'openai', '__init__.py')
         if os.path.exists(openai_init):
-            # 创建一个新的模块规范，使用官方的模块名 'openai'
             spec = importlib.util.spec_from_file_location("official_openai", openai_init)
             official_openai = importlib.util.module_from_spec(spec)
-            # 临时添加到 sys.modules
             sys.modules["official_openai"] = official_openai
             try:
                 spec.loader.exec_module(official_openai)
@@ -41,7 +38,7 @@ def load_official_openai():
                 print(f"Error loading official openai: {e}")
                 del sys.modules["official_openai"]
                 raise
-    raise ImportError("官方的 openai 库未找到。")
+    raise ImportError("Official openai is not found.")
 
 
 warnings.simplefilter('default')
@@ -50,8 +47,7 @@ Deepseek_API_BASE = "https://api.deepseek.com"
 
 
 class DeepseekAPI(BaseAPILLM):
-    """Model wrapper around OpenAI's models.
-
+    """
     Args:
         model_type (str): The name of OpenAI's model.
         retry (int): Number of retires if the API call fails. Defaults to 2.
@@ -112,10 +108,6 @@ class DeepseekAPI(BaseAPILLM):
         self.invalid_keys = set()
 
         self.key_ctr = 0
-        # if isinstance(org, str):
-        #     self.orgs = [org]
-        # else:
-        #     self.orgs = org
         self.org_ctr = 0
         self.url = api_base
         self.model_type = model_type
@@ -179,14 +171,6 @@ class DeepseekAPI(BaseAPILLM):
 
                 key = self.keys[self.key_ctr]
                 client = official_openai.OpenAI(api_key=key, base_url="https://api.deepseek.com")
-                # header['Authorization'] = f'Bearer {key}'
-
-            # if self.orgs:
-            #     with Lock():
-            #         self.org_ctr += 1
-            #         if self.org_ctr == len(self.orgs):
-            #             self.org_ctr = 0
-            #     header['OpenAI-Organization'] = self.orgs[self.org_ctr]
                 response = dict()
                 try:
                     response = client.chat.completions.create(
