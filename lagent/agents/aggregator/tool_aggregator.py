@@ -12,10 +12,12 @@ class InternLMToolAggregator(DefaultAggregator):
                  environment_role='environment',
                  environment_begin='',
                  environment_end='',
+                 user_names: Optional[List[str]] = None,
                  few_shot: Optional[List[List[dict]]] = None):
         self.environment_role = environment_role
         self.environment_begin = environment_begin
         self.environment_end = environment_end
+        self.user_names = user_names or ['user']
         self.few_shot = few_shot or []
 
     def aggregate(self,
@@ -92,12 +94,12 @@ class InternLMToolAggregator(DefaultAggregator):
                 else:
                     _message.append(
                         dict(role='assistant', content=str(message.content)))
-            elif message.sender == 'user':
+            elif message.sender in self.user_names:
                 _message.append(dict(role='user', content=message.content))
             else:
                 msg = dict(
                     role=self.environment_role,
-                    content=self.environment_begin + message.content +
+                    content=self.environment_begin + str(message.content) +
                     self.environment_end)
                 if tool_type:
                     msg['name'] = tool_type
