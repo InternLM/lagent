@@ -16,6 +16,15 @@ from lagent.rag.settings import DEFAULT_LLM_MAX_TOKEN
 
 
 def get_levels_from_commu(communities: List[Community]):
+    """
+        Extracts levels from a list of communities.
+
+        Args:
+            communities (List[Community]): A list of Community instances.
+
+        Returns:
+            List[int]: A list of unique levels present in the communities.
+    """
     levels = []
     for community in communities:
         if community.level not in levels:
@@ -28,16 +37,21 @@ def select_sub_communities(community_id: str, level: int, community_hierarchy: D
                            sub_level_communities_context, sub_level_reports) -> List[
     Dict[str, CommunityContext | CommunityReport]]:
     """
-    根据给出的community_id以及community_hierarchy，得到对应的子社区并将其contexts与reports信息聚合，以字典的形式返回
-    Args:
-        level:
-        community_id:
-        community_hierarchy:
-        sub_level_communities_context:
-        sub_level_reports:
+        Retrieves sub-communities based on the given community ID and hierarchy, aggregating their contexts and reports.
 
-    Returns:
+        Args:
+            community_id (str): The ID of the parent community.
+            level (int): The current level in the community hierarchy.
+            community_hierarchy (Dict[int, Dict[str, List[str]]]): Hierarchical mapping of communities.
+            sub_level_communities_context (List[CommunityContext]): Contexts of sublevel communities.
+            sub_level_reports (List[CommunityReport]): Reports of sublevel communities.
 
+        Returns:
+            List[Dict[str, Union[CommunityContext, CommunityReport]]]:
+                A list of dictionaries containing the context and optional report of each sub-community.
+
+        Raises:
+            ValueError: If the specified community ID does not exist in the given level.
     """
     communities_by_level = community_hierarchy[level]
     if community_id not in communities_by_level:
@@ -55,7 +69,7 @@ def select_sub_communities(community_id: str, level: int, community_hierarchy: D
     sub_community_ids = communities_by_level[community_id]
     for sub_community_id in sub_community_ids:
         item = {}
-        # 子社区中可以不存在reports，但是必须含有context
+        # Sub-communities may not have reports but must have context
         if sub_community_id not in id_map_context:
             raise ValueError(f"{sub_community_id} should exist in the given contexts")
         item['context'] = id_map_context[sub_community_id]
@@ -70,20 +84,21 @@ def merge_info(level: int, communities: List[Community],
                level_nodes: List[Node], level_relas: List[Relationship], level_claims: Optional = None) -> List[
     CommunityContext]:
     """
-    聚合给定level中每个community的信息，包括nodes、edges，并以context类的形式返回
-    Args:
-        level: 当前处理的level层次
-        communities: 输入communities信息
-        level_nodes:
-        level_relas:
-        level_claims:
+        Aggregates information for each community at a given level, including nodes and relationships.
 
-    Returns:List[CommunityContext]
+        Args:
+            level (int): The current level being processed.
+            communities (List[Community]): A list of Community instances.
+            level_nodes (List[Node]): A list of Node instances at the current level.
+            level_relas (List[Relationship]): A list of Relationship instances at the current level.
+            level_claims (Optional[List[Any]]): A list of claims associated with the communities, if any.
 
+        Returns:
+            List[CommunityContext]: A list of CommunityContext instances containing aggregated information.
+
+        Raises:
+            ValueError: If a community does not belong to the specified level.
     """
-    # merge得到的聚合消息需要有node.degree，node.name，node_details，edge_details,claim
-
-    # 目前可以暂时使用字典形式，merged_CommunityContext: Dict[community_id, Dict[info_name, info]]
     merged_community_context: List[CommunityContext] = []
     for community in communities:
         if community.level != level:
@@ -91,8 +106,6 @@ def merge_info(level: int, communities: List[Community],
         # if community.community_id not in merged_CommunityContext:
         #     merged_CommunityContext[community.community_id] = {}
 
-        # 对于每个community，找到其内部的节点和边，并将其信息添加到context中。
-        # 其中节点需要添加degree，description，name（id？），边需要添加source，target，description，degree，weight？
         community_nodes = filter_nodes_by_commu(level_nodes, community.community_id)
         community_relas = filter_relas_by_nodes(community_nodes, level_relas)
         community_claims = None
@@ -106,7 +119,6 @@ def merge_info(level: int, communities: List[Community],
                 'description': node.description,
                 'degree': node.degree
             }
-        # merged_community_context[community.community_id]['nodes_info'] = nodes_info
 
         relas_info = {}
         for rela in community_relas:
@@ -116,8 +128,6 @@ def merge_info(level: int, communities: List[Community],
                 'description': rela.description if rela.description is not None else '',
                 'degree': rela.degree
             }
-        # merged_community_context[community.community_id]['relas_info'] = relas_info
-
         if community_claims is not None:
             pass
 
@@ -137,15 +147,16 @@ def get_context_str(nodes: Optional[List[Dict]] = None, relas: Optional[List[Dic
                     claims: Optional[List[Dict]] = None,
                     sub_community_reports: Optional[List[CommunityReport]] = None) -> str:
     """
-    根据community包含的信息获得信息string
-    Args:
-        nodes:
-        relas:
-        claims:
-        sub_community_reports:
+        Constructs a context string based on the provided nodes, relationships, claims, and sub-community reports.
 
-    Returns:
+        Args:
+            nodes (Optional[List[Dict[str, Any]]]): A list of node dictionaries.
+            relas (Optional[List[Dict[str, Any]]]): A list of relationship dictionaries.
+            claims (Optional[List[Dict[str, Any]]]): A list of claim dictionaries.
+            sub_community_reports (Optional[List[CommunityReport]]): A list of sub-community reports.
 
+        Returns:
+            str: The constructed context string.
     """
     context_str = []
 
@@ -176,6 +187,14 @@ def get_context_str(nodes: Optional[List[Dict]] = None, relas: Optional[List[Dic
 
 @register_processor
 class CommunityReportsExtractor(BaseProcessor):
+    """
+        Processor that extracts and generates reports for communities within a multi-layer graph.
+
+        The CommunityReportsExtractor processes a MultiLayerGraph to generate structured reports for each community
+        based on their context. It handles different levels of communities, aggregates relevant information, and
+        interacts with a language model to produce comprehensive reports.
+    """
+
     name = 'CommunityReportsExtractor'
 
     def __init__(self, llm, max_tokens: Optional[int] = None, tokenizer: Optional = None, prompt: Optional[str] = None):
@@ -188,18 +207,8 @@ class CommunityReportsExtractor(BaseProcessor):
         self.prompt = prompt
 
     def run(self, graph: MultiLayerGraph) -> MultiLayerGraph:
-        """
-        根据不同层次的communities上下文生成report
-        Args:
-            graph:
-
-        Returns:
-
-        """
 
         tokenizer = self.tokenizer
-        # 首先获得不同level的nodes以及edges
-        # 目前暂定在final_graph之后，会得到不同level对应的nodes（如果不加对每一个level的其他处理的化，实际上都是同样的nodes）
 
         community_layer = graph.layers['community_layer']
         dict_communities = community_layer.get_nodes()
@@ -232,10 +241,8 @@ class CommunityReportsExtractor(BaseProcessor):
             # TODO
             level_claims = None
 
-            # 整合信息需要以community为单位
             merged_communities_context = merge_info(level, level_communities, level_nodes, level_relas, level_claims)
 
-            # 对每个community根据自身的context设置context_str
             for merged_community_context in merged_communities_context:
 
                 context_str = self.set_context(contexts_info=[merged_community_context])
@@ -246,12 +253,9 @@ class CommunityReportsExtractor(BaseProcessor):
 
             merge_result[level] = merged_communities_context
 
-        # 首先可以对获取得到的context进行检验：是否符合level，如果local_contexts未超过max_tokens，可以不用子社区的报告进行替代
-        # 在local_contexts超过max_tokens限制的前提下，如果子社区reports为None，则只能对local_context做裁剪（这种情况只能发生在最底层level中）
-        # 如果存在子社区，则根据子社区的上下文以及reports得到生成社区reports的context（首先合并子社区信息，之后进行裁剪）
+        # Generate reports based on the aggregated contexts
         reports: List[CommunityReport] = []
         for level in levels:
-            # 遍历当前level的每个community， 根据当前得到的reports以及社区的层次结构以及当前社区的context获取该community对应的context
             level_contexts = self.prepare_report_context(level=level, community_hierarchy=community_hierarchy,
                                                          community_contexts=merge_result[level],
                                                          community_reports=reports)
@@ -279,22 +283,25 @@ class CommunityReportsExtractor(BaseProcessor):
                     sub_community_reports: Optional[List[CommunityReport]] = None,
                     max_tokens: Optional[int] = None) -> str:
         """
-        根据输入的community上下文信息列表，得到最终的上下文string并返回该community对应的上下文string
-        Args:
-            contexts_info:
-            sub_community_reports:
-            max_tokens:
+            Constructs the final context string for a community based on its context information and sub-community
+            reports.
 
-        Returns:
+            Args:
+                contexts_info (List[CommunityContext]): A list of CommunityContext instances used for constructing
+                the target community context.
+                sub_community_reports (Optional[List[CommunityReport]]): A list of CommunityReport instances for
+                sub-communities.
+                    Defaults to None.
+                max_tokens (Optional[int]): The maximum number of tokens allowed for the context string.
+                    If not provided, then there is no limit for the number of tokens.
 
+            Returns:
+                str: The constructed context string.
         """
         community_context: str = ''
-        # 对于max_tokens，如果需要在该阶段设置，则在后续的进一步进行上下文裁剪步骤不需要，然而这可能会面临信息丢失
-        # 目前可以设置当前不对local_context进行裁剪，如果需要则在需要输入参数max_tokens
-        # max_tokens = max_tokens or self.max_tokens
         tokenizer = self.tokenizer
 
-        # 首先获取全部nodes，edges，claims信息
+        # Aggregate all nodes, relationships, and claims
         nodes_info = {}
         relas_info = {}
         claims_info = {}
@@ -304,7 +311,7 @@ class CommunityReportsExtractor(BaseProcessor):
             if community_info.claims is not None:
                 claims_info = claims_info | community_info.claims
 
-        # 根据边的degree来排序
+        # Sort relationships based on degree in descending order
         sorted_relas_info = dict(sorted(relas_info.items(), key=lambda item: item[1]['degree'], reverse=True))
         sorted_nodes = []
         sorted_relas = []
@@ -334,7 +341,6 @@ class CommunityReportsExtractor(BaseProcessor):
                     break
             community_context = new_context_str
         if flag is False and len(sorted_nodes) < len(nodes_info.keys()):
-            # 说明存在度数为0的节点信息没有被加入
             for _id, node_info in nodes_info.items():
                 if node_info not in sorted_nodes:
                     sorted_nodes.append(node_info)
@@ -346,21 +352,21 @@ class CommunityReportsExtractor(BaseProcessor):
                     community_context = new_context_str
 
         if community_context == '':
-            # 一般是chunk_node，可能description较长导致的
-            # 暂时的处理是缩短生成的description或增加max_llm_token
+            # Handle cases where context is too long by reducing content or increasing token limit
             community_context = get_context_str(sorted_nodes, sorted_relas, sorted_claims)
 
         return community_context
 
-    def generate_context(self, context_str: str, community_context: CommunityContext) -> CommunityContext:
+    def update_context(self, context_str: str, community_context: CommunityContext) -> CommunityContext:
         """
-        根据给出的context_str，将其添加到Community_context类中
-        Args:
-            community_context: 需要添加context_str的context
-            context_str: 通过set_context得到的str
+            Updates the CommunityContext instance with the provided context string and token count.
 
-        Returns:
+            Args:
+                context_str (str): The context string to be added.
+                community_context (CommunityContext): The CommunityContext instance to update.
 
+            Returns:
+                CommunityContext: The updated CommunityContext instance.
         """
         tokenizer = self.tokenizer
         community_context.context_str = context_str
@@ -376,16 +382,21 @@ class CommunityReportsExtractor(BaseProcessor):
                                community_contexts: List[CommunityContext],
                                community_reports: List[CommunityReport]) -> List[CommunityContext]:
         """
-        对于给定level，根据要求的上下文长度，获得每个community生成report的上下文
+            Prepares the context for report generation based on the community hierarchy and existing reports.
 
-        对于每个community：当merge_info满足上下文长度直接返回；否则根据子社区的上下文以及report生成上下文
-        Returns:
+            Args:
+                level (int): The current level in the community hierarchy.
+                community_hierarchy (Dict[int, Dict[str, List[str]]]): The community hierarchy mapping.
+                community_contexts (List[CommunityContext]): A list of CommunityContext instances.
+                community_reports (List[CommunityReport]): A list of existing CommunityReport instances.
 
+            Returns:
+                List[CommunityContext]: A list of CommunityContext instances with updated context strings.
         """
 
         tokenizer = self.tokenizer
 
-        # 筛选需要上下文长度超过限制token数的_community_context
+        # Identify communities exceeding token limits
         _community_contexts = []
         indexes = []
         for index, _context in enumerate(community_contexts):
@@ -393,15 +404,14 @@ class CommunityReportsExtractor(BaseProcessor):
                 indexes.append(index)
                 _community_contexts.append(_context)
         if len(_community_contexts) == 0:
-            # 说明每个community的上下文长度均未超过
             return community_contexts
 
         if not community_reports:
-            # 当子社区的reports为空，只能对当前的context进行裁剪
+            # If there are no sub-community reports, trim the current contexts
             results = []
             for community_context in community_contexts:
                 community_context_str = self.set_context(community_contexts, max_token=self.max_token)
-                results.append(self.generate_context(community_context_str, community_context))
+                results.append(self.update_context(community_context_str, community_context))
 
             return results
 
@@ -409,26 +419,23 @@ class CommunityReportsExtractor(BaseProcessor):
                                                                                                     community_contexts,
                                                                                                     community_reports)
         if not sub_level_reports and not sub_level_communities_context:
-            # 说明level对应的是最低层次，直接对context做裁剪
             results = []
             for community_context in community_contexts:
                 community_context_str = self.set_context(community_contexts, max_token=self.max_token)
-                results.append(self.generate_context(community_context_str, community_context))
+                results.append(self.update_context(community_context_str, community_context))
 
             return results
 
         for k, _community_context in enumerate(_community_contexts):
 
-            # 对每个community进行处理，首先得到contex在community_contexts中的index
             index = indexes[k]
             _community_id = _community_context.community_id
             exceed_flag = True
 
-            # 得到community对应的sub_communities的上下文+reports信息，以list[dict]的形式返回
             _sub_communities = select_sub_communities(_community_id, level, community_hierarchy,
                                                       sub_level_communities_context,
                                                       sub_level_reports)
-            # 从规模更大的sub_community开始获得上下文
+            # Sort sub-communities based on context size in descending order
             _sub_communities = sorted(_sub_communities, key=lambda x: x['context'].context_size, reverse=True)
 
             _substitute_reports = []
@@ -442,12 +449,10 @@ class CommunityReportsExtractor(BaseProcessor):
                     _local_contexts.append(_sub_community_context)
                     continue
 
-                # 得到剩下sub_communities对应的context，如果满足token要求就可以直接返回
                 _remaining_contexts = []
                 for j in range(i + 1, len(_sub_communities) - 1):
                     _remaining_contexts.append(_sub_communities[j])
 
-                # 根据contexts+reports得到context_str
                 _context_str = self.set_context(contexts_info=_local_contexts + _remaining_contexts,
                                                 sub_community_reports=_substitute_reports)
 
@@ -468,22 +473,13 @@ class CommunityReportsExtractor(BaseProcessor):
                     # 将reports转化为str形式
                     _context_str = get_context_str(sub_community_reports=_reports)
 
-                    if tokenizer.get_token_num(_context_str) > self.max_token:
+                    if tokenizer.get_token_num(_context_str) > self.max_tokens:
                         break
                 community_contexts[index].context_size = tokenizer.get_token_num(_context_str)
                 community_contexts[index].context_str = _context_str
                 community_contexts[index].exceed_token = False
 
     def generate_reports(self, community_contexts: List[CommunityContext], prompt: str) -> List[CommunityReport]:
-        """
-        根据给出的community上下文生成对应的report
-        Args:
-            prompt:
-            community_contexts:
-
-        Returns:
-
-        """
         llm = self.llm
         result = []
 
@@ -500,20 +496,18 @@ class CommunityReportsExtractor(BaseProcessor):
             output_str = ''
             try:
                 response = llm.chat(messages)
-                # 使用正则表达式提取JSON部分
+                # Extract JSON part from the response using regex
                 json_match = re.search(r'\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}', response, re.DOTALL)
 
-                # 检查是否成功匹配
                 if json_match:
-                    output_str = json_match.group(0)  # 提取JSON部分
+                    output_str = json_match.group(0)
 
-                    # 将字符串转换为字典
                     try:
                         output = json.loads(output_str)
                     except json.JSONDecodeError as e:
-                        print(f"JSON解码错误: {e}")
+                        print(f"JSON decoding error: {e}")
                 else:
-                    print("未找到JSON数据")
+                    print("No JSON data found in the response.")
                 output_str = transform_output(output)
             except Exception as e:
                 print("error when generating report")

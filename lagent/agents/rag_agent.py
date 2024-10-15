@@ -9,7 +9,7 @@ from lagent.rag.utils import replace_variables_in_prompt
 
 
 class BaseAgent(Agent):
-    def __init__(self, processors_config: str,
+    def __init__(self, processors_config: Dict,
                  **kwargs):
         super().__init__(memory={}, **kwargs)
         self.external_memory = None
@@ -33,8 +33,21 @@ class BaseAgent(Agent):
     def forward(self, **kwargs) -> Any:
         raise NotImplemented
 
-    def init_processors(self, config_path: str) -> List[BaseProcessor]:
-        """根据配置文件初始化处理器列表"""
+    def init_processors(self, processors_config: Dict):
+        dependencies = self.init_dependencies(processors_config.get('dependencies', {}))
+
+        # 实例化处理器
+        processors = []
+        for proc_conf in processors_config.get('processors', []):
+            # 解析依赖项
+            resolved_config = self.resolve_dependencies(proc_conf.get('params', {}), dependencies)
+            # 创建处理器实例
+            processor = create_object({'type': proc_conf['type'], **resolved_config})
+            processors.append(processor)
+        return processors
+
+    def init_processors_from_yaml(self, config_path: str) -> List[BaseProcessor]:
+        """initial processors from yaml"""
         with open(config_path, 'r', encoding='utf-8') as file:
             config = yaml.safe_load(file)
 

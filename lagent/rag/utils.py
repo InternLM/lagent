@@ -8,10 +8,13 @@ import re
 
 def normalize_edge(edge: Relationship) -> Relationship:
     """
-    标准化边的表示，使得边在无向情况下具有相同的键。
+        Normalizes the representation of an edge to ensure consistent ordering in undirected graphs.
 
-    :param: edge
-    :return: 标准化后的边 (sorted_source_id, sorted_target_id)
+        Args:
+            edge (Relationship): The relationship to normalize.
+
+        Returns:
+            Relationship: The normalized relationship with source and target IDs sorted.
     """
     source = edge.source
     target = edge.target
@@ -44,16 +47,6 @@ def str_to_tuple(data: str) -> tuple[str, str]:
 
 
 def get_id_map_nodes(nodes: List[Node], storage: Optional[Storage], stage: str) -> Dict[str, Node]:
-    """
-
-    Args:
-        nodes:
-        storage:
-        stage:说明当前存储的映射是哪一阶段的nodes
-
-    Returns:
-
-    """
     load_dict_items = storage.get(f"id_map_nodes_{stage}")
     id_map_nodes = {}
     if load_dict_items is None:
@@ -66,7 +59,6 @@ def get_id_map_nodes(nodes: List[Node], storage: Optional[Storage], stage: str) 
 
     else:
         for map_item in load_dict_items:
-            # 由存储时可知，对于每个元素只含有一个键值对
             k, v = map_item.popitem()
             id_map_nodes[k] = Node.dict_to_node(v)
 
@@ -99,13 +91,10 @@ def get_id_map_relationships(relationships: List[Relationship], storage: Optiona
 
 def create_igraph(nodes: List[Node], edges: Optional[List[Relationship]] = None):
     # given nodes and edges, create a graph for leidenalg
-
-    # 创建一个空的无向图
     g = ig.Graph(directed=False)
 
     for node in nodes:
 
-        # TODO:哪些属性应该被加入，以及属性命名
         vertex_attr = {'id': node.id, 'name': node.id}
         if node.description is not None:
             vertex_attr['description'] = node.description
@@ -156,16 +145,6 @@ def filter_relas_by_nodes(nodes: List[Node], relationships: List[Relationship]) 
 
 def get_communities_context_reports_by_level(level: int, community_contexts: List[CommunityContext],
                                              community_reports: List[CommunityReport]):
-    """
-    筛选community_contexts中在level层次的contexts, reports处理同理
-    Args:
-        level:
-        community_contexts:
-        community_reports:
-
-    Returns:
-
-    """
     result_contexts = []
     for community_context in community_contexts:
         if community_context.level == level:
@@ -181,44 +160,39 @@ def get_communities_context_reports_by_level(level: int, community_contexts: Lis
 
 def replace_variables_in_prompt(prompt: str, prompt_variables: Dict[str, str]):
     """
-    替换prompt中的变量为实际值，支持多种变量格式并包含错误检查
+        Replaces variables in the prompt with actual values, supporting multiple variable formats with error checking.
 
-    :param prompt: 包含变量的prompt字符串，支持以下格式:
-                   - {variable}
-                   - {{variable}}（双花括号）
-                   - ${variable}（美元符号）
-    :param prompt_variables: 包含变量名及其对应值的字典
-    :return: 替换变量后的完整prompt字符串
-    :raises ValueError: 如果变量未在字典中找到，抛出异常
+        Args:
+            prompt (str): The prompt string containing variables in formats like {variable}, {{variable}}, or ${variable}.
+            prompt_variables (Dict[str, str]): A dictionary containing variable names and their corresponding values.
+
+        Returns:
+            str: The complete prompt string with variables replaced by their actual values.
+
+        Raises:
+            ValueError: If a variable in the prompt is not found in the provided dictionary.
     """
 
-    # 定义正则表达式模式，用于检测变量格式
     patterns = {
         'braces': re.compile(r'\{(\w+)\}'),         # {variable}
         'double_braces': re.compile(r'\{\{(\w+)\}\}'),  # {{variable}}
         'dollar': re.compile(r'\$\{(\w+)\}')        # ${variable}
     }
 
-    # 使用正则表达式替换变量
     def replace_variable(match: re.Match) -> str:
         var_name = match.group(1)
         if var_name in prompt_variables:
             return prompt_variables[var_name]
         else:
-            return match.group(0)  # 如果变量不在字典中，返回原始变量格式
-
+            return match.group(0)
     try:
-        # 尝试替换 {variable}
         prompt = patterns['braces'].sub(replace_variable, prompt)
 
-        # 尝试替换 {{variable}}
         prompt = patterns['double_braces'].sub(lambda m: replace_variable(m), prompt)
 
-        # 尝试替换 ${variable}
         prompt = patterns['dollar'].sub(lambda m: replace_variable(m), prompt)
 
     except ValueError as e:
-        # 捕捉并处理变量未找到的错误
         raise ValueError(f"Error in prompts replacement: {e}")
 
     return prompt

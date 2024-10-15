@@ -26,7 +26,6 @@ class LoadGraph(BaseProcessor):
         graph = self.storage.get('external_memory')
         graph = MultiLayerGraph.dict_to_multilayergraph(graph)
 
-        # 加载db
         for k, path in graph.layers_db.items():
             db = FaissDatabase.load(path)
             graph.layers_db[k] = db

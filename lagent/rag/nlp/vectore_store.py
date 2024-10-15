@@ -10,6 +10,15 @@ from lagent.rag.nlp.sentence_transformer_embedder import SentenceTransformerEmbe
 
 
 class DocumentDB:
+    """
+        Represents a document with an ID, content, and optional metadata.It is used for building database.
+
+        Args:
+            id (str): The unique identifier for the document.
+            content (str): The textual content of the document.
+            metadata (Optional[Dict]): Additional metadata for the document.
+                Defaults to an empty dictionary if not provided.
+        """
     def __init__(self, id: str, content: str, metadata: Optional[Dict] = None):
         self.id = id
         self.content = content
@@ -19,16 +28,21 @@ class DocumentDB:
 class FaissDatabase:
     def __init__(self,
                  embedding_model: Optional[SentenceTransformerEmbedder] = None,
-                 dimension: int = 384,  # 默认维度
-                 normalize: bool = False):  # 默认归一化
+                 dimension: int = 384,
+                 normalize: bool = False):
         """
-        初始化向量数据库
-        :param embedding_model: 用于生成向量的嵌入模型，默认为None
-        :param dimension: 向量的维度，默认为384
-        :param normalize: 是否对向量进行L2归一化，默认为True
+        Initializes the Faiss vector database.
+
+        Args:
+            embedding_model (Optional[SentenceTransformerEmbedder]):
+                The embedder model used to generate vectors. Defaults to None,
+                which initializes a default SentenceTransformerEmbedder.
+            dimension (int): The dimensionality of the vectors. Defaults to 384.
+            normalize (bool): Whether to apply L2 normalization to vectors.
+                Defaults to False.
         """
         if embedding_model is None:
-            self.embedding_model = SentenceTransformerEmbedder()  # 默认嵌入模型
+            self.embedding_model = SentenceTransformerEmbedder()
         else:
             self.embedding_model = embedding_model
 
@@ -39,17 +53,20 @@ class FaissDatabase:
         self._normalize_L2 = normalize
 
     @classmethod
-    def from_documents(cls, documents: List[DocumentDB], emedder) -> 'FaissDatabase':
+    def from_documents(cls, documents: List[DocumentDB], embedder) -> 'FaissDatabase':
         """
-        根据文档构建向量数据库
-        :param documents: 文档列表
+        Constructs a FaissDatabase from a list of documents.
 
         Args:
-            emedder: 
+            documents (List[DocumentDB]): A list of DocumentDB instances to add to the database.
+            embedder (SentenceTransformerEmbedder): The embedder used to generate document vectors.
+
+        Returns:
+            FaissDatabase: An instance of FaissDatabase populated with the provided documents.
         """
-        db = cls(embedding_model=emedder)
+        db = cls(embedding_model=embedder)
         for doc in documents:
-            embedding = emedder.encode(doc.content).astype('float32')
+            embedding = embedder.encode(doc.content).astype('float32')
             embedding = np.reshape(embedding, (1, -1))  # 确保形状为 (1, dimension)
             db.index.add(embedding)
             db.documents.append(doc)
@@ -58,7 +75,6 @@ class FaissDatabase:
         return db
 
     def add_documents(self, docs: List[DocumentDB]):
-        """添加单个文档到数据库"""
         for doc in docs:
             embedding = self.embedding_model.encode(doc.content).astype('float32')
             embedding = np.reshape(embedding, (1, -1))  # 确保形状为 (1, dimension)
@@ -70,15 +86,24 @@ class FaissDatabase:
                                      filter: Optional[Union[Callable, Dict[str, Any]]] = None,
                                      fetch_k: int = 20, **kwargs: Any) -> List[Tuple[DocumentDB, float]]:
         """
-        根据查询返回相似文档和相应评分
-        :param query: 查询文本
-        :param k: 返回的文档数量
-        :param filter: 过滤条件
-        :param fetch_k: 先获取的文档数量
-        :return: 相似文档和相应评分的列表
+        Retrieves similar documents to the query along with their similarity scores.
+
+        Args:
+            query (str): The query text.
+            k (int): The number of top documents to return. Defaults to 4.
+            filter (Optional[Union[Callable[[Dict[str, Any]], bool], Dict[str, Any]]]):
+                A filter to apply to the documents. Can be a callable or a dictionary of conditions.
+                Defaults to None.
+            fetch_k (int): The number of documents to fetch initially before applying the filter.
+                Defaults to 20.
+            **kwargs (Any): Additional keyword arguments. Supports 'score_threshold' to filter results.
+
+        Returns:
+            List[Tuple[DocumentDB, float]]: A list of tuples containing the DocumentDB instances and their
+                corresponding similarity scores.
         """
         query_vector = self.embedding_model.encode(query).astype('float32')
-        query_vector = np.reshape(query_vector, (1, -1))  # 确保形状为 (1, dimension)
+        query_vector = np.reshape(query_vector, (1, -1))
         if self._normalize_L2:
             faiss.normalize_L2(query_vector)
 
@@ -105,7 +130,7 @@ class FaissDatabase:
 
         score_threshold = kwargs.get("score_threshold")
         if score_threshold is not None:
-            cmp = operator.le  # L2 distance越小越相似
+            cmp = operator.le
             docs = [
                 (doc, similarity)
                 for doc, similarity in docs
@@ -115,7 +140,6 @@ class FaissDatabase:
         return docs[:k]
 
     def save_local(self, file_path: str):
-        """保存当前向量数据库到本地文件"""
         with open(file_path, 'wb') as f:
             pickle.dump({
                 'index': self.index,
@@ -130,7 +154,6 @@ class FaissDatabase:
 
     @classmethod
     def load(cls, file_path: str):
-        """从本地文件加载向量数据库"""
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"No such file: '{file_path}'")
 
@@ -155,9 +178,15 @@ class FaissDatabase:
 
     def _create_filter_func(self, filter: Union[Callable, Dict[str, Any]]) -> Callable:
         """
-        创建过滤函数
-        :param filter: 过滤条件
-        :return: 过滤函数
+        Creates a filter function based on the provided filter criteria.
+
+        Args:
+            filter (Union[Callable[[Dict[str, Any]], bool], Dict[str, Any]]):
+                The filter criteria, either as a callable or a dictionary of key-value pairs.
+
+        Returns:
+            Callable[[Dict[str, Any]], bool]: A function that takes metadata and returns a boolean
+                indicating whether the metadata satisfies the filter criteria.
         """
         if callable(filter):
             return filter

@@ -61,14 +61,6 @@ class EntityExtractor(BaseProcessor):
         }
         history = kwargs.get("history", [])
 
-        # in test
-        # storage = Storage()
-        # entities = storage.get('entities')
-        # relationships = storage.get('relationships')
-        # chunk_to_entities = storage.get('chunk_to_entities')
-        # entities = [Node.dict_to_node(entity) for entity in entities]
-        # relationships = [Relationship.dict_to_edge(rela) for rela in relationships]
-
         entities = []
         relationships = []
         chunk_to_entities: Dict[str, List[str]] = {}
@@ -80,7 +72,6 @@ class EntityExtractor(BaseProcessor):
                 # TODO: get messages(history?)
                 messages = [*history, {"role": "user", "content": prompt}]
                 response = self.llm.chat(messages, **kwargs)
-                # response = RESPONSE
                 _entities, _relationships = self.process_response(response)
 
                 chunk_to_entities[chunk.id] = []
@@ -88,7 +79,6 @@ class EntityExtractor(BaseProcessor):
                     _entity = dict_to_entity(_entity)
                     _entity.source_id = [chunk.id]
                     entities.append(_entity)
-                    # chunk_to_entities中的value为list，元素为entity.content
                     chunk_to_entities[chunk.id].append(_entity.content)
                 for _relationship in _relationships:
                     _relationship = dict_to_relationship(_relationship)
@@ -101,14 +91,14 @@ class EntityExtractor(BaseProcessor):
         entities = list(id_map_entities.values())
         relationships = list(id_map_relas.values())
 
-        storage = Storage()
-        entities_dict = [entity.to_dict() for entity in entities]
-        relationships_dict = [rela.to_dict() for rela in relationships]
-        storage.put('entities', entities_dict)
-        storage.put('relationships', relationships_dict)
-        storage.put('chunk_to_entities', chunk_to_entities)
+        # save
+        # storage = Storage()
+        # entities_dict = [entity.to_dict() for entity in entities]
+        # relationships_dict = [rela.to_dict() for rela in relationships]
+        # storage.put('entities', entities_dict)
+        # storage.put('relationships', relationships_dict)
+        # storage.put('chunk_to_entities', chunk_to_entities)
 
-        # 添加entity node，并添加degree属性
         for entity in entities:
             node_attr = {
                 'source_id': entity.source_id,
@@ -117,7 +107,6 @@ class EntityExtractor(BaseProcessor):
             }
             entity_layer.add_node(entity.id, **node_attr)
 
-        # 添加边， 并添加degree属性
         for relationship in relationships:
             edge_attr = {
                 'description': relationship.description,
@@ -149,7 +138,6 @@ class EntityExtractor(BaseProcessor):
             degree = degree1 + degree2
             edge[2]['degree'] = degree
 
-        # 添加跨层边，即chunk与entity的映射关系
         for chunk_id, entities_id in chunk_to_entities.items():
             for entity_id in entities_id:
                 graph.add_interlayer_edge('chunk_layer', chunk_id, 'entity_layer', entity_id)
@@ -158,24 +146,25 @@ class EntityExtractor(BaseProcessor):
 
     def process_response(self, response: str):
         """
-        解析 LLM 输出，提取 entities 和 relationships 并转化为指定的字典形式。
-
-        :param response: LLM 的输出文本
-        :return: 包含 entities 和 relationships 的字典
+            Parses the LLM response to extract entities and relationships.
+            Args:
+                response (str): The output text from the language model.
+            Returns:
+                Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]: A tuple containing lists of entity dictionaries
+                and relationship dictionaries.
+            Raises:
+                ValueError: If the response is incomplete or improperly formatted.
         """
         tuple_delimiter = self.tuple_delimiter
         item_delimiter = self.item_delimiter
         completion_delimiter = self.completion_delimiter
 
-        # TODO:处理不完整输出
-        # 判断是否已完成输出
+        # Check if the response ends with the completion delimiter
         if not response.endswith(completion_delimiter):
             raise ValueError("LLM output is incomplete or not correctly terminated.")
 
-        # 去除完成分隔符以便后续处理
         response = response.rstrip(completion_delimiter).strip()
 
-        # 去除多余的引号
         if response.startswith("'''") and response.endswith("'''"):
             response = response[3:-3].strip()
 
@@ -187,17 +176,15 @@ class EntityExtractor(BaseProcessor):
         for item in items:
             item = item.strip()
             if not item:
-                continue  # 跳过空项
+                continue
 
             if item.startswith('\n'):
                 item = item[1:].strip()
             if item.endswith('\n'):
                 item = item[:-1].strip()
-            # 去除首尾括号和引号
             if item.startswith("(") and item.endswith(")"):
                 item = item[1:-1].strip()
 
-            # 处理多余的引号
             item = item.strip("'").strip()
 
             parts = item.split(tuple_delimiter)
@@ -229,9 +216,6 @@ class EntityExtractor(BaseProcessor):
 def dict_to_entity(entity_dict: Dict) -> Optional[Node]:
     try:
         name = entity_dict.get("entity_name")
-
-        # 将id和name设置为相同
-        # entity_id = hashlib.md5(name.encode('utf-8')).hexdigest()
 
         # when getting an entity, source_id is not added so far(added in nodes)
         entity_type = entity_dict.get("entity_type")

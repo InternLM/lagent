@@ -1,4 +1,10 @@
+# Copyright (c) 2024 Microsoft Corporation.
+# Licensed under the MIT License.
 
+# This file is copied directly from the Microsoft GraphRag project.
+# Original Project: Microsoft GraphRag
+# Repository: https://github.com/microsoft/GraphRag
+# Author: Microsoft Corporation
 
 """A file containing prompts definition."""
 

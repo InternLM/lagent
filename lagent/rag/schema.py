@@ -6,6 +6,13 @@ import matplotlib.pyplot as plt
 
 
 class Layer:
+    """
+       Represents a single layer within a multi-layer graph, encapsulating its own NetworkX graph.
+
+       Attributes:
+           layer_id (str): The unique identifier for the layer.
+           graph (nx.Graph): The NetworkX graph representing the layer's nodes and edges.
+    """
     def __init__(self, layer_id: str):
         self.layer_id = layer_id
         self.graph = nx.Graph()
@@ -45,46 +52,51 @@ class Layer:
 
 
 class MultiLayerGraph:
+    """
+        Represents a multi-layer graph consisting of multiple Layer instances and inter-layer edges.
+        This class facilitates the storage and organization of data produced by each processor in the pipeline by
+        representing them as graphs within multiple layers.
+        Ultimately, it aggregates these layered graphs into a comprehensive MultiLayerGraph structure, which serves
+        as the external memory for the RAG system.
+
+        Attributes:
+            layers (Dict[str, Layer]): A dictionary mapping layer IDs to their corresponding Layer instances.
+            interlayer_edges_by_layers (nx.DiGraph): A directed graph representing edges between different layers.
+            layers_db (Dict[str, str]): A dictionary for storing vector databases associated with layers.
+    """
     def __init__(self):
-        # 每一层是一个独立的图，存储为字典 {layer_id: Layer对象}
+        # Each layer is an independent graph, stored as a dictionary {layer_id: Layer object}}
         self.layers = {}
-        # 使用字典来存储层与层之间的跨层边映射 { (layer_id_1, layer_id_2): Graph }
+        # Stores inter-layer edge mappings as a directed graph { (layer_id_1, layer_id_2): Graph }
         self.interlayer_edges_by_layers = nx.DiGraph()
-        # 可创建某些层的向量数据库
+        # Store vector database for some layers
         self.layers_db = {}
 
     def add_layer(self, layer_id):
-        """添加一个新的层，每层是一个NetworkX图"""
         if layer_id not in self.layers:
             new_layer = Layer(layer_id)
             self.layers[layer_id] = new_layer
         return self.layers[layer_id]
 
     def add_node(self, layer_id, node_id, **attributes):
-        """在指定的层中添加一个节点"""
         if layer_id not in self.layers:
             self.add_layer(layer_id)
         self.layers[layer_id].add_node(node_id, **attributes)
 
     def add_edge(self, layer_id, node_id_1, node_id_2, **attributes):
-        """在同一层内添加边"""
         if layer_id in self.layers:
             self.layers[layer_id].add_edge(node_id_1, node_id_2, **attributes)
 
     def add_interlayer_edge(self, layer_id_1, source_node_id, layer_id_2, target_node_id, **attributes):
-        """为不同层之间的节点添加有向边"""
-        # 首先确保两个节点都在各自的层内存在
         if source_node_id not in self.layers[layer_id_1].graph.nodes:
-            raise ValueError(f"节点 {source_node_id} 不存在于层 {layer_id_1}")
+            raise ValueError(f"node{source_node_id} doesn't exist in layer{layer_id_1}")
         if target_node_id not in self.layers[layer_id_2].graph.nodes:
-            raise ValueError(f"节点 {target_node_id} 不存在于层 {layer_id_2}")
+            raise ValueError(f"node{target_node_id} doesn't exist in layer{layer_id_2}")
 
-        # 添加跨层有向边
         self.interlayer_edges_by_layers.add_edge((layer_id_1, source_node_id), (layer_id_2, target_node_id),
                                                  **attributes)
 
     def get_interlayer_mappings(self, layer_id_1, layer_id_2):
-        """获取相邻两层之间的节点映射关系"""
         mappings = {}
         for (source, target) in self.interlayer_edges_by_layers.edges():
             if source[0] == layer_id_1 and target[0] == layer_id_2:
@@ -94,7 +106,6 @@ class MultiLayerGraph:
         return mappings
 
     def to_dict(self) -> Dict:
-        """将多层图转换为字典格式"""
         graph_dict = {}
         for layer_id, layer in self.layers.items():
             graph_dict[layer_id] = {
@@ -131,12 +142,6 @@ class MultiLayerGraph:
 
     @classmethod
     def dict_to_multilayergraph(cls, graph_dict: Dict) -> 'MultiLayerGraph':
-        """
-        Convert a dictionary representation of a multi-layer graph back into a MultiLayerGraph object.
-
-        :param graph_dict: Dictionary representation of the multi-layer graph.
-        :return: Reconstructed MultiLayerGraph object.
-        """
         # Initialize a new MultiLayerGraph object
         ml_graph = cls()
 
@@ -180,50 +185,40 @@ class MultiLayerGraph:
         return ml_graph
 
     def visualize_layers(self, layer_ids):
-        """可视化指定层及跨层边"""
-        plt.figure(figsize=(12, 12))  # 增大图像尺寸以适应更多节点和边
+        plt.figure(figsize=(12, 12))
         pos = {}
         offset = 0
 
         labels = {}
 
-        # 可视化每个层及其节点
         for layer_id in layer_ids:
             if layer_id in self.layers:
                 layer_graph = self.layers[layer_id].graph
-                # 使用 spring_layout 生成布局
                 layer_pos = nx.spring_layout(layer_graph, seed=42)
-                # 确保节点标识符格式为 node_id
                 layer_pos = {k: (v[0], v[1] + offset) for k, v in layer_pos.items()}
                 pos.update(layer_pos)
 
-                # 创建节点标签
                 labels.update({node: node for node in layer_graph.nodes()})
 
                 offset += 3
 
-                # 绘制节点及边
                 nx.draw(layer_graph, pos,
                         nodelist=layer_graph.nodes(),
                         with_labels=False,
                         node_color=f"C{layer_id}",
                         node_size=500,
-                        edge_color=f"C{layer_id}",  # 为了区分不同层的边，可以使用不同的颜色
+                        edge_color=f"C{layer_id}",
                         alpha=0.6)
 
-                # 绘制边
                 nx.draw_networkx_edges(layer_graph, pos,
                                        edgelist=layer_graph.edges(),
                                        edge_color=f"C{layer_id}",
                                        alpha=0.6)
 
-        # 绘制节点标签
         nx.draw_networkx_labels(self.layers[layer_ids[0]].graph, pos=pos, labels=labels, font_size=10)
 
-        # 绘制跨层有向边
         if self.interlayer_edges_by_layers is not None:
             interlayer_edges = self.interlayer_edges_by_layers.edges()
-            # 确保跨层边的节点都在 pos 字典中
             valid_edges = [(source[1], target[1]) for source, target in interlayer_edges if
                            source[1] in pos and target[1] in pos]
             if valid_edges:
@@ -231,7 +226,7 @@ class MultiLayerGraph:
                                        edge_color="black", style="dotted", width=2, arrows=True)
 
         plt.title(f"Visualization of Layers: {layer_ids}")
-        plt.axis('off')  # 去除坐标轴以更清晰展示图形
+        plt.axis('off')
         plt.show()
 
 
@@ -244,46 +239,36 @@ class Node(BaseModel):
     entities: Optional[List[str]] = None
     entity_type: Optional[str] = None
 
-    # 用于存储额外属性的字典
     _extra_attributes: Dict[str, Any] = {}
 
     def __init__(self, **kwargs):
-        # 遍历传入的所有键值对，使用 setattr 动态设置属性
         super().__init__(**kwargs)
         for key, value in kwargs.items():
             if value is not None:
                 setattr(self, key, value)
 
     def __setattr__(self, name: str, value: Any) -> None:
-        # 优先设置普通属性
         if name in self.__annotations__:
             super().__setattr__(name, value)
         else:
-            # 设置额外属性
             self._extra_attributes[name] = value
 
     def __getattr__(self, name: str) -> Any:
-        # 先查找普通属性
         if name in self.__annotations__:
             return super().__getattr__(name)
-        # 查找额外属性
         if name in self._extra_attributes:
             return self._extra_attributes[name]
-        # 若属性不存在，抛出 AttributeError
         raise AttributeError(f"'Node' object has no attribute '{name}'")
 
     def __delattr__(self, name: str) -> None:
-        # 删除普通属性
         if name in self.__annotations__:
             super().__delattr__(name)
-        # 删除额外属性
         elif name in self._extra_attributes:
             del self._extra_attributes[name]
         else:
             raise AttributeError(f"'Node' object has no attribute '{name}'")
 
     def to_dict(self) -> Dict[str, Any]:
-        # 将所有属性转换为字典，并排除掉值为 None 的属性
         return {**{k: v for k, v in self.__dict__.items() if v is not None},
                 **self._extra_attributes}
 
@@ -310,7 +295,6 @@ class Node(BaseModel):
 
 class Relationship(BaseModel):
     weight: Optional[float] = None
-    # 若node为entity，实际上为node.content；若node为chunk，则为chunk_id
     source: str
     target: str
     description: Optional[str] = None
@@ -318,42 +302,33 @@ class Relationship(BaseModel):
     _extra_attributes: Dict[str, Any] = {}
 
     def __init__(self, **kwargs):
-        # 遍历传入的所有键值对，使用 setattr 动态设置属性
         super().__init__(**kwargs)
         for key, value in kwargs.items():
             if value is not None:
                 setattr(self, key, value)
 
     def __setattr__(self, name: str, value: Any) -> None:
-        # 优先设置普通属性
         if name in self.__annotations__:
             super().__setattr__(name, value)
         else:
-            # 设置额外属性
             self._extra_attributes[name] = value
 
     def __getattr__(self, name: str) -> Any:
-        # 先查找普通属性
         if name in self.__annotations__:
             return super().__getattr__(name)
-        # 查找额外属性
         if name in self._extra_attributes:
             return self._extra_attributes[name]
-        # 若属性不存在，抛出 AttributeError
         raise AttributeError(f"'Node' object has no attribute '{name}'")
 
     def __delattr__(self, name: str) -> None:
-        # 删除普通属性
         if name in self.__annotations__:
             super().__delattr__(name)
-        # 删除额外属性
         elif name in self._extra_attributes:
             del self._extra_attributes[name]
         else:
             raise AttributeError(f"'Node' object has no attribute '{name}'")
 
     def to_dict(self) -> Dict[str, Any]:
-        # 将所有属性转换为字典，并排除掉值为 None 的属性
         return {**{k: v for k, v in self.__dict__.items() if v is not None},
                 **self._extra_attributes}
 
@@ -386,14 +361,12 @@ class Community(BaseModel):
     nodes_id: List[str]
 
     def __init__(self, **kwargs):
-        # 遍历传入的所有键值对，使用 setattr 动态设置属性
         super().__init__(**kwargs)
         for key, value in kwargs.items():
             if value is not None:
                 setattr(self, key, value)
 
     def to_dict(self) -> Dict[str, Any]:
-        # 将所有属性转换为字典，并排除掉值为 None 的属性
         return {k: v for k, v in self.__dict__.items() if v is not None}
 
 
@@ -408,13 +381,11 @@ class CommunityContext(BaseModel):
     exceed_token: bool = False
 
     def __init__(self, **kwargs):
-        # 遍历传入的所有键值对，使用 setattr 动态设置属性
         super().__init__(**kwargs)
         for key, value in kwargs.items():
             setattr(self, key, value)
 
     def to_dict(self) -> Dict[str, Any]:
-        # 将所有属性转换为字典，并排除掉值为 None 的属性
         return {k: v for k, v in self.__dict__.items() if v is not None}
 
 
@@ -435,25 +406,15 @@ class Chunk(BaseModel):
     token_num: int
 
     def __init__(self, **kwargs):
-        # 遍历传入的所有键值对，使用 setattr 动态设置属性
         super().__init__(**kwargs)
         for key, value in kwargs.items():
             setattr(self, key, value)
 
     def to_dict(self) -> Dict[str, Any]:
-        '''
-        将python对象转化为字典
-        :return: dict
-        '''
-        # TODO: 错误检查
-        # 将所有属性转换为字典，并排除掉值为 None 的属性
         return {k: v for k, v in self.__dict__.items() if v is not None}
 
     @classmethod
     def dict_to_chunk(cls, data: Dict) -> 'Chunk':
-        """
-        从字典创建一个 Chunk 对象。
-        """
         return cls(
             id=data['id'],
             content=data['content'],
@@ -468,13 +429,11 @@ class Document(BaseModel):
     metadata: Dict[str, Any]
 
     def __init__(self, **kwargs):
-        # 遍历传入的所有键值对，使用 setattr 动态设置属性
         super().__init__(**kwargs)
         for key, value in kwargs.items():
             setattr(self, key, value)
 
     def to_dict(self) -> Dict:
-        # 将所有属性转换为字典，并排除掉值为 None 的属性
         return {k: v for k, v in self.__dict__.items() if v is not None}
 
     @classmethod

@@ -8,11 +8,9 @@ from lagent.rag.settings import DEFAULT_CACHE_DIR
 class Storage:
     def __init__(self, cache_dir: str = None):
         if cache_dir is None:
-            # 默认使用当前目录下的cache目录
             cache_dir = DEFAULT_CACHE_DIR
         self.cache_dir = os.path.abspath(cache_dir)
 
-        # 如果目录不存在，则创建
         if not os.path.exists(self.cache_dir):
             try:
                 os.makedirs(self.cache_dir)

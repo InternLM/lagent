@@ -11,17 +11,14 @@ class DocxParser:
         self.tokenizer = SimpleTokenizer()
 
     def parse_table(self, table):
-        """Extracts and formats table content from a docx table."""
         rows = []
         for row in table.rows:
             rows.append([cell.text.strip() for cell in row.cells])
         return self.format_table_content(pd.DataFrame(rows))
 
     def format_table_content(self, df):
-        """Formats the DataFrame content into a structured text representation."""
 
         def categorize_text(text):
-            """Categorizes text blocks into predefined types."""
             patterns = [
                 (r"^(20|19)\d{2}[年/-]\d{1,2}[月/-]\d{1,2}日?$", "Date"),
                 (r"^(20|19)\d{2}年$", "Date"),
@@ -86,7 +83,6 @@ class DocxParser:
         return formatted_lines if num_columns > 3 else ["\n".join(formatted_lines)]
 
     def parse(self, file_path, start_page=0, end_page=1000):
-        """Parses the docx file and extracts text from paragraphs and tables."""
         doc = Document(file_path)
         current_page = 0
 
@@ -126,7 +122,6 @@ class DocxParser:
 
 
 def print_parsed_content(parsed_content):
-    # 打印解析结果
     print("Headings:")
     for heading in parsed_content.get("headings", []):
         print(f"{heading['level']}: {heading['text']}")
@@ -146,15 +141,10 @@ def print_parsed_content(parsed_content):
 
 
 def main():
-    # 指定要解析的docx文件路径
     file_path = 'example.docx'
     tokenizer = SimpleTokenizer()
-
-    # 解析docx文件
     document_parser = DocxParser()
     parsed_content = document_parser.parse(file_path)
-
-    # 打印解析结果
     print_parsed_content(parsed_content)
 
 

@@ -1,3 +1,11 @@
+# Copyright (c) 2024 Alibaba Cloud.
+# Licensed under the Tongyi Qianwen LICENSE AGREEMENT.
+#
+# Based on the code from Qwen-Agent project (https://github.com/alibaba/Qwen-Agent),
+# variable names and some logic statements have been modified for clarity and performance.
+# Original Author: Alibaba Cloud
+# Modified by [kxZhou621] on [2024.10.15]
+
 from lagent.rag.schema import Document, Chunk, MultiLayerGraph
 from lagent.rag.settings import DEFAULT_CHUNK_SZIE, DEFAULT_OVERLAP
 from lagent.rag.nlp import SimpleTokenizer as Tokenizer
@@ -35,7 +43,7 @@ class ChunkSplitter(BaseProcessor):
             chunks = self.split_into_chunks(document)
             all_chunks.extend(chunks)
 
-        # 添加节点和跨层边
+        # add nodes and interlayer_edges
         for chunk in all_chunks:
             node_attr = {
                 'content': chunk.content,
@@ -49,7 +57,6 @@ class ChunkSplitter(BaseProcessor):
         return graph
 
     def get_overlap(self, chunk: list) -> Optional[str]:
-        # 基于字符不计算token数
         overlap_len = self.overlap_len
         overlap = ''
         flag = False
@@ -94,7 +101,6 @@ class ChunkSplitter(BaseProcessor):
         return overlap
 
     def split_into_chunks(self, document: Document) -> List[Chunk]:
-        """将Document分割成多个Chunk"""
 
         res = []
         chunk = []
@@ -106,13 +112,12 @@ class ChunkSplitter(BaseProcessor):
         for page in content:
             page_num = page['page_num']
             if not chunk or f'[page: {str(page_num)}]' != chunk[0]:
-                # 添加页码标签
+                # add page tag
                 chunk.append(f'[page: {str(page_num)}]')
             i = 0
             page_content = page['content']['text']
             len_para = len(page_content)
             while i < len_para:
-                # 逐段落添加
                 para = page_content[i].strip()
                 token_num = tokenizer.get_token_num(para)
                 if token_num < available_token:
@@ -122,9 +127,7 @@ class ChunkSplitter(BaseProcessor):
                     para_flag = True
                 else:
                     if para_flag:
-                        # 当前chunk存在段落，可以直接结束当前chunk获得新chunk
                         if isinstance(chunk[-1], str) and re.fullmatch(r'^\[page: \d+\]$', chunk[-1]) is not None:
-                            # 如果当前块的最后一个元素是多余的页码标签
                             chunk.pop()  # Redundant page information
                         res.append(Chunk(content='\n'.join([x if isinstance(x, str) else x[0] for x in chunk]),
                                          id=f"{document.id}{len(res)}",
@@ -140,7 +143,6 @@ class ChunkSplitter(BaseProcessor):
                             available_token = chunk_size
                             para_flag = False
                     else:
-                        # 当前chunk不存在段落，则需要逐句添加
                         sentences = []
                         sentences = re.split(r'\. |。', para)
                         j = 0
@@ -178,9 +180,6 @@ class ChunkSplitter(BaseProcessor):
         if para_flag:
             if isinstance(chunk[-1], str) and re.fullmatch(r'^\[page: \d+\]$', chunk[-1]) is not None:
                 chunk.pop()
-            # test1 = '\n'.join([x if isinstance(x, str) else x[0] for x in chunk])
-            # test2 = f"{document.document_id}{len(res)}"
-            # test3 = chunk_size - available_token
 
             res.append(Chunk(content='\n'.join([x if isinstance(x, str) else x[0] for x in chunk]),
                              id=f"{document.id}{len(res)}",

@@ -34,12 +34,6 @@ class BuildDatabase(BaseProcessor):
         return data
 
     def initialize_chunk_faiss(self, chunks: List[Chunk]) -> FaissDatabase:
-        """
-        目前默认使用FAISS 向量数据库。初始化 FAISS 向量数据库。如果存在已保存的 FAISS 索引，则加载它；否则，创建一个新的。
-
-        :return: FAISS 向量数据库实例
-        """
-        # 创建文档列表
         documents = [
             DocumentDB(
                 id=chunk.id,
@@ -49,28 +43,17 @@ class BuildDatabase(BaseProcessor):
             for chunk in chunks
         ]
 
-        # 初始化嵌入函数（使用 HuggingFaceEmbeddings）
         embedding_function = self.embedder
 
-        # 创建 FAISS 索引
         faiss_db = FaissDatabase.from_documents(documents, embedding_function)
 
-        # # 保存 FAISS 索引
+        # # save faiss index
         # faiss_db.save_local(f'{self.db_index_path}_chunks.pkl')
         # print(f"FAISS index created and saved to {self.db_index_path}_chunks.pkl")
 
         return faiss_db
 
     def initialize_entity_faiss(self, entities: List[Node]) -> FaissDatabase:
-        """
-        目前默认使用FAISS 向量数据库。初始化 FAISS 向量数据库。如果存在已保存的 FAISS 索引，则加载它；否则，创建一个新的。
-
-        :return: FAISS 向量数据库实例
-        """
-
-        # entities_with_embeddings = self.generate_embeddings(entities)
-
-        # 创建文档列表
         documents = [
             DocumentDB(
                 id=entity.id,
@@ -83,13 +66,11 @@ class BuildDatabase(BaseProcessor):
             for entity in entities
         ]
 
-        # 初始化嵌入函数（使用 HuggingFaceEmbeddings）
         embedding_function = self.embedder
 
-        # 创建 FAISS 索引
         faiss_db = FaissDatabase.from_documents(documents=documents, emedder=embedding_function)
 
-        # # 保存 FAISS 索引
+        # # save faiss index
         # faiss_db.save_local(f'{self.db_index_path}_entities')
         # print(f"FAISS index created and saved to {self.db_index_path}_entities.")
 

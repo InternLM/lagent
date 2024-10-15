@@ -30,7 +30,6 @@ class DescriptionSummarizer(BaseProcessor):
                  **kwargs
                  ):
         super().__init__(name='DescriptionSummarizer')
-        # TODO:llm输入类型规范
         self.llm = llm
         self.prompt = summarization_prompt or DEFAULT_SUMMATY_PROMPT
         if storage is not None:
@@ -43,15 +42,6 @@ class DescriptionSummarizer(BaseProcessor):
         self.max_tokens = max_tokens or DEFAULT_LLM_MAX_TOKEN
 
     def run(self, graph: MultiLayerGraph, **kwargs) -> MultiLayerGraph:
-        """
-        合并总结实体图中节点和边的description
-        Args:
-            graph:
-            **kwargs:
-
-        Returns:
-
-        """
         res = {}
         id_map_items = {}
         summarized_layer = graph.add_layer('summarized_entity_layer')
@@ -59,7 +49,6 @@ class DescriptionSummarizer(BaseProcessor):
         entities = entity_layer.get_nodes()
         relationships = entity_layer.get_edges()
 
-        # 针对节点description
         node_description_list = []
         for entity in entities:
             node_description_list = entity['description'].split(' | ')
@@ -87,10 +76,6 @@ class DescriptionSummarizer(BaseProcessor):
 
         self.storage.put('summarized_relationships', relationships)
 
-        # in test
-        # entities = self.storage.get('summarized_entity')
-        # relationships = self.storage.get('summarized_relationships')
-
         for entity in entities:
             entity_id = entity.pop('id')
             summarized_layer.add_node(entity_id, **entity)
@@ -108,7 +93,6 @@ class DescriptionSummarizer(BaseProcessor):
 
         available_token = self.max_tokens
 
-        # TODO:是否选取不同tokenizer
         tokenizer = Tokenizer()
 
         available_token -= tokenizer.get_token_num(self.prompt)

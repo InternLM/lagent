@@ -35,8 +35,7 @@ class NaiveRAGAgent(BaseAgent):
         results = chunks_db.similarity_search_with_score(query, k=top_k)
         search_contents = [result[0].content for result in results]
 
-        # 进一步根据上下文字数限制筛选得到max_ref_token以内的内容
-        # TODO:可以考虑使用其他的方法限制上下文
+        # TODO:find better ways to trim the context
         text = '\n'.join(search_contents)
         paras = text.split('\n')
         temp_doc = Document(
@@ -63,12 +62,6 @@ class NaiveRAGAgent(BaseAgent):
         return response
 
     def initialize_chunk_faiss(self, chunks: List[Chunk]) -> FaissDatabase:
-        """
-        目前默认使用FAISS 向量数据库。初始化 FAISS 向量数据库。如果存在已保存的 FAISS 索引，则加载它；否则，创建一个新的。
-
-        :return: FAISS 向量数据库实例
-        """
-        # 创建文档列表
         documents = [
             DocumentDB(
                 id=chunk.id,
@@ -78,10 +71,8 @@ class NaiveRAGAgent(BaseAgent):
             for chunk in chunks
         ]
 
-        # 初始化嵌入函数（使用 HuggingFaceEmbeddings）
         embedding_function = self.embedder
 
-        # 创建 FAISS 索引
         faiss_db = FaissDatabase.from_documents(documents, embedding_function)
 
         return faiss_db

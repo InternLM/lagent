@@ -30,7 +30,6 @@ class PdfParser:
             os.makedirs(output_dir)
 
         for i, page in enumerate(pages):
-            # 提取图像
             img = page.to_image()
             img_path = os.path.join(output_dir, f"page_{i + 1}.png")
             img.save(img_path)
@@ -224,18 +223,6 @@ def print_parsed_content(parsed_content):
             print(f"\nPage {page_num}:\n{text}")
     else:
         print("No text")
-
-    # # 打印表格内容
-    # print("\nTables:")
-    # if parsed_content.get("tables"):
-    #     for table_num, table in enumerate(parsed_content["tables"], 1):
-    #         print(f"\nTable {table_num}:")
-    #         for row in table:
-    #             print(row)
-    # else:
-    #     print("No tables")
-
-    # 打印图片信息
     print("\nImages:")
     if "images" in parsed_content and parsed_content["images"]:
         for img_num, img in enumerate(parsed_content["images"], 1):
@@ -247,14 +234,11 @@ def print_parsed_content(parsed_content):
 
 
 def main():
-    # 指定要解析的 PDF 文件路径
     file_path = 'example.pdf'
 
-    # 解析 PDF 文件
-    pdfparser = PDFParser()
+    pdfparser = PdfParser()
     parsed_content = pdfparser.parse(file_path)
 
-    # 打印解析结果
     print_parsed_content(parsed_content)
 
 

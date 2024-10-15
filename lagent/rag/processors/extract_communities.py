@@ -18,26 +18,24 @@ import numpy as np
 
 def nx_to_igraph(graph_nx: nx.Graph) -> ig.Graph:
     """
-    将 NetworkX 图转换为 iGraph 图，保留所有节点和边的属性。
+        Converts a NetworkX graph to an iGraph graph, preserving all node and edge attributes.
 
-    :param graph_nx: NetworkX 图对象
-    :return: iGraph 图对象
+        Args:
+            graph_nx (nx.Graph): The NetworkX graph object to convert.
+
+        Returns:
+            ig.Graph: The converted iGraph graph object.
     """
-    # 将所有节点转换为字符串
     ig_nodes = [str(node) for node in graph_nx.nodes()]
 
-    # 将所有边转换为字符串，并确保无向图中边的顺序一致
     ig_edges = [tuple(sorted([str(source), str(target)])) for source, target in graph_nx.edges()]
 
-    # 创建一个空的 iGraph 图，并添加所有节点
     graph_ig = ig.Graph()
     graph_ig.add_vertices(ig_nodes)
-    graph_ig.vs["id"] = ig_nodes  # 设置节点的 'id' 属性
+    graph_ig.vs["id"] = ig_nodes
 
-    # 添加所有边到 iGraph 图中
     graph_ig.add_edges(ig_edges)
 
-    # 创建边的映射字典，键为 (source, target)，值为边的索引
     edge_mapping = {}
     for idx, edge in enumerate(graph_ig.es):
         source = graph_ig.vs[edge.source]["id"]
@@ -45,13 +43,11 @@ def nx_to_igraph(graph_nx: nx.Graph) -> ig.Graph:
         edge_key = tuple(sorted([source, target]))
         edge_mapping[edge_key] = idx
 
-    # 复制节点属性
     for node_id, attrs in graph_nx.nodes(data=True):
         ig_node = graph_ig.vs.find(id=str(node_id))
         for attr_key, attr_val in attrs.items():
             ig_node[attr_key] = attr_val
 
-    # 复制边属性
     for source, target, attrs in graph_nx.edges(data=True):
         source_str = str(source)
         target_str = str(target)
@@ -62,26 +58,28 @@ def nx_to_igraph(graph_nx: nx.Graph) -> ig.Graph:
             for attr_key, attr_val in attrs.items():
                 ig_edge[attr_key] = attr_val
         else:
-            # 如果边未找到，可以选择忽略或处理
-            print(f"警告: 边 ({source}, {target}) 未在 iGraph 中找到。")
+            print(f"Warning: Edge ({source}, {target}) not found in iGraph.")
 
     return graph_ig
 
 
 def generate_node_embeddings(graph_nx: nx.Graph,
-                             dimensions: int = 32,  # 减少维度以适应描述较短的情况
-                             walk_length: int = 10,  # 减少随机游走长度
-                             num_walks: int = 100,  # 减少随机游走次数
+                             dimensions: int = 32,
+                             walk_length: int = 10,
+                             num_walks: int = 100,
                              workers: int = 4) -> Dict[str, np.ndarray]:
     """
-    使用 Node2Vec 生成节点嵌入
+        Generates node embeddings using Node2Vec.
 
-    :param graph_nx: NetworkX 图对象
-    :param dimensions: 嵌入维度
-    :param walk_length: 随机游走长度
-    :param num_walks: 每个节点的随机游走次数
-    :param workers: 并行执行的工作线程数
-    :return: 节点嵌入字典 {node_id: embedding}
+        Args:
+            graph_nx (nx.Graph): The NetworkX graph object.
+            dimensions (int, optional): The dimensionality of the embeddings. Defaults to 32.
+            walk_length (int, optional): The length of each random walk. Defaults to 10.
+            num_walks (int, optional): The number of walks per node. Defaults to 100.
+            workers (int, optional): The number of parallel workers. Defaults to 4.
+
+        Returns:
+            Dict[str, np.ndarray]: A dictionary mapping node IDs to their embedding vectors.
     """
     node2vec = Node2Vec(graph_nx, dimensions=dimensions, walk_length=walk_length,
                         num_walks=num_walks, workers=workers, quiet=True)
@@ -97,19 +95,25 @@ def generate_node_embeddings(graph_nx: nx.Graph,
 
 def get_community_hierarchy(communities: List[Community], levels: List[int]) -> Dict[int, Dict[str, List[str]]]:
     """
-    根据输入的communities，得到每个community的sub community
+        Constructs a hierarchical mapping of communities to their sub-communities.
+
+        Args:
+            communities (List[Community]): A list of Community instances.
+            levels (List[int]): A list of unique levels in the community hierarchy.
+
+        Returns:
+            Dict[int, Dict[str, List[str]]]: A dictionary mapping each level to its communities and their sub-community IDs.
     """
     communities_by_level: Dict[int, Dict[str, List[str]]] = {}
     community_hierarchy: Dict[int, Dict[str, List[str]]] = {}
 
-    # 首先获得每个level中不同community包含的节点
     for level in levels:
         communities_by_level[level] = {}
         for community in communities:
             if community.level == level:
                 communities_by_level[level][community.community_id] = community.nodes_id
 
-    # 默认level更小的为更高层次
+    # Sort levels in ascending order (smaller level means higher hierarchy)
     levels = list(sorted(levels))
 
     for index in range(len(levels) - 1):
@@ -135,13 +139,14 @@ def get_community_hierarchy(communities: List[Community], levels: List[int]) -> 
 def get_level_communities(hierarchy: Dict[int, Dict],
                           layer: Layer) -> Dict[int, Dict[int, List]]:
     """
-    以字典的形式返回不同层次划分得到的community
+    Get a dictionary mapping each level to its communities and their containing node IDs.
+
     Args:
-        hierarchy:
-        layer:
+        hierarchy (Dict[int, Dict[str, List[str]]]): The community hierarchy mapping.
+        layer (Layer): The layer containing community information.
 
     Returns:
-        {level: {community_id: [nodes_id]}}
+        Dict[int, Dict[int, List[str]]]: A dictionary mapping each level to its communities and their node IDs.
     """
     result: Dict[int, Dict[int, List]] = {}
     id_map_entities = {}
@@ -164,13 +169,14 @@ def get_level_communities(hierarchy: Dict[int, Dict],
 def get_level_Communities(hierarchy: Dict[int, Dict],
                           layer: Layer) -> Dict[int, List[Community]]:
     """
-    将community以类的形式返回
-    Args:
-        layer:
-        hierarchy:
+        Converts communities into Community instances organized by level.
 
-    Returns:
-        Dict[int, List[Community]]
+        Args:
+            hierarchy (Dict[int, Dict[str, List[str]]]): The community hierarchy mapping.
+            layer (Layer): The layer containing community information.
+
+        Returns:
+            Dict[int, List[Community]]: A dictionary mapping each level to a list of Community instances.
     """
     result: Dict[int, List[Community]] = {}
     dict_result = get_level_communities(hierarchy, layer)
@@ -214,14 +220,15 @@ class CommunitiesDetector(BaseProcessor):
         """
         根据给出实体做分层次聚类
         Args:
-            graph:
-            detector:
-            **kwargs:
+            graph (MultiLayerGraph): The multi-layer graph containing entities and relationships.
+            detector (Optional[Dict[str, Any]], optional): Configuration for the community detection algorithm.
+                If provided, it overrides the initial detector configuration. Defaults to None.
+            **kwargs (Any): Additional keyword arguments for community detection.
 
         Returns:
+            MultiLayerGraph: The updated graph with detected communities added as a new layer.
 
         """
-        # 根据给出的detector，由对应方法得到不同层次社区并规范化输出
 
         if detector is None:
             _detector = self._detector
@@ -230,7 +237,6 @@ class CommunitiesDetector(BaseProcessor):
             _detector = detector.pop('name', '').lower() or self._detector
             _detector_config = detector
 
-        # 目前只考虑节点为entity的聚类
         entity_layer = graph.layers['summarized_entity_layer']
         dict_entities = entity_layer.get_nodes()
         id_map_entities = {}
@@ -254,11 +260,11 @@ class CommunitiesDetector(BaseProcessor):
         communities_by_level = get_level_Communities(hierarchy, entity_layer)
 
         # save communities
-        storage = self._storage
-        list_dict_to_save = []
-        for k, v in communities_by_level.items():
-            list_dict_to_save.append({k: [_commu.to_dict() for _commu in v]})
-        storage.put("level_communities_class", list_dict_to_save)
+        # storage = self._storage
+        # list_dict_to_save = []
+        # for k, v in communities_by_level.items():
+        #     list_dict_to_save.append({k: [_commu.to_dict() for _commu in v]})
+        # storage.put("level_communities_class", list_dict_to_save)
 
         edges = copy.deepcopy(entity_layer.graph.edges(data=True))
 
@@ -280,7 +286,6 @@ class CommunitiesDetector(BaseProcessor):
                     node['level'] = level
                     level_layer.add_node(node_id, **node)
 
-                # 添加边
                 for edge in edges:
                     edge[2]['level'] = level
                     level_layer.add_edge(edge[0], edge[1], **(edge[2]))
@@ -291,14 +296,19 @@ class CommunitiesDetector(BaseProcessor):
                                            n_clusters: Optional[List[int]] = None,
                                            **kwargs):
         """
-        基于节点嵌入进行层次聚类
+            Performs hierarchical clustering based on node embeddings.
 
-        :param graph:
-        :param n_clusters: 聚类数列表
-        :return: dict[level: {node_id: cluster}]
+            Args:
+                graph (nx.Graph): The NetworkX graph object.
+                n_clusters (Optional[List[int]], optional): A list of cluster counts for each hierarchical level.
+                    Defaults to [2, 3, 4].
+                **kwargs (Any): Additional keyword arguments for clustering.
+
+            Returns:
+                Dict[int, Dict[str, int]]: A dictionary mapping each level to a mapping of node IDs to cluster labels.
         """
         if n_clusters is None:
-            n_clusters = [2, 3, 4]  # 可以根据需要调整
+            n_clusters = [2, 3, 4]
         embeddings = generate_node_embeddings(graph, **kwargs)
 
         hierarchy = {}
@@ -318,16 +328,19 @@ class CommunitiesDetector(BaseProcessor):
             max_cluster_size: Optional[int] = None,
             **kwargs) -> Dict[int, Dict[str, int]]:
         """
-        利用 Leiden 算法在 networkx 图上手动进行分层次社区检测
+            Performs hierarchical community detection using the Leiden algorithm on a NetworkX graph.
 
-        :param graph_nx: 必须是 networkx 的图对象
-        :param resolutions: 分辨率参数列表，不同的分辨率对应不同的层次
-        :return: dict[level: {node_index: cluster}] 层次化社区划分结果
+            Args:
+                graph_nx (nx.Graph): The NetworkX graph object.
+                max_cluster_size (Optional[int], optional): The maximum size of any cluster. Defaults to 10.
+                **kwargs (Any): Additional keyword arguments for the Leiden algorithm.
+
+            Returns:
+                Dict[int, Dict[str, int]]: A dictionary mapping each level to a mapping of node IDs to cluster labels.
         """
         if max_cluster_size is None:
             max_cluster_size = 10
 
-        # 使用 graspologic 提供的 hierarchical_leiden 方法进行社区检测
 
         community_mapping = hierarchical_leiden(
             graph_nx, max_cluster_size=max_cluster_size, random_seed=0xDEADBEEF
@@ -337,13 +350,6 @@ class CommunitiesDetector(BaseProcessor):
             results[partition.level] = results.get(partition.level, {})
             results[partition.level][partition.node] = partition.cluster
 
-        # hierarchy = {}
-        # for i, resolution in enumerate(resolutions):
-        #     _, levels = hierarchical_leiden(graph_nx, resolution=resolution, **kwargs)
-        #
-        #     # 将结果以 {level: {node_index: cluster}} 的形式存储
-        #     hierarchy[i] = {node: cluster for node, cluster in enumerate(levels[0])}
-
         return results
 
     def custom_leiden_hierarchical(
@@ -352,29 +358,20 @@ class CommunitiesDetector(BaseProcessor):
             resolutions: Optional[List] = DEFAULT_RESOLUTIONS,
             **kwargs) -> Dict[int, Dict[int, int]]:
         """
-        利用leiden算法手动进行分层次社区检测
+            Performs hierarchical community detection using a custom Leiden algorithm implementation.
 
-        :param graph:
-        :param resolutions:
-        :return: dict[level: {node_index: cluster}]
+            Args:
+                graph (nx.Graph): The NetworkX graph object.
+                resolutions (Optional[List[float]], optional): A list of resolution parameters for the Leiden algorithm.
+                    Defaults to DEFAULT_RESOLUTIONS.
+                **kwargs (Any): Additional keyword arguments for the Leiden algorithm.
+
+            Returns:
+                Dict[int, Dict[str, int]]: A dictionary mapping each level to a mapping of node IDs to cluster labels.
         """
 
-        # TODO: get resolutions(strategy?动态调整？)
-        # if resolutions is None:
-        #     resolutions = DEFAULT_RESOLUTIONS
-        #
-        # ig_graph = nx_to_igraph(graph)
-        #
-        # hierarchy = {}
-        # for i, resolution in enumerate(resolutions):
-        #     partition = la.find_partition(
-        #         ig_graph, la.CPMVertexPartition, resolution_parameter=resolution
-        #     )
-        #     hierarchy[i] = {node: cluster for node, cluster in enumerate(partition.membership)}
-        #
-        # # TODO: normalize output
-        #
-        # return hierarchy
+        # TODO: get resolutions(strategy?)
+
         if resolutions is None:
             resolutions = DEFAULT_RESOLUTIONS
 
@@ -421,37 +418,22 @@ class CommunitiesDetector(BaseProcessor):
         return hierarchy
 
     def kmeans_cluster(self, nodes: List[Node], num_cluster: Optional[List] = None, **kwargs):
-        """
-        针对不含边的chunk_node
-        Args:
-            nodes:
-            num_cluster:不同分辨率下的聚类数量列表
-            **kwargs:
 
-        Returns:
-
-        """
-        # TODO:考虑根据nodes数量以及实际应用情况手动调整num_cluster?
         if num_cluster is None:
             num_cluster = DEFAULT_NUM_CLUSTER
-        # 提取内容
         contents = [node.content for node in nodes]
         ids = [node.id for node in nodes]
 
-        # 计算TF-IDF矩阵
         vectorizer = TfidfVectorizer()
         tfidf_matrix = vectorizer.fit_transform(contents)
 
-        # 初始化层次结果字典
         hierarchy = {}
 
-        # 进行多层次聚类
         for i, n_clusters in enumerate(num_cluster):
             kmeans = KMeans(n_clusters=n_clusters, random_state=42)
             kmeans.fit(tfidf_matrix)
             clusters = kmeans.labels_
 
-            # 将结果保存为 {node_index: cluster}
             hierarchy[i] = {index: cluster for index, cluster in enumerate(clusters)}
 
         return hierarchy
