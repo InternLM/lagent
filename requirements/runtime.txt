@@ -1,5 +1,6 @@
 arxiv
 distro
+duckduckgo_search==5.3.1b1
 filelock
 func_timeout
 griffe
@@ -13,4 +14,3 @@ streamlit
 tiktoken
 timeout-decorator
 typing-extensions
-duckduckgo_search==5.3.1b1
