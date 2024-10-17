@@ -253,7 +253,9 @@ class LMDeployPipeline(BaseModel):
         }
         backend_config = TurbomindEngineConfig(**backend_config)
         self.model = pipeline(
-            model_path=self.path, model_name=model_name, tp=tp, **pipeline_cfg)
+            model_path=self.path,
+            backend_config=backend_config,
+            log_level='WARNING')
 
     def generate(self,
                  inputs: Union[str, List[str]],
