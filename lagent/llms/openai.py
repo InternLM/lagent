@@ -230,7 +230,8 @@ class GPTAPI(BaseAPILLM):
                 if self.model_type.lower().startswith('qwen'):
                     return response['output']['choices'][0]['message']['content'].strip()
                 elif self.model_type.lower().startswith('claude'):
-                    if response['msgCode'] == -1:
+                    print(response)
+                    if response['msgCode'] == '-1':
                         raise RuntimeError(response['msg'])
                     elif response['data']['stop_reason'] == 'max_tokens':
                         raise RuntimeError('max_tokens reached')
@@ -692,9 +693,11 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                         if self.model_type.lower().startswith('qwen'):
                             return response['output']['choices'][0]['message']['content'].strip()
                         elif self.model_type.lower().startswith('claude'):
-                            if response['msgCode'] == -1:
+                            if response['msgCode'] == '-1':
+                                print(response)
                                 raise RuntimeError(response['msg'])
                             elif response['data']['stop_reason'] == 'max_tokens':
+                                print(response)
                                 raise RuntimeError('max_tokens reached')
                             return response['data']['content'][0]['text'].strip()
                         return response['choices'][0]['message'][
