@@ -1,5 +1,5 @@
 google-search-results
-lmdeploy>=0.2.3
+lmdeploy<=0.5.3
 pillow
 python-pptx
 timeout_decorator
