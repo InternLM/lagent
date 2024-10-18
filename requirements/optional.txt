@@ -4,5 +4,5 @@ pillow
 python-pptx
 timeout_decorator
 torch
-transformers>=4.34
+transformers>=4.34,<=4.40
 vllm>=0.3.3
