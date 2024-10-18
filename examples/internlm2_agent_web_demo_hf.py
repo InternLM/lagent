@@ -12,7 +12,7 @@ from lagent.llms.meta_template import INTERNLM2_META as META
 from lagent.schema import AgentStatusCode
 
 # from streamlit.logger import get_logger
-
+os.environ["MPLBACKEND"] = ""
 
 class SessionState:
 
