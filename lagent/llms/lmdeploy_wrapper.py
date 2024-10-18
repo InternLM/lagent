@@ -234,7 +234,7 @@ class LMDeployPipeline(BaseModel):
                  pipeline_cfg=dict(),
                  **kwargs):
         import lmdeploy
-        from lmdeploy import TurbomindEngineConfig, pipeline, version_info
+        from lmdeploy import ChatTemplateConfig, TurbomindEngineConfig, pipeline, version_info
 
         self.str_version = lmdeploy.__version__
         self.version = version_info
@@ -252,9 +252,12 @@ class LMDeployPipeline(BaseModel):
             if hasattr(TurbomindEngineConfig, k)
         }
         backend_config = TurbomindEngineConfig(**backend_config)
+        chat_template_config = ChatTemplateConfig(
+            model_name=model_name) if model_name else None
         self.model = pipeline(
             model_path=self.path,
             backend_config=backend_config,
+            chat_template_config=chat_template_config,
             log_level='WARNING')
 
     def generate(self,
