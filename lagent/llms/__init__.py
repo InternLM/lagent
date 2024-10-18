@@ -6,9 +6,11 @@ from .meta_template import INTERNLM2_META
 from .openai import GPTAPI
 from .sensenova import SENSENOVA_API
 from .vllm_wrapper import VllmModel
+from .ollama import OllamaAPI
 
 __all__ = [
     'BaseModel', 'BaseAPIModel', 'SENSENOVA_API', 'GPTAPI', 'LMDeployClient',
     'LMDeployPipeline', 'LMDeployServer', 'HFTransformer',
-    'HFTransformerCasualLM', 'INTERNLM2_META', 'HFTransformerChat', 'VllmModel'
+    'HFTransformerCasualLM', 'INTERNLM2_META', 'HFTransformerChat', 'VllmModel',
+    'OllamaAPI'
 ]
