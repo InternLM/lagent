@@ -7,6 +7,7 @@ import faiss
 from typing import List, Tuple, Optional, Union, Callable, Dict, Any
 
 from lagent.rag.nlp.sentence_transformer_embedder import SentenceTransformerEmbedder
+from lagent.utils import create_object
 
 
 class DocumentDB:
@@ -27,7 +28,7 @@ class DocumentDB:
 
 class FaissDatabase:
     def __init__(self,
-                 embedding_model: Optional[SentenceTransformerEmbedder] = None,
+                 embedding_model: Optional[SentenceTransformerEmbedder] = dict(type=SentenceTransformerEmbedder),
                  dimension: int = 384,
                  normalize: bool = False):
         """
@@ -41,10 +42,7 @@ class FaissDatabase:
             normalize (bool): Whether to apply L2 normalization to vectors.
                 Defaults to False.
         """
-        if embedding_model is None:
-            self.embedding_model = SentenceTransformerEmbedder()
-        else:
-            self.embedding_model = embedding_model
+        self.embedding_model = create_object(embedding_model)
 
         self.dimension = dimension
         self.index = faiss.IndexFlat(dimension, faiss.METRIC_L2)

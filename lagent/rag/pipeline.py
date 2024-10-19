@@ -51,34 +51,10 @@ class Pipeline:
         self.processors = []
 
     def add_processor(self, processor: BaseProcessor):
-
         self.processors.append(processor)
 
-    def run(self, initial_data: MultiLayerGraph) -> MultiLayerGraph:
+    def run(self, initial_data):
         data = initial_data
         for processor in self.processors:
             data = processor.run(data)
         return data
-
-    @classmethod
-    def load_processors_from_config(cls, config_path: str, dependencies: Dict[str, Any]) -> List[BaseProcessor]:
-        with open(config_path, 'r') as file:
-            config = yaml.safe_load(file)
-
-        processors_list = []
-        for proc_conf in config.get('processors', []):
-            class_name = proc_conf['class']
-            params = proc_conf.get('params', {})
-
-            for key, value in params.items():
-                if isinstance(value, str) and value in dependencies:
-                    params[key] = dependencies[value]
-
-            processor_class = processors.get(class_name)
-            if not processor_class:
-                raise ValueError(f"processor:'{class_name}' is not found")
-
-            processor_instance = processor_class(**params)
-            processors_list.append(processor_instance)
-
-        return processors_list

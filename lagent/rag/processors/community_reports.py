@@ -5,6 +5,8 @@ from typing import Dict, Optional, List, Any
 import pandas as pd
 
 from lagent.rag.doc import Storage
+from lagent.utils import create_object
+from lagent.llms.deepseek import DeepseekAPI
 from lagent.rag.processors.extract_communities import get_community_hierarchy
 from lagent.rag.prompts import COMMUNITY_REPORT_PROMPT
 from lagent.rag.schema import MultiLayerGraph, Community, CommunityReport, CommunityContext, Node, Relationship
@@ -197,13 +199,14 @@ class CommunityReportsExtractor(BaseProcessor):
 
     name = 'CommunityReportsExtractor'
 
-    def __init__(self, llm, max_tokens: Optional[int] = None, tokenizer: Optional = None, prompt: Optional[str] = None):
+    def __init__(self,
+                 llm=dict(type=DeepseekAPI),
+                 max_tokens: int = DEFAULT_LLM_MAX_TOKEN,
+                 tokenizer=dict(type=SimpleTokenizer),
+                 prompt: str = COMMUNITY_REPORT_PROMPT):
         super().__init__(name='CommunityReportsExtractor')
-        self.max_tokens = max_tokens or DEFAULT_LLM_MAX_TOKEN
-        self.tokenizer = tokenizer or SimpleTokenizer()
-        self.llm = llm
-        if prompt is None:
-            prompt = COMMUNITY_REPORT_PROMPT
+        self.tokenizer = create_object(tokenizer)
+        self.llm = create_object(llm)
         self.prompt = prompt
 
     def run(self, graph: MultiLayerGraph) -> MultiLayerGraph:

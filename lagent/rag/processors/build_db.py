@@ -3,6 +3,7 @@ from lagent.rag.nlp import FaissDatabase, DocumentDB
 from lagent.rag.pipeline import BaseProcessor, register_processor
 from lagent.rag.nlp import SentenceTransformerEmbedder
 from lagent.rag.schema import Chunk, Node
+from lagent.utils import create_object
 
 from typing import Optional, List
 
@@ -11,10 +12,10 @@ from typing import Optional, List
 class BuildDatabase(BaseProcessor):
     name = 'BuildDatabase'
 
-    def __init__(self, embedder: Optional = None):
+    def __init__(self, embedder=dict(type=SentenceTransformerEmbedder)):
         super().__init__(name='BuildDatabase')
 
-        self.embedder = embedder or SentenceTransformerEmbedder()
+        self.embedder = create_object(embedder)
 
     def run(self, data: MultiLayerGraph) -> MultiLayerGraph:
         if 'chunk_layer' in data.layers:
@@ -68,7 +69,7 @@ class BuildDatabase(BaseProcessor):
 
         embedding_function = self.embedder
 
-        faiss_db = FaissDatabase.from_documents(documents=documents, emedder=embedding_function)
+        faiss_db = FaissDatabase.from_documents(documents=documents, embedder=embedding_function)
 
         # # save faiss index
         # faiss_db.save_local(f'{self.db_index_path}_entities')

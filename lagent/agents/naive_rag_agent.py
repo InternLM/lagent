@@ -3,18 +3,26 @@ from typing import Any, List
 from .rag_agent import BaseAgent
 from lagent.rag.prompts import KNOWLEDGE_PROMPT
 from lagent.rag.schema import Document, Chunk
-from lagent.rag.processors import ChunkSplitter
-from lagent.rag.nlp import SentenceTransformerEmbedder
+from lagent.llms import DeepseekAPI, BaseAPILLM
+from lagent.rag.processors import ChunkSplitter, DocParser, BuildDatabase, SaveGraph
+from lagent.rag.nlp import SentenceTransformerEmbedder, SimpleTokenizer
 from lagent.rag.nlp import FaissDatabase, DocumentDB
 
 
 class NaiveRAGAgent(BaseAgent):
-    def __init__(self, processors_config, **kwargs):
-        super().__init__(processors_config=processors_config, **kwargs)
+    def __init__(self,
+                 llm: BaseAPILLM = dict(type=DeepseekAPI),
+                 embedder=dict(type=SentenceTransformerEmbedder),
+                 tokenizer=dict(type=SimpleTokenizer),
+                 processors_config:
+                 List = [dict(type=DocParser), dict(type=ChunkSplitter),
+                         dict(type=BuildDatabase), dict(type=SaveGraph)],
+                 **kwargs):
+        super().__init__(llm=llm, embedder=embedder, tokenizer=tokenizer, processors_config=processors_config, **kwargs)
 
     def forward(self, query: str, **kwargs) -> Any:
 
-        embedder = self.embedder or SentenceTransformerEmbedder()
+        embedder = self.embedder
         memory = self.external_memory
         tokenizer = self.tokenizer
 
@@ -43,7 +51,7 @@ class NaiveRAGAgent(BaseAgent):
             id='search_result',
             metadata={'source': 'retrieve transform'}
         )
-        chunk_extractor = ChunkSplitter({'chunk_size': int(max_ref_token * 0.5)})
+        chunk_extractor = ChunkSplitter(chunk_size=int(max_ref_token * 0.5))
         temp_chunks = chunk_extractor.split_into_chunks(temp_doc)
         temp_chunks_db = self.initialize_chunk_faiss(temp_chunks)
         final_results = temp_chunks_db.similarity_search_with_score(query, k=2)

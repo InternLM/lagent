@@ -50,8 +50,8 @@ class PdfParser:
     def ocr(self, pagenum, img, chars, zoomin=3):
         bxs = [
             {
-                "x0": c["x0"] / zoomin, "x1": c["x1"] / zoomin,  # 左和右的x
-                "top": c["top"] / zoomin, "text": c.get("text", ""),  # 顶和底的y
+                "x0": c["x0"] / zoomin, "x1": c["x1"] / zoomin,
+                "top": c["top"] / zoomin, "text": c.get("text", ""),
                 "bottom": c["bottom"] / zoomin,
                 "page_number": pagenum
             }
@@ -203,7 +203,7 @@ class PdfParser:
         self.text_content.append(parsed_text)
         for page_num, img in enumerate(self.page_images, start=1):
             image_path = f"image_page_{page_num}.png"
-            img.save(image_path)  # 保存图像为文件
+            img.save(image_path)
             self.image_content.append({
                 "page_number": page_num,
                 "image_path": image_path,
@@ -216,7 +216,6 @@ class PdfParser:
 
 
 def print_parsed_content(parsed_content):
-    # 打印文本内容
     print("\nText:")
     if parsed_content.get("text"):
         for page_num, text in enumerate(parsed_content["text"], 1):

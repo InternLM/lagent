@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 import hashlib
 import requests
 
+from lagent.utils.util import create_object
 from lagent.rag.schema import Document, MultiLayerGraph
 from lagent.rag.doc import Storage
 from lagent.rag.doc import PdfParser, DocxParser
@@ -16,12 +17,9 @@ class DocParser(BaseProcessor):
     expected_input_type = List
     expected_output_type = MultiLayerGraph
 
-    def __init__(self, cfg: Optional[Dict] = None, storage: Optional[Storage] = None):
+    def __init__(self, storage: Storage = dict(type=Storage)):
         super().__init__(name='DocParser')
-        if cfg is None:
-            cfg = {}
-        self.cfg = cfg
-        self.storage = storage or Storage()
+        self.storage = create_object(storage)
 
     def run(self, files: List[Union[str, dict]]) -> MultiLayerGraph:
 
@@ -142,7 +140,8 @@ class DocParser(BaseProcessor):
         try:
             pdf_parser = PdfParser()
             content = pdf_parser.parse(file_path=file_path)
-            content = [{'page_num': 1, 'content': content}]
+            paras = content['text'][-1]
+            content = [{'page_num': 1, 'content': {'text': [f'{para}' for para in paras if para.strip() != '']}}]
             document = Document(
                 content=content,
                 id=os.path.basename(file_path),
@@ -158,7 +157,8 @@ class DocParser(BaseProcessor):
         try:
             doxc_parser = DocxParser()
             content = doxc_parser.parse(file_path=file_path)
-            content = [{'page_num': 1, 'content': content}]
+            paras = content['paragraphs']
+            content = [{'page_num': 1, 'content': {'text': [f'{para}' for para in paras if para.strip() != '']}}]
             document = Document(
                 content=content,
                 id=os.path.basename(file_path),

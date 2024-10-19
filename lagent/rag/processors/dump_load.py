@@ -6,6 +6,7 @@ from lagent.rag.schema import MultiLayerGraph
 from lagent.rag.pipeline import BaseProcessor, register_processor
 from lagent.rag.nlp import FaissDatabase
 from lagent.rag.doc import Storage
+from lagent.utils import create_object
 
 
 @register_processor
@@ -14,10 +15,10 @@ class LoadGraph(BaseProcessor):
     expected_input_type = str
     expected_output_type = MultiLayerGraph
 
-    def __init__(self, storage: Optional = None):
+    def __init__(self, storage: Storage = dict(type=Storage)):
         super().__init__(name='LoadGraph')
 
-        self.storage = storage or Storage()
+        self.storage = create_object(storage)
 
     def run(self, path: str) -> MultiLayerGraph:
         if not os.path.exists(path):
@@ -39,9 +40,9 @@ class SaveGraph(BaseProcessor):
     expected_input_type = MultiLayerGraph
     expected_output_type = MultiLayerGraph
 
-    def __init__(self, dir_name: Optional = None, storage: Optional = None):
+    def __init__(self, dir_name: Optional = None, storage: Storage = dict(type=Storage)):
         super().__init__(name='SaveGraph')
-        self.storage = storage or Storage()
+        self.storage = create_object(storage)
         self.dir_name = dir_name or self.storage.cache_dir
 
     def run(self, data: MultiLayerGraph) -> MultiLayerGraph:

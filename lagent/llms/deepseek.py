@@ -49,22 +49,18 @@ Deepseek_API_BASE = "https://api.deepseek.com"
 class DeepseekAPI(BaseAPILLM):
     """
     Args:
-        model_type (str): The name of OpenAI's model.
+        model_type (str): The name of DeepSeek's model.
         retry (int): Number of retires if the API call fails. Defaults to 2.
-        key (str or List[str]): OpenAI key(s). In particular, when it
+        key (str or List[str]): DeepSeek key(s). In particular, when it
             is set to "ENV", the key will be fetched from the environment
-            variable $OPENAI_API_KEY, as how openai defaults to be. If it's a
+            variable $DEEPSEEK_API_KEY, as how openai defaults to be. If it's a
             list, the keys will be used in round-robin manner. Defaults to
             'ENV'.
-        org (str or List[str], optional): OpenAI organization(s). If not
-            specified, OpenAI uses the default organization bound to each API
-            key. If specified, the orgs will be posted with each request in
-            round-robin manner. Defaults to None.
         meta_template (Dict, optional): The model's meta prompts
             template if needed, in case the requirement of injecting or
             wrapping of any meta instructions.
-        api_base (str): The base url of OpenAI's API. Defaults to
-            'https://api.openai.com/v1/chat/completions'.
+        api_base (str): The base url of DeepSeek's API. Defaults to
+            'https://api.deepseek.com'.
         gen_params: Default generation configuration which could be overridden
             on the fly of generation.
     """
@@ -76,7 +72,6 @@ class DeepseekAPI(BaseAPILLM):
                  retry: int = 2,
                  json_mode: bool = False,
                  key: Union[str, List[str]] = 'ENV',
-                 org: Optional[Union[str, List[str]]] = None,
                  meta_template: Optional[Dict] = [
                      dict(role='system', api_role='system'),
                      dict(role='user', api_role='user'),
@@ -86,10 +81,6 @@ class DeepseekAPI(BaseAPILLM):
                  proxies: Optional[Dict] = None,
                  max_tokens: Optional[int] = None,
                  **gen_params):
-        # if 'top_k' in gen_params:
-        #     warnings.warn('`top_k` parameter is deprecated in OpenAI APIs.',
-        #                   DeprecationWarning)
-        #     gen_params.pop('top_k')
         super().__init__(
             model_type=model_type,
             meta_template=meta_template,
@@ -108,7 +99,6 @@ class DeepseekAPI(BaseAPILLM):
         self.invalid_keys = set()
 
         self.key_ctr = 0
-        self.org_ctr = 0
         self.url = api_base
         self.model_type = model_type
         self.proxies = proxies

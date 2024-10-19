@@ -1,0 +1,90 @@
+{
+    "document_layer": {
+        "nodes": [
+            {
+                "content": [
+                    {
+                        "page_num": 1,
+                        "content": {
+                            "text": [
+                                "基于RAG和网络搜索的大语言模型知识增强智能体研究",
+                                "申请人：PB22000264周可心  PB22000212郭笑言",
+                                "研究初衷",
+                                "当前，大型语言模型（LLM）在自然语言理解和生成领域取得了巨大的进展，但在实际应用中，其知识获取的局限性仍然是一个挑战。而基于RAG（Retrieval Augment Generation）的智能体将结合预训练的大型语言模型和实时的网络搜索技术，能够动态、实时地从网络中获取、筛选和整合知识，从而提高LLM的知识覆盖范围和质量。本研究旨在探索如何有效地利用RAG和网络搜索技术相结合的方式，构建一个高效、智能的知识增强性智能体，在老年人健康咨询、专业知识回答等特定场景下，为用户提供个性化、实时的知识服务，推动智能助手技术的发展。",
+                                "前期工作",
+                                "由于LLM（Large Language Model）的爆发以及其所展示的强大的语言理解和人机交互能力，LLM-based Agent采用LLM作为其大脑，解析用户的输入并完成复杂任务。现有的开源语言大模型有LLaMA、Gemma、Bert等，其中InternLM、ChatGLM、XVERSE等大模型在中文语料库上有着较好的性能。Lagent 是一个轻量级、开源的基于大语言模型的智能体（agent）框架，支持用户快速地将一个大语言模型转变为多种类型的智能体，并提供了一些典型工具为大语言模型赋能，如图1所示。经调研，本研究决定采用InternLM大模型，基于Lagent框架进行开发。",
+                                "图 1：Lagent框架",
+                                " ",
+                                "在前期工作中，笔者进行了LLM调研工作，了解了最新版本（v0.2.2）Lagent的框架及其提供的模块，通读examples代码并且测试了样例，通过ReAct方法进行推理和action的交互，并尝试不同的action实现不同场景下的任务。",
+                                "研究内容",
+                                "研究目标：",
+                                "在无需重新训练大语言模型的前提下，采用RAG和网络搜索技术，允许大模型实时访问在线知识库或其他外部数据库，对LLM进行知识增强。",
+                                "技术路线：",
+                                "（1）引入RAG技术应用场景需要的基础知识以外部知识库的形式接入LLM模型。",
+                                "RAG，即检索增强生成技术，常用于对大型语言模型（即LLM）输出进行优化，通过用户的输入查询，从外部知识库中搜索所查询的内容收集信息，进行进一步的筛选后传给LLM辅助回复的生成。RAG旨在将LLM扩展为能访问特定领域或组织的内部知识库，由于无需重新训练模型，是目前的一种经济高效的新数据引入方法。例如在健康咨询场景下，我们设想将常见的疾病相关知识和饮食建议等作为外部知识库接入LLM，这样可以显著提高LLM对话的可靠性与时效性，将LLM从简单的对话对话机器人升级为健康咨询助手。",
+                                "创新性的引入了一套给LLM接入web search的方案",
+                                "CoT[1]（Chain-of-Thought）提示显示了 LLMs 执行推理轨迹以生成涉及算术和常识推理的问题的答案的能力。ReAct[2]（Reason+Act）框架允许 LLMs 与外部工具交互以获取额外信息，从而给出更可靠和实际的回应。本研究创新性的引入一套给LLM接入web search的方案，将ReAct与CoT结合，使得LLM能够以交错的方式生成推理轨迹和任务特定操作，并且推理过程中能够将外部信息合并到推理中。ReAct思维链的方式可以引导LLM以类人的方式使用和分析网络的搜索结果，通过推理轨迹制定并完善计划，最终做出可靠的决策，增强LLM处理实际用户请求时决策的实时性与真实性。",
+                                "",
+                                "拟解决的问题：",
+                                "（1）利用Lagent框架，将RAG和采用的InternLM模型进行兼容，使得LLM与外部知识库进行高效的交互，增强智能助手解决问题的针对性和专业性。",
+                                "（2）一些研究表明，LLM接入web search后，由于搜索结果信息量剧增等问题，性能可能不如原始会话版本，需要策划高质量的网络搜索轨迹对智能体进行改善。",
+                                "",
+                                "参考文献：",
+                                "Wei, J., Wang, X., Schuurmans, D., Bosma, M., Chi, E.H., Xia, F., Le, Q., & Zhou, D. (2022). Chain of Thought Prompting Elicits Reasoning in Large Language Models. ArXiv, abs/2201.11903.",
+                                "Yao, S., Zhao, J., Yu, D., Du, N., Shafran, I., Narasimhan, K., & Cao, Y. (2022). React: Synergizing reasoning and acting in language models. arXiv preprint arXiv:2210.03629.",
+                                ""
+                            ]
+                        }
+                    }
+                ],
+                "metadata": {
+                    "file_type": "pdf",
+                    "file_path": "F:\\LLM-based_agent\\RAG\\lagent\\lagent\\rag\\examples\\test_file2.docx"
+                },
+                "id": "test_file2.docx"
+            }
+        ],
+        "edges": []
+    },
+    "chunk_layer": {
+        "nodes": [
+            {
+                "content": "[page: 1]\n基于RAG和网络搜索的大语言模型知识增强智能体研究\n申请人：PB22000264周可心  PB22000212郭笑言\n研究初衷\n当前，大型语言模型（LLM）在自然语言理解和生成领域取得了巨大的进展，但在实际应用中，其知识获取的局限性仍然是一个挑战。而基于RAG（Retrieval Augment Generation）的智能体将结合预训练的大型语言模型和实时的网络搜索技术，能够动态、实时地从网络中获取、筛选和整合知识，从而提高LLM的知识覆盖范围和质量。本研究旨在探索如何有效地利用RAG和网络搜索技术相结合的方式，构建一个高效、智能的知识增强性智能体，在老年人健康咨询、专业知识回答等特定场景下，为用户提供个性化、实时的知识服务，推动智能助手技术的发展。\n前期工作\n由于LLM（Large Language Model）的爆发以及其所展示的强大的语言理解和人机交互能力，LLM-based Agent采用LLM作为其大脑，解析用户的输入并完成复杂任务。现有的开源语言大模型有LLaMA、Gemma、Bert等，其中InternLM、ChatGLM、XVERSE等大模型在中文语料库上有着较好的性能。Lagent 是一个轻量级、开源的基于大语言模型的智能体（agent）框架，支持用户快速地将一个大语言模型转变为多种类型的智能体，并提供了一些典型工具为大语言模型赋能，如图1所示。经调研，本研究决定采用InternLM大模型，基于Lagent框架进行开发。\n图 1：Lagent框架\n\n在前期工作中，笔者进行了LLM调研工作，了解了最新版本（v0.2.2）Lagent的框架及其提供的模块，通读examples代码并且测试了样例，通过ReAct方法进行推理和action的交互，并尝试不同的action实现不同场景下的任务。\n研究内容\n研究目标：\n在无需重新训练大语言模型的前提下，采用RAG和网络搜索技术，允许大模型实时访问在线知识库或其他外部数据库，对LLM进行知识增强。\n技术路线：\n（1）引入RAG技术应用场景需要的基础知识以外部知识库的形式接入LLM模型。",
+                "metadata": {
+                    "source": "test_file2.docx"
+                },
+                "token_num": 792,
+                "id": "test_file2.docx0"
+            },
+            {
+                "content": "[page: 1]\n通读examples代码并且测试了样例, 通过ReAct方法进行推理和action的交互, 并尝试不同的action实现不同场景下的任务, \n研究内容\n研究目标：\n在无需重新训练大语言模型的前提下，采用RAG和网络搜索技术，允许大模型实时访问在线知识库或其他外部数据库，对LLM进行知识增强。\n技术路线：\n（1）引入RAG技术应用场景需要的基础知识以外部知识库的形式接入LLM模型。\nRAG，即检索增强生成技术，常用于对大型语言模型（即LLM）输出进行优化，通过用户的输入查询，从外部知识库中搜索所查询的内容收集信息，进行进一步的筛选后传给LLM辅助回复的生成。RAG旨在将LLM扩展为能访问特定领域或组织的内部知识库，由于无需重新训练模型，是目前的一种经济高效的新数据引入方法。例如在健康咨询场景下，我们设想将常见的疾病相关知识和饮食建议等作为外部知识库接入LLM，这样可以显著提高LLM对话的可靠性与时效性，将LLM从简单的对话对话机器人升级为健康咨询助手。\n创新性的引入了一套给LLM接入web search的方案\nCoT[1]（Chain-of-Thought）提示显示了 LLMs 执行推理轨迹以生成涉及算术和常识推理的问题的答案的能力。ReAct[2]（Reason+Act）框架允许 LLMs 与外部工具交互以获取额外信息，从而给出更可靠和实际的回应。本研究创新性的引入一套给LLM接入web search的方案，将ReAct与CoT结合，使得LLM能够以交错的方式生成推理轨迹和任务特定操作，并且推理过程中能够将外部信息合并到推理中。ReAct思维链的方式可以引导LLM以类人的方式使用和分析网络的搜索结果，通过推理轨迹制定并完善计划，最终做出可靠的决策，增强LLM处理实际用户请求时决策的实时性与真实性。\n\n拟解决的问题：\n（1）利用Lagent框架，将RAG和采用的InternLM模型进行兼容，使得LLM与外部知识库进行高效的交互，增强智能助手解决问题的针对性和专业性。\n（2）一些研究表明，LLM接入web search后，由于搜索结果信息量剧增等问题，性能可能不如原始会话版本，需要策划高质量的网络搜索轨迹对智能体进行改善。\n\n参考文献：\nWei, J., Wang, X., Schuurmans, D., Bosma, M., Chi, E.H., Xia, F., Le, Q., & Zhou, D. (2022). Chain of Thought Prompting Elicits Reasoning in Large Language Models. ArXiv, abs/2201.11903.",
+                "metadata": {
+                    "source": "test_file2.docx"
+                },
+                "token_num": 934,
+                "id": "test_file2.docx1"
+            },
+            {
+                "content": "[page: 1]\n\n\n参考文献：\nWei, J., Wang, X., Schuurmans, D., Bosma, M., Chi, E.H., Xia, F., Le, Q., & Zhou, D. (2022). Chain of Thought Prompting Elicits Reasoning in Large Language Models. ArXiv, abs/2201.11903.\nYao, S., Zhao, J., Yu, D., Du, N., Shafran, I., Narasimhan, K., & Cao, Y. (2022). React: Synergizing reasoning and acting in language models. arXiv preprint arXiv:2210.03629.\n",
+                "metadata": {
+                    "source": "test_file2.docx"
+                },
+                "token_num": 143,
+                "id": "test_file2.docx2"
+            }
+        ],
+        "edges": []
+    },
+    "interlayer_mappings": {
+        "document_layer -> chunk_layer": {
+            "test_file2.docx": [
+                "test_file2.docx0",
+                "test_file2.docx1",
+                "test_file2.docx2"
+            ]
+        }
+    },
+    "layers_db": {
+        "chunk_layer": "F:\\LLM-based_agent\\RAG\\lagent\\lagent\\rag\\cache\\chunk_layer.pkl"
+    }
+}

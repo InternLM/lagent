@@ -2,6 +2,8 @@ from typing import Optional, List, Dict
 from lagent.rag.schema import Chunk, Node, Relationship, MultiLayerGraph
 from lagent.rag.doc import Storage
 from lagent.rag.utils import normalize_edge, replace_variables_in_prompt
+from lagent.llms import DeepseekAPI, BaseAPILLM
+from lagent.utils import create_object
 from lagent.rag.pipeline import register_processor, BaseProcessor
 from lagent.rag.prompts import ENTITY_EXTRACTION_PROMPT
 
@@ -15,11 +17,11 @@ DEFAULT_ENTITY_TYPES = ["organization", "person", "geo", "event"]
 class EntityExtractor(BaseProcessor):
     name = 'EntityExtractor'
 
-    def __init__(self, llm, entity_types: Optional[List] = None, **kwargs):
+    def __init__(self, llm: BaseAPILLM = dict(type=DeepseekAPI), entity_types: Optional[List] = None, **kwargs):
         super().__init__('EntityExtractor')
         # TODO
         self.entity_types = entity_types or DEFAULT_ENTITY_TYPES
-        self.llm = llm
+        self.llm = create_object(llm)
         self.extraction_prompt = kwargs.get("prompts") or ENTITY_EXTRACTION_PROMPT
         self.tuple_delimiter = kwargs.get("tuple_delimiter", DEFAULT_TUPLE_DELIMITER)
         self.item_delimiter = kwargs.get("item_delimiter", DEFAULT_ITEM_DELIMITER)

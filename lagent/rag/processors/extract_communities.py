@@ -9,6 +9,7 @@ from lagent.rag.doc import Storage
 from lagent.rag.schema import Node, Layer, Community, MultiLayerGraph
 from lagent.rag.pipeline import register_processor, BaseProcessor
 from lagent.rag.settings import DEFAULT_RESOLUTIONS, DEFAULT_NUM_CLUSTER
+from lagent.utils import create_object
 from node2vec import Node2Vec
 from sklearn.cluster import AgglomerativeClustering
 import copy
@@ -199,18 +200,13 @@ def get_level_Communities(hierarchy: Dict[int, Dict],
 class CommunitiesDetector(BaseProcessor):
     name = 'CommunitiesDetector'
 
-    def __init__(self, detector: Optional[Dict] = None, storage: Optional[Storage] | Optional[Dict] = None):
+    def __init__(self, detector: Optional[Dict] = None, storage: Storage = dict(type=Storage)):
         super().__init__(name='CommunitiesDetector')
         if detector is None:
             detector = {}
         self._detector = detector.pop('name', '').lower() or 'custom_leidenalg'
         self._detector_config = detector
-        if isinstance(storage, Storage):
-            self._storage = storage
-        elif isinstance(storage, dict):
-            self._storage = Storage(**storage)
-        elif storage is None:
-            self._storage = Storage()
+        self._storage = create_object(storage)
 
     def run(
             self,

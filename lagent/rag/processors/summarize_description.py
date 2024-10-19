@@ -4,6 +4,8 @@ from lagent.rag.prompts import DEFAULT_SUMMATY_PROMPT
 from lagent.rag.settings import DEFAULT_LLM_MAX_TOKEN
 from lagent.rag.nlp import SimpleTokenizer as Tokenizer
 from lagent.rag.doc import Storage
+from lagent.llms import DeepseekAPI, BaseAPILLM
+from lagent.utils import create_object
 from lagent.rag.utils import replace_variables_in_prompt, tuple_to_str
 from lagent.rag.schema import MultiLayerGraph
 from lagent.rag.pipeline import register_processor, BaseProcessor
@@ -23,27 +25,19 @@ class DescriptionSummarizer(BaseProcessor):
     name = 'DescriptionSummarizer'
 
     def __init__(self,
-                 llm,
-                 storage: Union[Storage, Dict, None] = None,
+                 llm: BaseAPILLM = dict(type=DeepseekAPI),
+                 storage: Storage = dict(type=Storage),
                  summarization_prompt: Optional[str] = None,
                  max_tokens: Optional[int] = None,
                  **kwargs
                  ):
         super().__init__(name='DescriptionSummarizer')
-        self.llm = llm
+        self.llm = create_object(llm)
         self.prompt = summarization_prompt or DEFAULT_SUMMATY_PROMPT
-        if storage is not None:
-            if isinstance(storage, Storage):
-                self.storage = storage
-            else:
-                self.storage = Storage(**storage)
-        else:
-            self.storage = Storage()
+        self.storage = create_object(storage)
         self.max_tokens = max_tokens or DEFAULT_LLM_MAX_TOKEN
 
     def run(self, graph: MultiLayerGraph, **kwargs) -> MultiLayerGraph:
-        res = {}
-        id_map_items = {}
         summarized_layer = graph.add_layer('summarized_entity_layer')
         entity_layer = graph.layers['entity_layer']
         entities = entity_layer.get_nodes()
@@ -129,7 +123,6 @@ class DescriptionSummarizer(BaseProcessor):
         }
         prompt = replace_variables_in_prompt(self.prompt, prompt_varaibles)
 
-        # TODO: create messages
         messages = [{"role": "user", "content": prompt}]
 
         response = self.llm.chat(messages)
