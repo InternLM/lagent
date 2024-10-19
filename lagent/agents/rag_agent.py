@@ -46,7 +46,7 @@ class BaseAgent(Agent):
         for processor_config in processors_config:
             if isinstance(processor_config, dict):
                 processor = create_object(processor_config)
-            elif inspect.isclass(processor_config):
+            elif isinstance(processor_config, object):
                 processor = processor_config
             else:
                 raise ValueError
