@@ -11,7 +11,7 @@ Lagent 是一个开源的 LLM 智能体框架，允许使用者快速将一个�
 Lagent 包含三个主要模块：agents，llms 和 actions。
 
 - **agents** 实现了多种智能体，如 ReAct，AutoGPT。
-- **llms** 支持多种大语言模型，包括在 HuggingFace 上托管的开源模型（Llama-2, InterLM）及 GPT3.5/4 等闭源模型。
+- **llms** 支持多种大语言模型，包括在 HuggingFace 上托管的开源模型（Llama-2, InternLM）及 GPT3.5/4 等闭源模型。
 - **actions** 包含一系列工具，并提供工具执行器来统一管理。
 
 ## 如何使用

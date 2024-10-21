@@ -3,9 +3,10 @@ aiohttp
 arxiv
 asyncache
 distro
+duckduckgo_search==5.3.1b1
 filelock
 func_timeout
-griffe==0.48.0
+griffe<1.0
 json5
 jsonschema
 jupyter==1.0.0
@@ -14,7 +15,7 @@ jupyter_client==8.6.2
 requests
 stdlib_list==0.10.0
 streamlit
+termcolor
 tiktoken
 timeout-decorator
 typing-extensions
-duckduckgo_search==5.3.1b1
