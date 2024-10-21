@@ -14,8 +14,7 @@ loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 # initialize the model
 model = AsyncLMDeployPipeline(
-    path=
-    '/cpfs02/llm/shared/public/zhaoqian/ckpt/7B/240623/P-volc_internlm2_5_boost1_7B_FT_merge_boost_bbh_v2',
+    path='internlm/internlm2_5-7b-chat',
     meta_template=INTERNLM2_META,
     model_name='internlm-chat',
     tp=1,
