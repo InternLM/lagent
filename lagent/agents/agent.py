@@ -70,8 +70,8 @@ class Agent:
     ) -> AgentMessage:
         # message.receiver = self.name
         message = [
-            AgentMessage(sender=self.name, content=m)
-            if isinstance(m, str) else m for m in message
+            AgentMessage(sender='user', content=m) if isinstance(m, str) else m
+            for m in message
         ]
         for hook in self._hooks.values():
             message = copy.deepcopy(message)
@@ -171,8 +171,8 @@ class AsyncAgent(Agent):
                        session_id=0,
                        **kwargs) -> AgentMessage:
         message = [
-            AgentMessage(sender=self.name, content=m)
-            if isinstance(m, str) else m for m in message
+            AgentMessage(sender='user', content=m) if isinstance(m, str) else m
+            for m in message
         ]
         for hook in self._hooks.values():
             message = copy.deepcopy(message)
