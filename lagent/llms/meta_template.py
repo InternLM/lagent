@@ -38,3 +38,24 @@ INTERNLM2_META = [
             }),
         end='<|im_end|>\n'),
 ]
+
+LLAMA2_AGENT_META = [
+    dict(role='system', begin='<|Human|>െ', end='\n '),
+    dict(role='user', begin='<|Human|>െ', end='\n '),
+    dict(role='assistant', begin='<|Assistant|>െ', end='ി\n '),
+]
+
+LLAMA3_META = [
+    dict(
+        role='system',
+        begin='<|start_header_id|>system<|end_header_id|>\n\n',
+        end='<|eot_id|>'),
+    dict(
+        role='user',
+        begin='<|start_header_id|>user<|end_header_id|>\n\n',
+        end='<|eot_id|>'),
+    dict(
+        role='assistant',
+        begin='<|start_header_id|>assistant<|end_header_id|>\n\n',
+        end='<|eot_id|>'),
+]
