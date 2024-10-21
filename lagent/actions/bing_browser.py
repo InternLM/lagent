@@ -11,7 +11,6 @@ from typing import List, Optional, Tuple, Type, Union
 import requests
 from bs4 import BeautifulSoup
 from cachetools import TTLCache, cached
-from duckduckgo_search import DDGS
 
 from lagent.actions import BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
@@ -71,6 +70,7 @@ class DuckDuckGoSearch(BaseSearch):
             'Failed to get search results from DuckDuckGo after retries.')
 
     async def _async_call_ddgs(self, query: str, **kwargs) -> dict:
+        from duckduckgo_search import DDGS
         ddgs = DDGS(**kwargs)
         try:
             response = await asyncio.wait_for(
