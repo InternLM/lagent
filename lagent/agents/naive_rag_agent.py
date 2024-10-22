@@ -2,11 +2,11 @@ from typing import Any, List
 
 from .rag_agent import BaseAgent
 from lagent.rag.prompts import KNOWLEDGE_PROMPT
-from lagent.rag.schema import Document, Chunk
+from lagent.rag.schema import Document, Chunk, DocumentDB
 from lagent.llms import DeepseekAPI, BaseAPILLM
 from lagent.rag.processors import ChunkSplitter, DocParser, BuildDatabase, SaveGraph
 from lagent.rag.nlp import SentenceTransformerEmbedder, SimpleTokenizer
-from lagent.rag.nlp import FaissDatabase, DocumentDB
+from lagent.rag.nlp import FaissDatabase
 
 
 class NaiveRAGAgent(BaseAgent):

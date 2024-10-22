@@ -1,6 +1,5 @@
 from typing import Optional, List, Dict
 from lagent.rag.schema import Chunk, Node, Relationship, MultiLayerGraph
-from lagent.rag.doc import Storage
 from lagent.rag.utils import normalize_edge, replace_variables_in_prompt
 from lagent.llms import DeepseekAPI, BaseAPILLM
 from lagent.utils import create_object
@@ -19,7 +18,6 @@ class EntityExtractor(BaseProcessor):
 
     def __init__(self, llm: BaseAPILLM = dict(type=DeepseekAPI), entity_types: Optional[List] = None, **kwargs):
         super().__init__('EntityExtractor')
-        # TODO
         self.entity_types = entity_types or DEFAULT_ENTITY_TYPES
         self.llm = create_object(llm)
         self.extraction_prompt = kwargs.get("prompts") or ENTITY_EXTRACTION_PROMPT
@@ -29,14 +27,13 @@ class EntityExtractor(BaseProcessor):
 
     def run(self, graph: MultiLayerGraph, prompt_variables: Dict = None, **kwargs) -> MultiLayerGraph:
         """
-        从chunk中抽取实体与实体之间的关系
+        Extract entities and relationships
         Args:
-            graph:
-            prompt_variables:
+            graph: multi-layer graph containing chunk layer
+            prompt_variables: variables in the given prompt
             **kwargs:
 
-        Returns:
-
+        Returns: graph
         """
         if prompt_variables is None:
             prompt_variables = {}
@@ -71,7 +68,6 @@ class EntityExtractor(BaseProcessor):
             try:
 
                 prompt = replace_variables_in_prompt(prompt, {"input_text": chunk.content})
-                # TODO: get messages(history?)
                 messages = [*history, {"role": "user", "content": prompt}]
                 response = self.llm.chat(messages, **kwargs)
                 _entities, _relationships = self.process_response(response)
@@ -92,14 +88,6 @@ class EntityExtractor(BaseProcessor):
         id_map_entities, id_map_relas = merge_graph(entities, relationships)
         entities = list(id_map_entities.values())
         relationships = list(id_map_relas.values())
-
-        # save
-        # storage = Storage()
-        # entities_dict = [entity.to_dict() for entity in entities]
-        # relationships_dict = [rela.to_dict() for rela in relationships]
-        # storage.put('entities', entities_dict)
-        # storage.put('relationships', relationships_dict)
-        # storage.put('chunk_to_entities', chunk_to_entities)
 
         for entity in entities:
             node_attr = {
@@ -239,9 +227,6 @@ def dict_to_relationship(relationship_dict: Dict) -> Optional[Relationship]:
         _weight = float(relationship_dict.get("weight"))
         _source_entity = relationship_dict.get("source_entity")
         _target_entity = relationship_dict.get("target_entity")
-        # use id
-        # _source_id = hashlib.md5(_source_entity.encode('utf-8')).hexdigest()
-        # _target_id = hashlib.md5(_target_entity.encode('utf-8')).hexdigest()
         _description = relationship_dict.get("description", None)
 
     except Exception as e:

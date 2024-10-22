@@ -60,7 +60,6 @@ class ChunkSplitter(BaseProcessor):
         flag = False
         length = len(chunk)
         for i in range(len(chunk) - 1, -1, -1):
-            # 逆序遍历chunk
             text = chunk[i][0]
             if flag is True:
                 break

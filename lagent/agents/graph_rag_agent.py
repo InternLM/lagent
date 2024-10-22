@@ -2,13 +2,13 @@ from typing import Any, List, Dict
 import re
 
 from .rag_agent import BaseAgent
-from lagent.rag.schema import Node, CommunityReport, Community, Chunk
+from lagent.rag.schema import Node, CommunityReport, Community, Chunk, DocumentDB
 from lagent.rag.nlp import SentenceTransformerEmbedder, SimpleTokenizer
 from lagent.llms import DeepseekAPI, BaseAPILLM
 from lagent.rag.prompts import KNOWLEDGE_PROMPT
 from lagent.rag.processors import (DocParser, ChunkSplitter, EntityExtractor, DescriptionSummarizer,
                                    CommunitiesDetector, CommunityReportsExtractor, BuildDatabase, SaveGraph)
-from lagent.rag.nlp import FaissDatabase, DocumentDB
+from lagent.rag.nlp import FaissDatabase
 
 
 class GraphRagAgent(BaseAgent):

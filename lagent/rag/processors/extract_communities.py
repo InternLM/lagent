@@ -140,14 +140,14 @@ def get_community_hierarchy(communities: List[Community], levels: List[int]) -> 
 def get_level_communities(hierarchy: Dict[int, Dict],
                           layer: Layer) -> Dict[int, Dict[int, List]]:
     """
-    Get a dictionary mapping each level to its communities and their containing node IDs.
+        Get a dictionary mapping each level to its communities and their containing node IDs.
 
-    Args:
-        hierarchy (Dict[int, Dict[str, List[str]]]): The community hierarchy mapping.
-        layer (Layer): The layer containing community information.
+        Args:
+            hierarchy (Dict[int, Dict[str, List[str]]]): The community hierarchy mapping.
+            layer (Layer): The layer containing community information.
 
-    Returns:
-        Dict[int, Dict[int, List[str]]]: A dictionary mapping each level to its communities and their node IDs.
+        Returns:
+            Dict[int, Dict[int, List[str]]]: A dictionary mapping each level to its communities and their node IDs.
     """
     result: Dict[int, Dict[int, List]] = {}
     id_map_entities = {}
@@ -214,16 +214,15 @@ class CommunitiesDetector(BaseProcessor):
             detector: Optional[Dict] = None,
             **kwargs) -> MultiLayerGraph:
         """
-        根据给出实体做分层次聚类
-        Args:
-            graph (MultiLayerGraph): The multi-layer graph containing entities and relationships.
-            detector (Optional[Dict[str, Any]], optional): Configuration for the community detection algorithm.
-                If provided, it overrides the initial detector configuration. Defaults to None.
-            **kwargs (Any): Additional keyword arguments for community detection.
+            Do hierarchical clustering on a given graph
+            Args:
+                graph (MultiLayerGraph): The multi-layer graph containing entities and relationships.
+                detector (Optional[Dict[str, Any]], optional): Configuration for the community detection algorithm.
+                    If provided, it overrides the initial detector configuration. Defaults to None.
+                **kwargs (Any): Additional keyword arguments for community detection.
 
-        Returns:
-            MultiLayerGraph: The updated graph with detected communities added as a new layer.
-
+            Returns:
+                MultiLayerGraph: The updated graph with detected communities added as a new layer.
         """
 
         if detector is None:
@@ -254,13 +253,6 @@ class CommunitiesDetector(BaseProcessor):
         hierarchy = alg(entity_layer.graph, **_detector_config)
 
         communities_by_level = get_level_Communities(hierarchy, entity_layer)
-
-        # save communities
-        # storage = self._storage
-        # list_dict_to_save = []
-        # for k, v in communities_by_level.items():
-        #     list_dict_to_save.append({k: [_commu.to_dict() for _commu in v]})
-        # storage.put("level_communities_class", list_dict_to_save)
 
         edges = copy.deepcopy(entity_layer.graph.edges(data=True))
 
@@ -337,7 +329,6 @@ class CommunitiesDetector(BaseProcessor):
         if max_cluster_size is None:
             max_cluster_size = 10
 
-
         community_mapping = hierarchical_leiden(
             graph_nx, max_cluster_size=max_cluster_size, random_seed=0xDEADBEEF
         )
@@ -382,54 +373,5 @@ class CommunitiesDetector(BaseProcessor):
             )
             node_ids = ig_graph.vs["id"]
             hierarchy[i] = {node_id: cluster for node_id, cluster in zip(node_ids, partition.membership)}
-
-        return hierarchy
-
-    def cluster_nodes(self, detector_name: str, detector_config: Optional[Dict], graph):
-        detector_map = {
-            'leidenalg': self.custom_leiden_hierarchical
-        }
-        alg = detector_map[detector_name]
-        if alg is None:
-            raise TypeError
-        hierarchy = {}
-        hierarchy = alg(graph, **detector_config)
-
-        return hierarchy
-
-    def cluster_nodes_without_relationship(self, detector_name: str, detector_config: Optional[Dict],
-                                           chunk_nodes: List[Node]):
-
-        detector_without_edge_map = {
-            'kmeans': self.kmeans_cluster
-        }
-
-        alg = detector_without_edge_map.get(detector_name)
-        if alg is None:
-            raise TypeError
-
-        hierarchy = {}
-        hierarchy = alg(chunk_nodes, **detector_config)
-
-        return hierarchy
-
-    def kmeans_cluster(self, nodes: List[Node], num_cluster: Optional[List] = None, **kwargs):
-
-        if num_cluster is None:
-            num_cluster = DEFAULT_NUM_CLUSTER
-        contents = [node.content for node in nodes]
-        ids = [node.id for node in nodes]
-
-        vectorizer = TfidfVectorizer()
-        tfidf_matrix = vectorizer.fit_transform(contents)
-
-        hierarchy = {}
-
-        for i, n_clusters in enumerate(num_cluster):
-            kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-            kmeans.fit(tfidf_matrix)
-            clusters = kmeans.labels_
-
-            hierarchy[i] = {index: cluster for index, cluster in enumerate(clusters)}
 
         return hierarchy

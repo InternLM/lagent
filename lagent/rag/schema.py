@@ -375,7 +375,6 @@ class CommunityContext(BaseModel):
     level: int
     nodes_info: Dict[str, Dict]
     edges_info: Dict[tuple[str, str], Dict]
-    claims: Optional[Dict[str, Any]] = None
     context_str: str = ''
     context_size: int = 0
     exceed_token: bool = False
@@ -443,3 +442,19 @@ class Document(BaseModel):
             content=data['content'],
             metadata=data['metadata']
         )
+
+
+class DocumentDB:
+    """
+        Represents a document with an ID, content, and optional metadata.It is used for building database.
+
+        Args:
+            id (str): The unique identifier for the document.
+            content (str): The textual content of the document.
+            metadata (Optional[Dict]): Additional metadata for the document.
+                Defaults to an empty dictionary if not provided.
+        """
+    def __init__(self, id: str, content: str, metadata: Optional[Dict] = None):
+        self.id = id
+        self.content = content
+        self.metadata = metadata or {}

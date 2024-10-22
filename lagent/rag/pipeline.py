@@ -2,7 +2,6 @@ from lagent.rag.schema import MultiLayerGraph
 
 from typing import Dict, Type, Any, List
 from abc import abstractmethod
-import yaml
 
 
 class BaseProcessor:

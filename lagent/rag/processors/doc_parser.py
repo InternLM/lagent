@@ -136,7 +136,6 @@ class DocParser(BaseProcessor):
             return None
 
     def parse_pdf(self, file_path: str) -> Document:
-        # TODO
         try:
             pdf_parser = PdfParser()
             content = pdf_parser.parse(file_path=file_path)
@@ -153,7 +152,6 @@ class DocParser(BaseProcessor):
             return None
 
     def parse_docx(self, file_path: str) -> Document:
-        # TODO
         try:
             doxc_parser = DocxParser()
             content = doxc_parser.parse(file_path=file_path)
