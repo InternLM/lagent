@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import time
+import traceback
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from logging import getLogger
@@ -186,7 +187,7 @@ class GPTAPI(BaseAPILLM):
             gen_params=gen_params,
             json_mode=self.json_mode)
 
-        max_num_retries = 0
+        max_num_retries, errmsg = 0, ''
         while max_num_retries < self.retry:
             with Lock():
                 if len(self.invalid_keys) == len(self.keys):
@@ -221,11 +222,12 @@ class GPTAPI(BaseAPILLM):
                 response = raw_response.json()
                 return response['choices'][0]['message']['content'].strip()
             except requests.ConnectionError:
-                self.logger.error('Got connection error, retrying...')
+                errmsg = 'Got connection error ' + str(traceback.format_exc())
+                self.logger.error(errmsg)
                 continue
             except requests.JSONDecodeError:
-                self.logger.error('JsonDecode error, got ' +
-                                  str(raw_response.content))
+                errmsg = 'JsonDecode error, got ' + str(raw_response.content)
+                self.logger.error(errmsg)
                 continue
             except KeyError:
                 if 'error' in response:
@@ -237,15 +239,17 @@ class GPTAPI(BaseAPILLM):
                         self.logger.warn(f'insufficient_quota key: {key}')
                         continue
 
-                    self.logger.error('Find error message in response: ' +
-                                      str(response['error']))
+                    errmsg = 'Find error message in response: ' + str(
+                        response['error'])
+                    self.logger.error(errmsg)
             except Exception as error:
-                self.logger.error(str(error))
+                errmsg = str(error) + ' ' + str(traceback.format_exc())
+                self.logger.error(errmsg)
             max_num_retries += 1
 
         raise RuntimeError('Calling OpenAI failed after retrying for '
                            f'{max_num_retries} times. Check the logs for '
-                           'details.')
+                           f'details. errmsg: {errmsg}')
 
     def _stream_chat(self, messages: List[dict], **gen_params) -> str:
         """Generate completion from a list of templates.
@@ -302,7 +306,7 @@ class GPTAPI(BaseAPILLM):
             gen_params=gen_params,
             json_mode=self.json_mode)
 
-        max_num_retries = 0
+        max_num_retries, errmsg = 0, ''
         while max_num_retries < self.retry:
             if len(self.invalid_keys) == len(self.keys):
                 raise RuntimeError('All keys have insufficient quota.')
@@ -334,11 +338,12 @@ class GPTAPI(BaseAPILLM):
                     proxies=self.proxies)
                 return streaming(raw_response)
             except requests.ConnectionError:
-                self.logger.error('Got connection error, retrying...')
+                errmsg = 'Got connection error ' + str(traceback.format_exc())
+                self.logger.error(errmsg)
                 continue
             except requests.JSONDecodeError:
-                self.logger.error('JsonDecode error, got ' +
-                                  str(raw_response.content))
+                errmsg = 'JsonDecode error, got ' + str(raw_response.content)
+                self.logger.error(errmsg)
                 continue
             except KeyError:
                 if 'error' in response:
@@ -350,15 +355,17 @@ class GPTAPI(BaseAPILLM):
                         self.logger.warn(f'insufficient_quota key: {key}')
                         continue
 
-                    self.logger.error('Find error message in response: ' +
-                                      str(response['error']))
+                    errmsg = 'Find error message in response: ' + str(
+                        response['error'])
+                    self.logger.error(errmsg)
             except Exception as error:
-                self.logger.error(str(error))
+                errmsg = str(error) + ' ' + str(traceback.format_exc())
+                self.logger.error(errmsg)
             max_num_retries += 1
 
         raise RuntimeError('Calling OpenAI failed after retrying for '
                            f'{max_num_retries} times. Check the logs for '
-                           'details.')
+                           f'details. errmsg: {errmsg}')
 
     def generate_request_data(self,
                               model_type,
@@ -625,7 +632,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
             gen_params=gen_params,
             json_mode=self.json_mode)
 
-        max_num_retries = 0
+        max_num_retries, errmsg = 0, ''
         while max_num_retries < self.retry:
             if len(self.invalid_keys) == len(self.keys):
                 raise RuntimeError('All keys have insufficient quota.')
@@ -661,14 +668,17 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                         return response['choices'][0]['message'][
                             'content'].strip()
             except aiohttp.ClientConnectionError:
-                self.logger.error('Got connection error, retrying...')
+                errmsg = 'Got connection error ' + str(traceback.format_exc())
+                self.logger.error(errmsg)
                 continue
             except aiohttp.ClientResponseError as e:
-                self.logger.error('Response error, got ' + str(e))
+                errmsg = 'Response error, got ' + str(e)
+                self.logger.error(errmsg)
                 continue
             except json.JSONDecodeError:
-                self.logger.error('JsonDecode error, got ' +
-                                  (await resp.text(errors='replace')))
+                errmsg = 'JsonDecode error, got ' + (await resp.text(
+                    errors='replace'))
+                self.logger.error(errmsg)
                 continue
             except KeyError:
                 if 'error' in response:
@@ -680,15 +690,17 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                         self.logger.warn(f'insufficient_quota key: {key}')
                         continue
 
-                    self.logger.error('Find error message in response: ' +
-                                      str(response['error']))
+                    errmsg = 'Find error message in response: ' + str(
+                        response['error'])
+                    self.logger.error(errmsg)
             except Exception as error:
-                self.logger.error(str(error))
+                errmsg = str(error) + ' ' + str(traceback.format_exc())
+                self.logger.error(errmsg)
             max_num_retries += 1
 
         raise RuntimeError('Calling OpenAI failed after retrying for '
                            f'{max_num_retries} times. Check the logs for '
-                           'details.')
+                           f'details. errmsg: {errmsg}')
 
     async def _stream_chat(self, messages: List[dict], **gen_params) -> str:
         """Generate completion from a list of templates.
@@ -744,7 +756,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
             gen_params=gen_params,
             json_mode=self.json_mode)
 
-        max_num_retries = 0
+        max_num_retries, errmsg = 0, ''
         while max_num_retries < self.retry:
             if len(self.invalid_keys) == len(self.keys):
                 raise RuntimeError('All keys have insufficient quota.')
@@ -781,10 +793,12 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                             yield msg
                         return
             except aiohttp.ClientConnectionError:
-                self.logger.error('Got connection error, retrying...')
+                errmsg = 'Got connection error ' + str(traceback.format_exc())
+                self.logger.error(errmsg)
                 continue
             except aiohttp.ClientResponseError as e:
-                self.logger.error('Response error, got ' + str(e))
+                errmsg = 'Response error, got ' + str(e)
+                self.logger.error(errmsg)
                 continue
             except KeyError:
                 if 'error' in response:
@@ -796,15 +810,17 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                         self.logger.warn(f'insufficient_quota key: {key}')
                         continue
 
-                    self.logger.error('Find error message in response: ' +
-                                      str(response['error']))
+                    errmsg = 'Find error message in response: ' + str(
+                        response['error'])
+                    self.logger.error(errmsg)
             except Exception as error:
-                self.logger.error(str(error))
+                errmsg = str(error) + ' ' + str(traceback.format_exc())
+                self.logger.error(errmsg)
             max_num_retries += 1
 
         raise RuntimeError('Calling OpenAI failed after retrying for '
                            f'{max_num_retries} times. Check the logs for '
-                           'details.')
+                           f'details. errmsg: {errmsg}')
 
     def generate_request_data(self,
                               model_type,
