@@ -14,8 +14,7 @@ loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 # initialize the model
 model = AsyncVllmModel(
-    path=
-    '/cpfs01/shared/public/llmeval/model_weights/hf_hub/models--Qwen--Qwen2-7B-Instruct/snapshots/41c66b0be1c3081f13defc6bdf946c2ef240d6a6',
+    path='internlm/internlm2_5-7b-chat',
     meta_template=INTERNLM2_META,
     tp=1,
     top_k=1,

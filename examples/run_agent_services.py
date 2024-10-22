@@ -16,8 +16,7 @@ server = HTTPAgentServer(
         'type': 'lagent.agents.AsyncAgent',
         'llm': {
             'type': 'lagent.llms.AsyncLMDeployPipeline',
-            'model_name': 'internlm2',
-            'path': '/cpfs02/llm/shared/public/zhaoqian/ckpt/7B/240623/P-volc_internlm2_5_boost1_7B_FT_merge_boost_bbh_v2',
+            'path': 'internlm/internlm2_5-7b-chat',
             'meta_template': INTERNLM2_META,
         }
     },
@@ -36,8 +35,7 @@ server = AsyncHTTPAgentServer(
         'type': 'lagent.agents.AsyncMathCoder',
         'llm': {
             'type': 'lagent.llms.AsyncLMDeployPipeline',
-            'model_name': 'internlm2',
-            'path': '/cpfs02/llm/shared/public/zhaoqian/ckpt/7B/240623/P-volc_internlm2_5_boost1_7B_FT_merge_boost_bbh_v2',
+            'path': 'internlm/internlm2_5-7b-chat',
             'meta_template': INTERNLM2_META,
             'tp': 1,
             'top_k': 1,
@@ -83,8 +81,7 @@ server_cfg = dict(
         'type': 'lagent.agents.AsyncAgentForInternLM',
         'llm': {
             'type': 'lagent.llms.AsyncLMDeployPipeline',
-            'model_name': 'internlm2',
-            'path': '/cpfs02/llm/shared/public/zhaoqian/ckpt/7B/240623/P-volc_internlm2_5_boost1_7B_FT_merge_boost_bbh_v2',
+            'path': 'internlm/internlm2_5-7b-chat',
             'meta_template': INTERNLM2_META,
             'tp': 1,
             'top_k': 1,
