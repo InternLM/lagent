@@ -2,13 +2,12 @@ from typing import Any, List, Dict
 import re
 
 from .rag_agent import BaseAgent
-from lagent.rag.schema import Node, CommunityReport, Community, Chunk, DocumentDB
+from lagent.rag.schema import Node, CommunityReport, Community, Chunk
 from lagent.rag.nlp import SentenceTransformerEmbedder, SimpleTokenizer
 from lagent.llms import DeepseekAPI, BaseAPILLM
 from lagent.rag.prompts import KNOWLEDGE_PROMPT
 from lagent.rag.processors import (DocParser, ChunkSplitter, EntityExtractor, DescriptionSummarizer,
                                    CommunitiesDetector, CommunityReportsExtractor, BuildDatabase, SaveGraph)
-from lagent.rag.nlp import FaissDatabase
 
 
 class GraphRagAgent(BaseAgent):
@@ -109,39 +108,6 @@ class GraphRagAgent(BaseAgent):
 
         return response
 
-    def initialize_chunk_faiss(self, chunks: List[Chunk]) -> FaissDatabase:
-        documents = [
-            DocumentDB(
-                id=chunk.id,
-                content=chunk.content,
-                metadata=chunk.metadata
-            )
-            for chunk in chunks
-        ]
-
-        embedding_function = self.embedder
-
-        # create faiss index
-        faiss_db = FaissDatabase.from_documents(documents, embedding_function)
-
-        return faiss_db
-
-    def add_entities_to_faiss(self, entities: List[Node], db: FaissDatabase):
-        # Create a list of DocumentDB instances from entities
-        documents = [
-            DocumentDB(
-                id=entity.id,
-                content=entity.description,
-                metadata={
-                    "id": entity.id,
-                    "entity_type": entity.entity_type
-                }
-            )
-            for entity in entities
-        ]
-
-        db.add_documents(documents)
-
     def build_community_contexts(self, entities_with_score: List[tuple[str, float]],
                                  community_reports: List[CommunityReport], max_tokens: int,
                                  communities: List[Community]) -> str:
@@ -181,7 +147,7 @@ class GraphRagAgent(BaseAgent):
 
         # Trim reports to fit within the token limit
         result = [f'------reports------' + '\n']
-        tokenizer = SimpleTokenizer()
+        tokenizer = self.tokenizer
         for selected_report in selected_reports:
             content = selected_report.report
             token_num = tokenizer.get_token_num(content)
@@ -246,7 +212,7 @@ class GraphRagAgent(BaseAgent):
         )
 
         result = [f'------texts------' + '\n']
-        tokenizer = SimpleTokenizer()
+        tokenizer = self.tokenizer
         for chunk_id, selected_chunk in selected_chunks.items():
             content = id_map_chunks[chunk_id].content
             token_num = id_map_chunks[chunk_id].token_num

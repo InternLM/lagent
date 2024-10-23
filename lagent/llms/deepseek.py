@@ -122,14 +122,10 @@ class DeepseekAPI(BaseAPILLM):
         """
         assert isinstance(inputs, list)
         gen_params = {**self.gen_params, **gen_params}
-        with ThreadPoolExecutor(max_workers=20) as executor:
-            tasks = [
-                executor.submit(self._chat, messages, **gen_params)
-                for messages in (
-                    [inputs] if isinstance(inputs[0], dict) else inputs)
-            ]
-        ret = [task.result() for task in tasks]
-        return ret[0] if isinstance(inputs[0], dict) else ret
+        if isinstance(inputs[0], dict):
+            return self._chat(inputs, **gen_params)
+        else:
+            return [self._chat(messages, **gen_params) for messages in inputs]
 
     def _chat(self, messages: List[dict], **gen_params) -> str:
         """Generate completion from a list of templates.
@@ -163,13 +159,14 @@ class DeepseekAPI(BaseAPILLM):
                 client = official_openai.OpenAI(api_key=key, base_url="https://api.deepseek.com")
                 response = dict()
                 try:
-                    response = client.chat.completions.create(
-                        model="deepseek-chat",
-                        messages=messages,
-                        max_tokens=self.max_tokens,
-                        temperature=gen_params.get('temperature', 0.7),
-                        stream=False
-                    )
+                    with requests.Session() as session:
+                        response = client.chat.completions.create(
+                            model="deepseek-chat",
+                            messages=messages,
+                            max_tokens=self.max_tokens,
+                            temperature=gen_params.get('temperature', 0.7),
+                            stream=False
+                        )
                     return response.choices[0].message.content.strip()
                 except requests.ConnectionError:
                     print('Got connection error, retrying...')

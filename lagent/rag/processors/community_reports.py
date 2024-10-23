@@ -1,7 +1,7 @@
 import json
 import re
 from typing import Dict, Optional, List, Any
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 
 from lagent.rag.doc import Storage
@@ -459,10 +459,11 @@ class CommunityReportsExtractor(BaseProcessor):
         llm = self.llm
         result = []
 
-        for community_context in community_contexts:
+        def process_single_context(community_context: CommunityContext) -> CommunityReport:
             community_id = community_context.community_id
             if community_context.context_size == 0 or community_context.exceed_token is True:
-                raise ValueError
+                raise ValueError(f"Invalid context for community {community_id}")
+
             prompt_variables = {
                 'input_text': community_context.context_str
             }
@@ -477,22 +478,34 @@ class CommunityReportsExtractor(BaseProcessor):
 
                 if json_match:
                     output_str = json_match.group(0)
-
                     try:
                         output = json.loads(output_str)
                     except json.JSONDecodeError as e:
-                        print(f"JSON decoding error: {e}")
-                else:
-                    print("No JSON data found in the response.")
+                        raise e
+
                 output_str = transform_output(output)
             except Exception as e:
-                print("error when generating report")
+                raise ValueError(f"Error when generating report for community {community_id}: {e}")
 
-            result.append(
-                CommunityReport(community_id=community_id, level=community_context.level,
-                                report=output_str, structured_report=output)
+            return CommunityReport(
+                community_id=community_id,
+                level=community_context.level,
+                report=output_str,
+                structured_report=output
             )
 
+        max_workers = min(32, (len(community_contexts) or 1))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_context = {executor.submit(process_single_context, context): context for context in
+                                 community_contexts}
+
+            for future in as_completed(future_to_context):
+                context = future_to_context[future]
+                try:
+                    report = future.result()
+                    result.append(report)
+                except Exception as e:
+                    raise e
         return result
 
 

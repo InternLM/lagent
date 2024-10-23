@@ -1,4 +1,5 @@
 from typing import Dict, List, Optional, Union
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from lagent.rag.prompts import DEFAULT_SUMMATY_PROMPT
 from lagent.rag.settings import DEFAULT_LLM_MAX_TOKEN
@@ -43,37 +44,66 @@ class DescriptionSummarizer(BaseProcessor):
         entities = entity_layer.get_nodes()
         relationships = entity_layer.get_edges()
 
-        node_description_list = []
-        for entity in entities:
-            node_description_list = entity['description'].split(' | ')
-            node_name = entity['id']
-            node_description_list = merge_description(descri_list=node_description_list)
-            if len(node_description_list) == 1:
-                entity['description'] = node_description_list[0]
-                continue
-            summary = self.summarize_descriptions(node_name, node_description_list)
-            entity['description'] = summary
+        summarized_entities = []
+        summarized_relationships = []
 
-        self.storage.put('summarized_entity', entities)
+        def summarize_entity(entity: Dict) -> Dict:
+            try:
+                node_description = entity.get('description', '')
+                if not node_description:
+                    raise ValueError(f"Entity {entity.get('id', 'Unknown ID')} is missing 'description' key.")
+                node_description_list = merge_description(descri_list=entity['description'].split(' | '))
+                node_name = entity['id']
+                if len(node_description_list) == 1:
+                    entity['description'] = node_description_list[0]
+                    return entity
 
-        rela_description_list = []
-        for rela in relationships:
-            rela_description_list = rela['description'].split(' | ')
-            rela_name = (rela['source'], rela['target'])
-            rela_name = tuple_to_str(rela_name)
-            rela_description_list = merge_description(rela_description_list)
-            if len(relationships) == 1:
-                rela['description'] = rela_description_list[0]
-                continue
-            summary = self.summarize_descriptions(rela_name, rela_description_list)
-            rela['description'] = summary
+                summary = self.summarize_descriptions(node_name, node_description_list)
+                entity['description'] = summary
+                return entity
 
-        self.storage.put('summarized_relationships', relationships)
+            except Exception as e:
+                raise ValueError(f"Error processing entity {entity['id']}: {e}")
 
-        for entity in entities:
+        def summarize_relationship(rela: Dict) -> Dict:
+            try:
+                rela_description_list = merge_description(descri_list=rela['description'].split(' | '))
+                rela_name = tuple_to_str((rela['source'], rela['target']))
+                if len(rela_description_list) == 1:
+                    rela['description'] = rela_description_list[0]
+                    return rela
+
+                summary = self.summarize_descriptions(rela_name, rela_description_list)
+                rela['description'] = summary
+                return rela
+
+            except Exception as e:
+                raise ValueError(f"Error processing relationship {rela['source']} -> {rela['target']}: {e}")
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            entity_futures = {executor.submit(summarize_entity, entity): entity for entity in entities}
+            relationship_futures = {executor.submit(summarize_relationship, rela): rela for rela in relationships}
+
+            for future in as_completed(entity_futures):
+                entity = entity_futures[future]
+                try:
+                    summarized_entity = future.result()
+                    summarized_entities.append(summarized_entity)
+                except Exception as e:
+                    raise ValueError
+
+            for future in as_completed(relationship_futures):
+                rela = relationship_futures[future]
+                try:
+                    summarized_rela = future.result()
+                    summarized_relationships.append(summarized_rela)
+                except Exception as e:
+                    raise ValueError
+        for entity in summarized_entities:
             entity_id = entity.pop('id')
             summarized_layer.add_node(entity_id, **entity)
-        for rela in relationships:
+
+        for rela in summarized_relationships:
             source = rela.pop('source')
             target = rela.pop("target")
             summarized_layer.add_edge(source, target, **rela)

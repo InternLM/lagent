@@ -1,4 +1,5 @@
 from typing import Optional, List, Dict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from lagent.rag.schema import Chunk, Node, Relationship, MultiLayerGraph
 from lagent.rag.utils import normalize_edge, replace_variables_in_prompt
 from lagent.llms import DeepseekAPI, BaseAPILLM
@@ -63,27 +64,61 @@ class EntityExtractor(BaseProcessor):
         entities = []
         relationships = []
         chunk_to_entities: Dict[str, List[str]] = {}
-        prompt = replace_variables_in_prompt(self.extraction_prompt, prompt_variables)
-        for index, chunk in enumerate(chunks):
-            try:
+        prompt_template = replace_variables_in_prompt(self.extraction_prompt, prompt_variables)
 
-                prompt = replace_variables_in_prompt(prompt, {"input_text": chunk.content})
+        prompt_template = replace_variables_in_prompt(self.extraction_prompt, prompt_variables)
+
+        def process_single_chunk(chunk: Chunk) -> Dict:
+            try:
+                prompt = replace_variables_in_prompt(prompt_template, {"input_text": chunk.content})
                 messages = [*history, {"role": "user", "content": prompt}]
+
                 response = self.llm.chat(messages, **kwargs)
+
                 _entities, _relationships = self.process_response(response)
 
-                chunk_to_entities[chunk.id] = []
+                _processed_entities = []
+                _chunk_entities_content = []
                 for _entity in _entities:
                     _entity = dict_to_entity(_entity)
                     _entity.source_id = [chunk.id]
-                    entities.append(_entity)
-                    chunk_to_entities[chunk.id].append(_entity.content)
+                    _processed_entities.append(_entity)
+                    _chunk_entities_content.append(_entity.content)
+
+                _processed_relationships = []
                 for _relationship in _relationships:
                     _relationship = dict_to_relationship(_relationship)
-                    relationships.append(_relationship)
+                    _processed_relationships.append(_relationship)
+
+                return {
+                    "chunk_id": chunk.id,
+                    "entities": _processed_entities,
+                    "chunk_entities_content": _chunk_entities_content,
+                    "relationships": _processed_relationships
+                }
 
             except Exception as e:
-                raise ValueError
+                raise ValueError(f"Error processing chunk {chunk.id}: {e}")
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {executor.submit(process_single_chunk, chunk): chunk for chunk in chunks}
+
+            for future in as_completed(futures):
+                chunk = futures[future]
+                try:
+                    result = future.result()
+                    chunk_id = result["chunk_id"]
+                    processed_entities = result["entities"]
+                    chunk_entities_content = result["chunk_entities_content"]
+                    processed_relationships = result["relationships"]
+                    chunk_to_entities[chunk_id] = chunk_entities_content
+
+                    entities.extend(processed_entities)
+                    relationships.extend(processed_relationships)
+
+                except Exception as e:
+                    print(f"Error processing chunk {chunk.id}: {e}")
+                    continue
 
         id_map_entities, id_map_relas = merge_graph(entities, relationships)
         entities = list(id_map_entities.values())

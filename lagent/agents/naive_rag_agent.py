@@ -1,3 +1,4 @@
+import re
 from typing import Any, List
 
 from .rag_agent import BaseAgent
@@ -6,7 +7,7 @@ from lagent.rag.schema import Document, Chunk, DocumentDB
 from lagent.llms import DeepseekAPI, BaseAPILLM
 from lagent.rag.processors import ChunkSplitter, DocParser, BuildDatabase, SaveGraph
 from lagent.rag.nlp import SentenceTransformerEmbedder, SimpleTokenizer
-from lagent.rag.nlp import FaissDatabase
+from lagent.rag.settings import DEFAULT_LLM_MAX_TOKEN
 
 
 class NaiveRAGAgent(BaseAgent):
@@ -21,16 +22,12 @@ class NaiveRAGAgent(BaseAgent):
         super().__init__(llm=llm, embedder=embedder, tokenizer=tokenizer, processors_config=processors_config, **kwargs)
 
     def forward(self, query: str, **kwargs) -> Any:
-
-        embedder = self.embedder
         memory = self.external_memory
         tokenizer = self.tokenizer
 
         prompt = kwargs.get('prompts', KNOWLEDGE_PROMPT)
 
-        max_ref_token = kwargs.get('max_ref_token', 2000)
-        w_community = kwargs.get('w_community', 0.4)
-        w_text = kwargs.get('w_text', 0.6)
+        max_ref_token = kwargs.get('max_ref_token', DEFAULT_LLM_MAX_TOKEN)
         max_ref_token = max_ref_token - tokenizer.get_token_num(prompt)
 
         dict_chunks = memory.layers['chunk_layer'].get_nodes()
@@ -45,42 +42,43 @@ class NaiveRAGAgent(BaseAgent):
 
         # TODO:find better ways to trim the context
         text = '\n'.join(search_contents)
-        paras = text.split('\n')
-        temp_doc = Document(
-            content=[{'page_num': 1, 'content': {'text': paras}}],
-            id='search_result',
-            metadata={'source': 'retrieve transform'}
-        )
-        chunk_extractor = ChunkSplitter(chunk_size=int(max_ref_token * 0.5))
-        temp_chunks = chunk_extractor.split_into_chunks(temp_doc)
-        temp_chunks_db = self.initialize_chunk_faiss(temp_chunks)
-        final_results = temp_chunks_db.similarity_search_with_score(query, k=2)
-        final_search_contents = ['------texts------' + '\n']
-        for result in final_results:
-            final_search_contents.append(result[0].content)
-        final_search_contents = '\n'.join(final_search_contents)
+        final_search_contents = self.trim_context(text, max_ref_token)
 
-        num = tokenizer.get_token_num(final_search_contents)
         result = self.prepare_prompt(query=query, knowledge=final_search_contents, prompt=prompt)
 
         messages = [{"role": "user", "content": result}]
-
         response = self.llm.chat(messages)
 
         return response
 
-    def initialize_chunk_faiss(self, chunks: List[Chunk]) -> FaissDatabase:
-        documents = [
-            DocumentDB(
-                id=chunk.id,
-                content=chunk.content,
-                metadata=chunk.metadata
-            )
-            for chunk in chunks
-        ]
-
-        embedding_function = self.embedder
-
-        faiss_db = FaissDatabase.from_documents(documents, embedding_function)
-
-        return faiss_db
+    def trim_context(self, text, max_ref_token):
+        tokenizer = self.tokenizer
+        token_num = tokenizer.get_token_num(text)
+        if token_num <= max_ref_token:
+            return text
+        paras = text.split('\n')
+        available_num = max_ref_token
+        result = []
+        for para in paras:
+            para = para.strip()
+            token_num = tokenizer.get_token_num(para)
+            if token_num <= available_num:
+                result.append(para)
+                available_num -= token_num
+            else:
+                tmp = ''
+                sentences = re.split(r'\. |。', para)
+                j = 0
+                while j < len(sentences):
+                    sentence = sentences[j].strip()
+                    num = tokenizer.get_token_num(sentence)
+                    if num == 0:
+                        continue
+                    if num <= available_num:
+                        tmp = f'{tmp}.{sentence}'
+                        max_tokens = available_num - num
+                        j += 1
+                    else:
+                        break
+                result.append(tmp)
+        return '\n'.join(result)
