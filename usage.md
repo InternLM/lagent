@@ -407,13 +407,13 @@ from lagent.llms import GPTAPI
 from lagent.hooks import InternLMActionProcessor
 
 TOOL_TEMPLATE = (
-    "You are a helpful AI assistant, collaborating with other assistants."
-    " Use the provided tools to progress towards answering the question."
-    " If you are unable to fully answer, that's OK, another assistant with different tools "
-    " will help where you left off. Execute what you can to make progress."
-    " If you or any of the other assistants have the final answer or deliverable,"
-    " prefix your response with {finish_pattern} so the team knows to stop."
-    " You have access to the following tools:\n{tool_description}.\\\\n**{system_prompt}**"
+    "You are a helpful AI assistant, collaborating with other assistants. Use the provided tools to progress"
+    " towards answering the question. If you are unable to fully answer, that's OK, another assistant with"
+    " different tools will help where you left off. Execute what you can to make progress. If you or any of"
+    " the other assistants have the final answer or deliverable, prefix your response with {finish_pattern}"
+    " so the team knows to stop. You have access to the following tools:\n{tool_description}\nPlease provide"
+    " your thought process when you need to use a tool, followed by the call statement in this format:"
+    "\n{invocation_format}\\\\n**{system_prompt}**"
 )
 
 class DataVisualizer(Agent):
@@ -425,15 +425,15 @@ class DataVisualizer(Agent):
             llm,
             TOOL_TEMPLATE.format(
                 finish_pattern=finish_pattern,
-                tool_description=get_plugin_prompt(browser) + 
-                '\nInvoke a tool in this format: ```json\n{"name": {{tool name}}, "parameters": {{keyword arguments}}}\n```\n',
+                tool_description=get_plugin_prompt(browser),
+                invocation_format='```json\n{"name": {{tool name}}, "parameters": {{keyword arguments}}}\n```\n',
                 system_prompt=research_prompt,
             ),
             output_format=ToolParser(
                 "browser",
                 begin="```json\n",
                 end="\n```\n",
-                validate=lambda x: json.loads(x.rstrip('\n`')),
+                validate=lambda x: json.loads(x.rstrip('`')),
             ),
             aggregator=InternLMToolAggregator(),
             name="researcher",
@@ -442,14 +442,15 @@ class DataVisualizer(Agent):
             llm,
             TOOL_TEMPLATE.format(
                 finish_pattern=finish_pattern,
-                tool_description=interpreter.name + '\nInvoke a tool in this format: ```python\n{{code}}\n```\n',
+                tool_description=interpreter.name,
+                invocation_format='```python\n{{code}}\n```\n',
                 system_prompt=chart_prompt,
             ),
             output_format=ToolParser(
                 "interpreter",
                 begin="```python\n",
                 end="\n```\n",
-                validate=lambda x: x.rstrip('\n`'),
+                validate=lambda x: x.rstrip('`'),
             ),
             aggregator=InternLMToolAggregator(),
             name="charter",

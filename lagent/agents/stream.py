@@ -50,7 +50,7 @@ def get_plugin_prompt(actions, api_desc_template=API_PREFIX):
                 plugin_descriptions.append(api)
         else:
             action_desc['description'] = api_desc_template.format(
-                tool_name=action.name, description=api['description'])
+                tool_name=action.name, description=action_desc['description'])
             action_desc['parameters'] = [
                 param for param in action_desc['parameters']
                 if param['name'] in action_desc['required']
