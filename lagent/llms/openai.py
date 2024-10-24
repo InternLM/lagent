@@ -267,7 +267,7 @@ class GPTAPI(BaseAPILLM):
                     chunk_size=8192, decode_unicode=False, delimiter=b'\n'):
                 if chunk:
                     decoded = chunk.decode('utf-8')
-                    if decoded == 'data: [DONE]':
+                    if decoded.startswith('data: [DONE]'):
                         return
                     if decoded[:5] == 'data:':
                         decoded = decoded[5:]
@@ -716,7 +716,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
             async for chunk in raw_response.content:
                 if chunk:
                     decoded = chunk.decode('utf-8')
-                    if decoded == 'data: [DONE]':
+                    if decoded.startswith('data: [DONE]'):
                         return
                     if decoded[:5] == 'data:':
                         decoded = decoded[5:]
