@@ -1,6 +1,8 @@
 from typing import Dict, Optional, Type
 
-from lagent.actions.base_action import BaseAction, tool_api
+from aioify import aioify
+
+from lagent.actions.base_action import AsyncActionMixin, BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
 
 THEME_MAPPING = {
@@ -16,12 +18,13 @@ THEME_MAPPING = {
 class PPT(BaseAction):
     """Plugin to create ppt slides with text, paragraph, images in good looking styles."""
 
-    def __init__(self,
-                 theme_mapping: Optional[Dict[str, dict]] = None,
-                 description: Optional[dict] = None,
-                 parser: Type[BaseParser] = JsonParser,
-                 enable: bool = True):
-        super().__init__(description, parser, enable)
+    def __init__(
+        self,
+        theme_mapping: Optional[Dict[str, dict]] = None,
+        description: Optional[dict] = None,
+        parser: Type[BaseParser] = JsonParser,
+    ):
+        super().__init__(description, parser)
         self.theme_mapping = theme_mapping or THEME_MAPPING
         self.pointer = None
         self.location = None
@@ -156,3 +159,80 @@ class PPT(BaseAction):
         # retreival_url = upload_file(file_path)
         self.pointer.save(self.location)
         return dict(status=f'submitted. view ppt at {self.location}')
+
+
+class AsyncPPT(AsyncActionMixin, PPT):
+    """Plugin to create ppt slides with text, paragraph, images in good looking styles."""
+
+    @tool_api(explode_return=True)
+    @aioify
+    def create_file(self, theme: str, abs_location: str) -> dict:
+        """Create a pptx file with specific themes.
+
+        Args:
+            theme (:class:`str`): the theme used. The value should be one of ['Default'].
+            abs_location (:class:`str`): the ppt file's absolute location
+
+        Returns:
+            :class:`dict`: operation status
+                * status: the result of the execution
+        """
+        return super().create_file(theme, abs_location)
+
+    @tool_api(explode_return=True)
+    @aioify
+    def add_first_page(self, title: str, subtitle: str) -> dict:
+        """Add the first page of ppt.
+
+        Args:
+            title (:class:`str`): the title of ppt
+            subtitle (:class:`str`): the subtitle of ppt
+
+        Returns:
+            :class:`dict`: operation status
+                * status: the result of the execution
+        """
+        return super().add_first_page(title, subtitle)
+
+    @tool_api(explode_return=True)
+    @aioify
+    def add_text_page(self, title: str, bullet_items: str) -> dict:
+        """Add text page of ppt.
+
+        Args:
+            title (:class:`str`): the title of the page
+            bullet_items (:class:`str`): bullet_items should be string, for multiple bullet items, please use [SPAN] to separate them.
+
+        Returns:
+            :class:`dict`: operation status
+                * status: the result of the execution
+        """
+        return super().add_text_page(title, bullet_items)
+
+    @tool_api(explode_return=True)
+    @aioify
+    def add_text_image_page(self, title: str, bullet_items: str,
+                            image: str) -> dict:
+        """Add a text page with one image. Image should be a path.
+
+        Args:
+            title (:class:`str`): the title of the page
+            bullet_items (:class:`str`): bullet_items should be string, for multiple bullet items, please use [SPAN] to separate them.
+            image (:class:`str`): the path of the image
+
+        Returns:
+            :class:`dict`: operation status
+                * status: the result of the execution
+        """
+        return super().add_text_image_page(title, bullet_items, image)
+
+    @tool_api(explode_return=True)
+    @aioify
+    def submit_file(self) -> dict:
+        """When all steps done, YOU MUST use submit_file() to submit your work.
+
+        Returns:
+            :class:`dict`: operation status
+                * status: the result of the execution
+        """
+        return super().submit_file()

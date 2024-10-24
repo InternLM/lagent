@@ -1,6 +1,5 @@
 from copy import copy
 from typing import Dict, List, Optional, Tuple, Union
-from warnings import warn
 
 
 class LMTemplateParser:
@@ -94,7 +93,7 @@ class LMTemplateParser:
         return res
 
 
-class BaseModel:
+class BaseLLM:
     """Base class for model wrapper.
 
     Args:
@@ -107,8 +106,6 @@ class BaseModel:
             template if needed, in case the requirement of injecting or
             wrapping of any meta instructions.
     """
-
-    is_api: bool = False
 
     def __init__(self,
                  path: str,
@@ -174,7 +171,10 @@ class BaseModel:
         """
         raise NotImplementedError
 
-    def chat(self, inputs: Union[List[dict], List[List[dict]]], **gen_params):
+    def chat(self,
+             inputs: Union[List[dict], List[List[dict]]],
+             session_ids: Union[int, List[int]] = None,
+             **gen_params):
         """Generate completion from a list of templates.
 
         Args:
@@ -189,15 +189,6 @@ class BaseModel:
         else:
             _inputs = self.template_parser(inputs)
         return self.generate(_inputs, **gen_params)
-
-    def generate_from_template(self, inputs: Union[List[dict],
-                                                   List[List[dict]]],
-                               **gen_params):
-        warn(
-            'This function will be deprecated after three months'
-            'and will be replaced. Please use `.chat()`', DeprecationWarning,
-            2)
-        return self.chat(inputs, **gen_params)
 
     def stream_chat(self, inputs: List[dict], **gen_params):
         """Generate results as streaming given a list of templates.
@@ -226,3 +217,89 @@ class BaseModel:
         gen_params = copy(self.gen_params)
         gen_params.update(kwargs)
         return gen_params
+
+
+class AsyncLLMMixin:
+
+    async def generate(self,
+                       inputs: Union[str, List[str]],
+                       session_ids: Union[int, List[int]] = None,
+                       **gen_params) -> str:
+        """Generate results given a str (or list of) inputs.
+
+        Args:
+            inputs (Union[str, List[str]]):
+            gen_params (dict): The input params for generation.
+
+        Returns:
+            Union[str, List[str]]: A (list of) generated strings.
+
+        eg.
+            batched = True
+            if isinstance(inputs, str):
+                inputs = [inputs]
+                batched = False
+            response = ['']
+            if batched:
+                return response
+            return response[0]
+        """
+        raise NotImplementedError
+
+    async def stream_generate(self, inputs: str, **gen_params) -> List[str]:
+        """Generate results as streaming given a str inputs.
+
+        Args:
+            inputs (str):
+            gen_params (dict): The input params for generation.
+
+        Returns:
+            str: A generated string.
+        """
+        raise NotImplementedError
+
+    async def chat(self,
+                   inputs: Union[List[dict], List[List[dict]]],
+                   session_ids: Union[int, List[int]] = None,
+                   **gen_params):
+        """Generate completion from a list of templates.
+
+        Args:
+            inputs (Union[List[dict], List[List[dict]]]):
+            gen_params (dict): The input params for generation.
+        Returns:
+        """
+        if isinstance(inputs[0], list):
+            _inputs = list()
+            for msg in inputs:
+                _inputs.append(self.template_parser(msg))
+        else:
+            _inputs = self.template_parser(inputs)
+        return await self.generate(_inputs, session_ids, **gen_params)
+
+    async def stream_chat(self, inputs: List[dict], **gen_params):
+        """Generate results as streaming given a list of templates.
+
+        Args:
+            inputs (Union[List[dict]):
+            gen_params (dict): The input params for generation.
+        Returns:
+        """
+        raise NotImplementedError
+
+    async def tokenize(self, prompts: Union[str, List[str], List[dict],
+                                            List[List[dict]]]):
+        """Tokenize the input prompts.
+
+        Args:
+            prompts(str | List[str]): user's prompt, or a batch prompts
+
+        Returns:
+            Tuple(numpy.ndarray, numpy.ndarray, numpy.ndarray): prompt's token
+            ids, ids' length and requested output length
+        """
+        raise NotImplementedError
+
+
+class AsyncBaseLLM(AsyncLLMMixin, BaseLLM):
+    pass

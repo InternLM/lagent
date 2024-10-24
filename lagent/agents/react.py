@@ -1,248 +1,161 @@
-from typing import Dict, List, Tuple, Union
+import json
+from typing import Callable, Dict, List, Union
 
-from lagent.actions import ActionExecutor
-from lagent.llms.base_api import BaseAPIModel
-from lagent.llms.base_llm import BaseModel
-from lagent.schema import ActionReturn, ActionStatusCode, AgentReturn
-from .base_agent import BaseAgent
+from pydantic import BaseModel, Field
 
-# The Chinese prompts for ReAct
+from lagent.actions import ActionExecutor, AsyncActionExecutor, BaseAction
+from lagent.agents.agent import Agent, AsyncAgent
+from lagent.agents.aggregator import DefaultAggregator
+from lagent.hooks import ActionPreprocessor
+from lagent.llms import BaseLLM
+from lagent.memory import Memory
+from lagent.prompts.parsers.json_parser import JSONParser
+from lagent.prompts.prompt_template import PromptTemplate
+from lagent.schema import AgentMessage
+from lagent.utils import create_object
 
-CALL_PROTOCOL_CN = """你是一个可以调用外部工具的助手，可以使用的工具包括：
-{tool_description}
-如果使用工具请遵循以下格式回复：
-```
-{thought}思考你当前步骤需要解决什么问题，是否需要使用工具
-{action}工具名称，你的工具必须从 [{action_names}] 选择
-{action_input}工具输入参数
-```
-工具返回按照以下格式回复：
-```
-{response}调用工具后的结果
-```
-如果你已经知道了答案，或者你不需要工具，请遵循以下格式回复
-```
-{thought}给出最终答案的思考过程
-{finish}最终答案
-```
+select_action_template = """你是一个可以调用外部工具的助手，可以使用的工具包括：
+{action_info}
+{output_format}
 开始!"""
 
-FORCE_STOP_PROMPT_CN = '你需要基于历史消息返回一个最终结果'
+output_format_template = """如果使用工具请遵循以下格式回复：
+{function_format}
 
-# The English prompts for ReAct
-
-CALL_PROTOCOL_EN = """You are a assistant who can utilize external tools.
-{tool_description}
-To use a tool, please use the following format:
-```
-{thought}Think what you need to solve, do you need to use tools?
-{action}the tool name, should be one of [{action_names}]
-{action_input}the input to the action
-```
-The response after utilizing tools should using the following format:
-```
-{response}the results after call the tool.
-```
-If you already know the answer, or you do not need to use tools,
-please using the following format to reply:
-```
-{thought}the thought process to get the final answer
-{finish}final answer
-```
-Begin!"""
-
-FORCE_STOP_PROMPT_EN = """You should directly give results
- based on history information."""
+如果你已经知道了答案，或者你不需要工具，请遵循以下格式回复
+{finish_format}"""
 
 
-class ReActProtocol:
-    """A wrapper of ReAct prompt which manages the response from LLM and
-    generate desired prompts in a ReAct format.
-
-    Args:
-        thought (dict): the information of thought pattern
-        action (dict): the information of action pattern
-        action_input (dict): the information of action_input pattern
-        response (dict): the information of response pattern
-        finish (dict): the information of finish pattern
-        call_protocol (str): the format of ReAct
-        force_stop (str): the prompt to force LLM to generate response
-    """
+class ReAct(Agent):
 
     def __init__(self,
-                 thought: dict = dict(
-                     role='THOUGHT',
-                     begin='Thought:',
-                     end='\n',
-                     belong='assistant'),
-                 action: dict = dict(role='ACTION', begin='Action:', end='\n'),
-                 action_input: dict = dict(
-                     role='ARGS', begin='Action Input:', end='\n'),
-                 response: dict = dict(
-                     role='RESPONSE', begin='Response:', end='\n'),
-                 finish: dict = dict(
-                     role='FINISH', begin='Final Answer:', end='\n'),
-                 call_protocol: str = CALL_PROTOCOL_EN,
-                 force_stop: str = FORCE_STOP_PROMPT_EN) -> None:
-        self.call_protocol = call_protocol
-        self.force_stop = force_stop
-        self.thought = thought
-        self.action = action
-        self.action_input = action_input
-        self.response = response
-        self.finish = finish
-
-    def format(self,
-               chat_history: List[Dict],
-               inner_step: List[Dict],
-               action_executor: ActionExecutor,
-               force_stop: bool = False) -> list:
-        """Generate the ReAct format prompt.
-
-        Args:
-            chat_history (List[Dict]): The history log in previous runs.
-            inner_step (List[Dict]): The log in the current run.
-            action_executor (ActionExecutor): the action manager to
-                execute actions.
-            force_stop (boolean): whether force the agent to give responses
-                under pre-defined turns.
-
-        Returns:
-            List[Dict]: ReAct format prompt.
-        """
-
-        call_protocol = self.call_protocol.format(
-            tool_description=action_executor.get_actions_info(),
-            action_names=action_executor.action_names(),
-            thought=self.thought['begin'],
-            action=self.action['begin'],
-            action_input=self.action_input['begin'],
-            response=self.response['begin'],
-            finish=self.finish['begin'],
-        )
-        formatted = []
-        formatted.append(dict(role='system', content=call_protocol))
-        formatted += chat_history
-        formatted += inner_step
-        if force_stop:
-            formatted.append(dict(role='system', content=self.force_stop))
-        return formatted
-
-    def parse(
-        self,
-        message: str,
-        action_executor: ActionExecutor,
-    ) -> Tuple[str, str, str]:
-        """Parse the action returns in a ReAct format.
-
-        Args:
-            message (str): The response from LLM with ReAct format.
-            action_executor (ActionExecutor): Action executor to
-                provide no_action/finish_action name.
-
-        Returns:
-            tuple: the return value is a tuple contains:
-                - thought (str): contain LLM thought of the current step.
-                - action (str): contain action scheduled by LLM.
-                - action_input (str): contain the required action input
-                    for current action.
-        """
-
-        import re
-        thought = message.split(self.action['begin'])[0]
-        thought = thought.split(self.thought['begin'])[-1]
-        thought = thought.split(self.finish['begin'])[0]
-        if self.finish['begin'] in message:
-            final_answer = message.split(self.finish['begin'])[-1]
-            return thought, action_executor.finish_action.name, final_answer
-
-        action_regex = f"{self.action['begin']}(.*?)\n"
-        args_regex = f"{self.action_input['begin']}(.*)"
-        action_match = re.findall(action_regex, message)
-        if not action_match:
-            return thought, action_executor.no_action.name, ''
-        action = action_match[-1]
-        arg_match = re.findall(args_regex, message, re.DOTALL)
-
-        if not arg_match:
-            return thought, action_executor.no_action.name, ''
-        action_input = arg_match[-1]
-        return thought, action.strip(), action_input.strip().strip('"')
-
-    def format_response(self, action_return: ActionReturn) -> dict:
-        """Format the final response at current step.
-
-        Args:
-            action_return (ActionReturn): return value of the current action.
-
-        Returns:
-            dict: the final response at current step.
-        """
-        if action_return.state == ActionStatusCode.SUCCESS:
-            response = action_return.format_result()
-        else:
-            response = action_return.errmsg
-        return dict(
-            role='system',
-            content=self.response['begin'] + response + self.response['end'])
-
-
-class ReAct(BaseAgent):
-    """An implementation of ReAct (https://arxiv.org/abs/2210.03629)
-
-    Args:
-        llm (BaseModel or BaseAPIModel): a LLM service which can chat
-            and act as backend.
-        action_executor (ActionExecutor): an action executor to manage
-            all actions and their response.
-        protocol (ReActProtocol): a wrapper to generate prompt and
-            parse the response from LLM / actions.
-        max_turn (int): the maximum number of trails for LLM to generate
-            plans that can be successfully parsed by ReAct protocol.
-            Defaults to 4.
-    """
-
-    def __init__(self,
-                 llm: Union[BaseModel, BaseAPIModel],
-                 action_executor: ActionExecutor,
-                 protocol: ReActProtocol = ReActProtocol(),
-                 max_turn: int = 4) -> None:
+                 llm: Union[BaseLLM, Dict],
+                 actions: Union[BaseAction, List[BaseAction]],
+                 template: Union[PromptTemplate, str] = None,
+                 memory: Dict = dict(type=Memory),
+                 output_format: Dict = dict(type=JSONParser),
+                 aggregator: Dict = dict(type=DefaultAggregator),
+                 hooks: List = [dict(type=ActionPreprocessor)],
+                 finish_condition: Callable[[AgentMessage], bool] = lambda m:
+                 'conclusion' in m.content or 'conclusion' in m.formatted,
+                 max_turn: int = 5,
+                 **kwargs):
         self.max_turn = max_turn
-        super().__init__(
-            llm=llm, action_executor=action_executor, protocol=protocol)
+        self.finish_condition = finish_condition
+        actions = dict(
+            type=ActionExecutor,
+            actions=actions,
+            hooks=hooks,
+        )
+        self.actions: ActionExecutor = create_object(actions)
+        select_agent = dict(
+            type=Agent,
+            llm=llm,
+            template=template.format(
+                action_info=json.dumps(self.actions.description()),
+                output_format=output_format.format_instruction()),
+            output_format=output_format,
+            memory=memory,
+            aggregator=aggregator,
+            hooks=hooks,
+        )
+        self.select_agent = create_object(select_agent)
+        super().__init__(**kwargs)
 
-    def chat(self, message: Union[str, dict, List[dict]],
-             **kwargs) -> AgentReturn:
-        if isinstance(message, str):
-            inner_history = [dict(role='user', content=message)]
-        elif isinstance(message, dict):
-            inner_history = [message]
-        elif isinstance(message, list):
-            inner_history = message[:]
-        else:
-            raise TypeError(f'unsupported type: {type(message)}')
-        offset = len(inner_history)
-        agent_return = AgentReturn()
-        default_response = 'Sorry that I cannot answer your question.'
-        for turn in range(self.max_turn):
-            prompt = self._protocol.format(
-                chat_history=[],
-                inner_step=inner_history,
-                action_executor=self._action_executor,
-                force_stop=(turn == self.max_turn - 1))
-            response = self._llm.chat(prompt, **kwargs)
-            inner_history.append(dict(role='assistant', content=response))
-            thought, action, action_input = self._protocol.parse(
-                response, self._action_executor)
-            action_return: ActionReturn = self._action_executor(
-                action, action_input)
-            action_return.thought = thought
-            agent_return.actions.append(action_return)
-            if action_return.type == self._action_executor.finish_action.name:
-                agent_return.response = action_return.format_result()
-                break
-            inner_history.append(self._protocol.format_response(action_return))
-        else:
-            agent_return.response = default_response
-        agent_return.inner_steps = inner_history[offset:]
-        return agent_return
+    def forward(self, message: AgentMessage, **kwargs) -> AgentMessage:
+        for _ in range(self.max_turn):
+            message = self.select_agent(message)
+            if self.finish_condition(message):
+                return message
+            message = self.actions(message)
+        return message
+
+
+class AsyncReAct(AsyncAgent):
+
+    def __init__(self,
+                 llm: Union[BaseLLM, Dict],
+                 actions: Union[BaseAction, List[BaseAction]],
+                 template: Union[PromptTemplate, str] = None,
+                 memory: Dict = dict(type=Memory),
+                 output_format: Dict = dict(type=JSONParser),
+                 aggregator: Dict = dict(type=DefaultAggregator),
+                 hooks: List = [dict(type=ActionPreprocessor)],
+                 finish_condition: Callable[[AgentMessage], bool] = lambda m:
+                 'conclusion' in m.content or 'conclusion' in m.formatted,
+                 max_turn: int = 5,
+                 **kwargs):
+        self.max_turn = max_turn
+        self.finish_condition = finish_condition
+        actions = dict(
+            type=AsyncActionExecutor,
+            actions=actions,
+            hooks=hooks,
+        )
+        self.actions: AsyncActionExecutor = create_object(actions)
+        select_agent = dict(
+            type=AsyncAgent,
+            llm=llm,
+            template=template.format(
+                action_info=json.dumps(self.actions.description()),
+                output_format=output_format.format_instruction()),
+            output_format=output_format,
+            memory=memory,
+            aggregator=aggregator,
+            hooks=hooks,
+        )
+        self.select_agent = create_object(select_agent)
+        super().__init__(**kwargs)
+
+    async def forward(self, message: AgentMessage, **kwargs) -> AgentMessage:
+        for _ in range(self.max_turn):
+            message = await self.select_agent(message)
+            if self.finish_condition(message):
+                return message
+            message = await self.actions(message)
+        return message
+
+
+if __name__ == '__main__':
+    from lagent.llms import GPTAPI
+
+    class ActionCall(BaseModel):
+        name: str = Field(description='调用的函数名称')
+        parameters: Dict = Field(description='调用函数的参数')
+
+    class ActionFormat(BaseModel):
+        thought_process: str = Field(
+            description='描述当前所处的状态和已知信息。这有助于明确目前所掌握的信息和接下来的搜索方向。')
+        action: ActionCall = Field(description='当前步骤需要执行的操作，包括函数名称和参数。')
+
+    class FinishFormat(BaseModel):
+        thought_process: str = Field(
+            description='描述当前所处的状态和已知信息。这有助于明确目前所掌握的信息和接下来的搜索方向。')
+        conclusion: str = Field(description='总结当前的搜索结果，回答问题。')
+
+    prompt_template = PromptTemplate(select_action_template)
+    output_format = JSONParser(
+        output_format_template,
+        function_format=ActionFormat,
+        finish_format=FinishFormat)
+
+    llm = dict(
+        type=GPTAPI,
+        model_type='gpt-4o-2024-05-13',
+        key=None,
+        max_new_tokens=4096,
+        proxies=dict(),
+        retry=1000)
+
+    agent = ReAct(
+        llm=llm,
+        template=prompt_template,
+        output_format=output_format,
+        aggregator=dict(type='DefaultAggregator'),
+        actions=[dict(type='PythonInterpreter')],
+    )
+    response = agent(
+        AgentMessage(sender='user', content='用 Python 计算一下 3 ** 5'))
+    print(response)
+    response = agent(AgentMessage(sender='user', content=' 2 ** 5 呢'))
+    print(response)

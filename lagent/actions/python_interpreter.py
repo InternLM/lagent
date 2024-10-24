@@ -4,7 +4,9 @@ import io
 from contextlib import redirect_stdout
 from typing import Any, Optional, Type
 
-from lagent.actions.base_action import BaseAction, tool_api
+from aioify import aioify
+
+from lagent.actions.base_action import AsyncActionMixin, BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
 from lagent.schema import ActionReturn, ActionStatusCode
 
@@ -43,19 +45,18 @@ class PythonInterpreter(BaseAction):
         description (dict, Optional): The description of the action. Defaults to ``None``.
         parser (Type[BaseParser]): The parser class to process the
             action's inputs and outputs. Defaults to :class:`JsonParser`.
-        enable (bool, optional): Whether the action is enabled. Defaults to
-            ``True``.
     """
 
-    def __init__(self,
-                 answer_symbol: Optional[str] = None,
-                 answer_expr: Optional[str] = 'solution()',
-                 answer_from_stdout: bool = False,
-                 timeout: int = 20,
-                 description: Optional[dict] = None,
-                 parser: Type[BaseParser] = JsonParser,
-                 enable: bool = True) -> None:
-        super().__init__(description, parser, enable)
+    def __init__(
+        self,
+        answer_symbol: Optional[str] = None,
+        answer_expr: Optional[str] = 'solution()',
+        answer_from_stdout: bool = False,
+        timeout: int = 20,
+        description: Optional[dict] = None,
+        parser: Type[BaseParser] = JsonParser,
+    ) -> None:
+        super().__init__(description, parser)
         self.answer_symbol = answer_symbol
         self.answer_expr = answer_expr
         self.answer_from_stdout = answer_from_stdout
@@ -131,3 +132,45 @@ class PythonInterpreter(BaseAction):
             tool_return.type = self.name
             tool_return.state = ActionStatusCode.API_ERROR
         return tool_return
+
+
+class AsyncPythonInterpreter(AsyncActionMixin, PythonInterpreter):
+    """A Python executor that can execute Python scripts.
+
+    Args:
+        answer_symbol (str, Optional): the answer symbol from LLM. Defaults to ``None``.
+        answer_expr (str, Optional): the answer function name of the Python
+            script. Defaults to ``'solution()'``.
+        answer_from_stdout (boolean, Optional): whether the execution results is from
+            stdout. Defaults to ``False``.
+        timeout (int, Optional): Upper bound of waiting time for Python script execution.
+            Defaults to ``20``.
+        description (dict, Optional): The description of the action. Defaults to ``None``.
+        parser (Type[BaseParser]): The parser class to process the
+            action's inputs and outputs. Defaults to :class:`JsonParser`.
+    """
+
+    @tool_api
+    @aioify
+    def run(self, command: str) -> ActionReturn:
+        """用来执行Python代码。代码必须是一个函数，函数名必须得是 'solution'，代码对应你的思考过程。代码实例格式如下：
+
+        ```python
+        # import 依赖包
+        import xxx
+        def solution():
+            # 初始化一些变量
+            variable_names_with_real_meaning = xxx
+            # 步骤一
+            mid_variable = func(variable_names_with_real_meaning)
+            # 步骤 x
+            mid_variable = func(mid_variable)
+            # 最后结果
+            final_answer =  func(mid_variable)
+            return final_answer
+        ```
+
+        Args:
+            command (:class:`str`): Python code snippet
+        """
+        return super().run(command)

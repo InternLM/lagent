@@ -1,6 +1,8 @@
 from typing import Optional, Type
 
-from lagent.actions.base_action import BaseAction, tool_api
+from aioify import aioify
+
+from lagent.actions.base_action import AsyncActionMixin, BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
 from lagent.schema import ActionReturn, ActionStatusCode
 
@@ -12,14 +14,15 @@ Computer Science, Quantitative Biology, Quantitative Finance, Statistics, \
 Electrical Engineering, and Economics from scientific articles on arxiv.org.
     """
 
-    def __init__(self,
-                 top_k_results: int = 3,
-                 max_query_len: int = 300,
-                 doc_content_chars_max: int = 1500,
-                 description: Optional[dict] = None,
-                 parser: Type[BaseParser] = JsonParser,
-                 enable: bool = True):
-        super().__init__(description, parser, enable)
+    def __init__(
+        self,
+        top_k_results: int = 3,
+        max_query_len: int = 300,
+        doc_content_chars_max: int = 1500,
+        description: Optional[dict] = None,
+        parser: Type[BaseParser] = JsonParser,
+    ):
+        super().__init__(description, parser)
         self.top_k_results = top_k_results
         self.max_query_len = max_query_len
         self.doc_content_chars_max = doc_content_chars_max
@@ -54,3 +57,25 @@ Electrical Engineering, and Economics from scientific articles on arxiv.org.
         if docs:
             return {'content': '\n\n'.join(docs)}
         return {'content': 'No good Arxiv Result was found'}
+
+
+class AsyncArxivSearch(AsyncActionMixin, ArxivSearch):
+    """Search information from Arxiv.org. \
+Useful for when you need to answer questions about Physics, Mathematics, \
+Computer Science, Quantitative Biology, Quantitative Finance, Statistics, \
+Electrical Engineering, and Economics from scientific articles on arxiv.org.
+    """
+
+    @tool_api(explode_return=True)
+    @aioify
+    def get_arxiv_article_information(self, query: str) -> dict:
+        """Run Arxiv search and get the article meta information.
+
+        Args:
+            query (:class:`str`): the content of search query
+
+        Returns:
+            :class:`dict`: article information
+                * content (str): a list of 3 arxiv search papers
+        """
+        return super().get_arxiv_article_information(query)
