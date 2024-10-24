@@ -243,7 +243,7 @@ class GPTAPI(BaseAPILLM):
                         response['error'])
                     self.logger.error(errmsg)
             except Exception as error:
-                errmsg = str(error) + ' ' + str(traceback.format_exc())
+                errmsg = str(error) + '\n' + str(traceback.format_exc())
                 self.logger.error(errmsg)
             max_num_retries += 1
 
@@ -293,10 +293,9 @@ class GPTAPI(BaseAPILLM):
                                 return
                             yield choice['delta'].get('content', '')
                     except Exception as exc:
-                        print(
-                            f'response {decoded} lead to exception of {str(exc)}'
-                        )
-                        raise
+                        msg = f'response {decoded} lead to exception of {str(exc)}'
+                        self.logger.error(msg)
+                        raise Exception(msg) from exc
 
         assert isinstance(messages, list)
 
@@ -359,7 +358,7 @@ class GPTAPI(BaseAPILLM):
                         response['error'])
                     self.logger.error(errmsg)
             except Exception as error:
-                errmsg = str(error) + ' ' + str(traceback.format_exc())
+                errmsg = str(error) + '\n' + str(traceback.format_exc())
                 self.logger.error(errmsg)
             max_num_retries += 1
 
@@ -694,7 +693,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                         response['error'])
                     self.logger.error(errmsg)
             except Exception as error:
-                errmsg = str(error) + ' ' + str(traceback.format_exc())
+                errmsg = str(error) + '\n' + str(traceback.format_exc())
                 self.logger.error(errmsg)
             max_num_retries += 1
 
@@ -743,10 +742,9 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                                 return
                             yield choice['delta'].get('content', '')
                     except Exception as exc:
-                        self.logger.error(
-                            f'response {decoded} lead to exception of {str(exc)}'
-                        )
-                        raise
+                        msg = f'response {decoded} lead to exception of {str(exc)}'
+                        self.logger.error(msg)
+                        raise Exception(msg) from exc
 
         assert isinstance(messages, list)
 
@@ -814,7 +812,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                         response['error'])
                     self.logger.error(errmsg)
             except Exception as error:
-                errmsg = str(error) + ' ' + str(traceback.format_exc())
+                errmsg = str(error) + '\n' + str(traceback.format_exc())
                 self.logger.error(errmsg)
             max_num_retries += 1
 
