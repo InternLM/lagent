@@ -53,7 +53,7 @@ class Memory:
         else:
             raise TypeError(f'{type(memories)} is not supported')
 
-    def save(self) -> Union[Dict, List]:
+    def save(self) -> List[dict]:
         memory = []
         for m in self.memory:
             memory.append(m.model_dump())
