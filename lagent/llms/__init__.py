@@ -8,6 +8,7 @@ from .meta_template import INTERNLM2_META
 from .openai import GPTAPI, AsyncGPTAPI
 from .sensenova import SensenovaAPI
 from .vllm_wrapper import AsyncVllmModel, VllmModel
+from .deepseek import DeepseekAPI
 
 __all__ = [
     'AsyncBaseLLM',
@@ -29,4 +30,5 @@ __all__ = [
     'VllmModel',
     'AsyncVllmModel',
     'SensenovaAPI',
+    'DeepseekAPI',
 ]
