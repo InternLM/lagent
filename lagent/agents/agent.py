@@ -70,11 +70,10 @@ class Agent:
     ) -> AgentMessage:
         # message.receiver = self.name
         message = [
-            AgentMessage(sender='user', content=m) if isinstance(m, str) else m
-            for m in message
+            AgentMessage(sender='user', content=m)
+            if isinstance(m, str) else copy.deepcopy(m) for m in message
         ]
         for hook in self._hooks.values():
-            message = copy.deepcopy(message)
             result = hook.before_agent(self, message, session_id)
             if result:
                 message = result
@@ -87,8 +86,8 @@ class Agent:
                 content=response_message,
             )
         self.update_memory(response_message, session_id=session_id)
+        response_message = copy.deepcopy(response_message)
         for hook in self._hooks.values():
-            response_message = copy.deepcopy(response_message)
             result = hook.after_agent(self, response_message, session_id)
             if result:
                 response_message = result
@@ -177,11 +176,10 @@ class AsyncAgent(Agent):
                        session_id=0,
                        **kwargs) -> AgentMessage:
         message = [
-            AgentMessage(sender='user', content=m) if isinstance(m, str) else m
-            for m in message
+            AgentMessage(sender='user', content=m)
+            if isinstance(m, str) else copy.deepcopy(m) for m in message
         ]
         for hook in self._hooks.values():
-            message = copy.deepcopy(message)
             result = hook.before_agent(self, message, session_id)
             if result:
                 message = result
@@ -194,8 +192,8 @@ class AsyncAgent(Agent):
                 content=response_message,
             )
         self.update_memory(response_message, session_id=session_id)
+        response_message = copy.deepcopy(response_message)
         for hook in self._hooks.values():
-            response_message = copy.deepcopy(response_message)
             result = hook.after_agent(self, response_message, session_id)
             if result:
                 response_message = result

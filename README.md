@@ -367,12 +367,9 @@ class PrefixedMessageHook(Hook):
         self.senders = senders or []
 
     def before_agent(self, agent, messages, session_id):
-        for i, message in enumerate(messages):
+        for message in messages:
             if message.sender in self.senders:
-                message = message.copy(deep=True)
                 message.content = self.prefix + message.content
-                messages[i] = message
-        return messages
 
 class AsyncBlogger(AsyncAgent):
     def __init__(self, model_path, writer_prompt, critic_prompt, critic_prefix='', max_turn=3):
