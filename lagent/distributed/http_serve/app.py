@@ -1,13 +1,12 @@
 import argparse
-import importlib
 import json
 import logging
-import sys
 import time
 
 import uvicorn
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.requests import Request
 
 from lagent.schema import AgentMessage
 from lagent.utils import load_class_from_string
@@ -37,22 +36,23 @@ class AgentAPIServer:
 
     def setup_routes(self):
 
-        @self.app.get('/health_check')
         def heartbeat():
             return {'status': 'success', 'timestamp': time.time()}
 
-        @self.app.post('/chat_completion')
-        async def process_message(message: AgentMessage,
-                                  session_id: int = Body(0)):
+        async def process_message(request: Request):
             try:
-                result = await self.agent(message, session_id=session_id)
+                body = await request.json()
+                message = [
+                    m if isinstance(m, str) else AgentMessage.model_validate(m)
+                    for m in body.pop('message')
+                ]
+                result = await self.agent(*message, **body)
                 return result
             except Exception as e:
                 logging.error(f'Error processing message: {str(e)}')
                 raise HTTPException(
                     status_code=500, detail='Internal Server Error')
 
-        @self.app.get('/memory/{session_id}')
         def get_memory(session_id: int = 0):
             try:
                 result = self.agent.state_dict(session_id)
@@ -64,6 +64,12 @@ class AgentAPIServer:
                 logging.error(f'Error processing message: {str(e)}')
                 raise HTTPException(
                     status_code=500, detail='Internal Server Error')
+
+        self.app.add_api_route('/health_check', heartbeat, methods=['GET'])
+        self.app.add_api_route(
+            '/chat_completion', process_message, methods=['POST'])
+        self.app.add_api_route(
+            '/memory/{session_id}', get_memory, methods=['GET'])
 
     def run(self, host='127.0.0.1', port=8090):
         logging.info(f'Starting server at {host}:{port}')

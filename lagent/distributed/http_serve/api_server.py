@@ -1,4 +1,3 @@
-# server.py
 import json
 import os
 import subprocess
@@ -28,14 +27,16 @@ class HTTPAgentClient:
         except:
             return False
 
-    def __call__(self, message: AgentMessage, session_id: int = 0):
-        if isinstance(message, str):
-            message = AgentMessage(sender='user', content=message)
+    def __call__(self, *message, session_id: int = 0, **kwargs):
         response = requests.post(
             f'http://{self.host}:{self.port}/chat_completion',
             json={
-                'message': message.model_dump(),
-                'session_id': session_id
+                'message': [
+                    m if isinstance(m, str) else m.model_dump()
+                    for m in message
+                ],
+                'session_id': session_id,
+                **kwargs,
             },
             headers={'Content-Type': 'application/json'},
             timeout=self.timeout)
@@ -93,16 +94,18 @@ class HTTPAgentServer(HTTPAgentClient):
 
 class AsyncHTTPAgentMixin:
 
-    async def __call__(self, message: AgentMessage, session_id: int = 0):
-        if isinstance(message, str):
-            message = AgentMessage(sender='user', content=message)
+    async def __call__(self, *message, session_id: int = 0, **kwargs):
         async with aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(self.timeout)) as session:
             async with session.post(
                     f'http://{self.host}:{self.port}/chat_completion',
                     json={
-                        'message': message.model_dump(),
-                        'session_id': session_id
+                        'message': [
+                            m if isinstance(m, str) else m.model_dump()
+                            for m in message
+                        ],
+                        'session_id': session_id,
+                        **kwargs,
                     },
                     headers={'Content-Type': 'application/json'},
             ) as response:

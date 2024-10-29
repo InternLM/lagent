@@ -1,8 +1,8 @@
 google-search-results
-lmdeploy>=0.2.3
+lmdeploy>=0.2.5
 pillow
 python-pptx
 timeout_decorator
 torch
-transformers>=4.34
+transformers>=4.34,<=4.40
 vllm>=0.3.3
