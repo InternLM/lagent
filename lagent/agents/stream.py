@@ -9,8 +9,8 @@ from lagent.agents.aggregator import InternLMToolAggregator
 from lagent.hooks import InternLMActionProcessor
 from lagent.llms import BaseLLM
 from lagent.memory import Memory
-from lagent.prompts.parsers import InterpreterParser, MixedToolParser, PluginParser
-from lagent.schema import AgentMessage, AgentStatusCode
+from lagent.prompts.parsers import InterpreterParser, MixedToolParser, PluginParser, ToolStatusCode
+from lagent.schema import AgentMessage
 from lagent.utils import create_object
 
 API_PREFIX = (
@@ -81,7 +81,7 @@ class AgentForInternLM(Agent):
         action_hooks: List = [dict(type=InternLMActionProcessor)],
         finish_condition: Callable[
             [AgentMessage],
-            bool] = lambda m: m.formatted['status'] == AgentStatusCode.END,
+            bool] = lambda m: m.formatted['status'] == ToolStatusCode.NO_TOOL,
         max_turn: int = 4,
         **kwargs,
     ):
@@ -165,7 +165,7 @@ class MathCoder(AgentForInternLM):
         action_hooks: List = [dict(type=InternLMActionProcessor)],
         finish_condition: Callable[
             [AgentMessage],
-            bool] = lambda m: m.formatted['status'] == AgentStatusCode.END,
+            bool] = lambda m: m.formatted['status'] == ToolStatusCode.NO_TOOL,
         max_turn: int = 6,
         **kwargs,
     ):
@@ -205,7 +205,7 @@ class AsyncAgentForInternLM(AsyncAgent):
         action_hooks: List = [dict(type=InternLMActionProcessor)],
         finish_condition: Callable[
             [AgentMessage],
-            bool] = lambda m: m.formatted['status'] == AgentStatusCode.END,
+            bool] = lambda m: m.formatted['status'] == ToolStatusCode.NO_TOOL,
         max_turn: int = 4,
         **kwargs,
     ):
@@ -289,7 +289,7 @@ class AsyncMathCoder(AsyncAgentForInternLM):
         action_hooks: List = [dict(type=InternLMActionProcessor)],
         finish_condition: Callable[
             [AgentMessage],
-            bool] = lambda m: m.formatted['status'] == AgentStatusCode.END,
+            bool] = lambda m: m.formatted['status'] == ToolStatusCode.NO_TOOL,
         max_turn: int = 6,
         **kwargs,
     ):

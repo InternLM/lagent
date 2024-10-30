@@ -1,10 +1,10 @@
 import json
+from enum import IntEnum
 
 # import re
 from typing import Any, Callable, List, Optional
 
 from lagent.prompts.parsers import StrParser
-from lagent.schema import AgentStatusCode
 from lagent.utils import create_object, load_class_from_string
 
 
@@ -13,6 +13,12 @@ def default_plugin_validate(plugin: str):
     if not (plugin.startswith('{') and plugin.endswith("}")):
         raise json.decoder.JSONDecodeError
     return json.loads(plugin)
+
+
+class ToolStatusCode(IntEnum):
+    NO_TOOL = 0
+    VALID_TOOL = 1
+    PARSING_ERROR = -1
 
 
 class ToolParser(StrParser):
@@ -34,28 +40,20 @@ class ToolParser(StrParser):
             validate, str) else validate
 
     def parse_response(self, data: str) -> dict:
-        # match = self.pattern.search(data)
-        # if not match:
-        #     return dict(
-        #         tool_type=None,
-        #         thought=data,
-        #         action=None,
-        #         status=AgentStatusCode.END)
-        # thought, action = match.group(1), match.group(2).strip()
         if self.format_field['begin'] not in data:
             return dict(
                 tool_type=None,
                 thought=data,
                 action=None,
-                status=AgentStatusCode.END)
+                status=ToolStatusCode.NO_TOOL)
         thought, action, *_ = data.split(self.format_field["begin"])
         action = action.split(self.format_field['end'])[0]
-        status = AgentStatusCode.STREAM_ING
+        status = ToolStatusCode.VALID_TOOL
         if self.validate:
             try:
                 action = self.validate(action)
             except Exception:
-                status = AgentStatusCode.SESSION_INVALID_ARG
+                status = ToolStatusCode.PARSING_ERROR
         return dict(
             tool_type=self.tool_type,
             thought=thought,
@@ -131,7 +129,7 @@ class MixedToolParser(StrParser):
             tool_type=None,
             thought=data,
             action=None,
-            status=AgentStatusCode.END)
+            status=ToolStatusCode.NO_TOOL)
         for name, parser in self.parsers.items():
             res = parser.parse_response(data)
             if res['tool_type'] == name:

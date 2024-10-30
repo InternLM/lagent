@@ -88,7 +88,6 @@ class AgentStatusCode(IntEnum):
 
 
 class AgentMessage(BaseModel):
-
     content: Any
     sender: str = 'user'
     formatted: Optional[Any] = None
