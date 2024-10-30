@@ -87,8 +87,13 @@ class AgentStatusCode(IntEnum):
     CODE_RETURN = 8  # python return
 
 
-class AgentMessage(BaseModel):
+class ToolStatusCode(IntEnum):
+    NO_TOOL = 0
+    VALID_TOOL = 1
+    PARSING_ERROR = -1
 
+
+class AgentMessage(BaseModel):
     content: Any
     sender: str = 'user'
     formatted: Optional[Any] = None

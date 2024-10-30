@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, Union
 from lagent.agents.aggregator.default_aggregator import DefaultAggregator
 from lagent.memory.base_memory import Memory
 from lagent.prompts.parsers.tool_parser import MixedToolParser, ToolParser
-from lagent.schema import AgentStatusCode
+from lagent.schema import ToolStatusCode
 
 
 class InternLMToolAggregator(DefaultAggregator):
@@ -84,7 +84,7 @@ class InternLMToolAggregator(DefaultAggregator):
             if message.sender == name:
                 if isinstance(message.formatted, dict):
                     parsed = message.formatted
-                    if parsed['status'] == AgentStatusCode.SESSION_INVALID_ARG:
+                    if parsed['status'] == ToolStatusCode.PARSING_ERROR:
                         continue
                     _message.append(
                         dict(
