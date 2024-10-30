@@ -1,10 +1,10 @@
 import json
+from enum import IntEnum
 
 # import re
 from typing import Any, Callable, List, Optional
 
 from lagent.prompts.parsers import StrParser
-from lagent.schema import ToolStatusCode
 from lagent.utils import create_object, load_class_from_string
 
 
@@ -13,6 +13,12 @@ def default_plugin_validate(plugin: str):
     if not (plugin.startswith('{') and plugin.endswith("}")):
         raise json.decoder.JSONDecodeError
     return json.loads(plugin)
+
+
+class ToolStatusCode(IntEnum):
+    NO_TOOL = 0
+    VALID_TOOL = 1
+    PARSING_ERROR = -1
 
 
 class ToolParser(StrParser):

@@ -2,8 +2,7 @@ from typing import Dict, List, Optional, Union
 
 from lagent.agents.aggregator.default_aggregator import DefaultAggregator
 from lagent.memory.base_memory import Memory
-from lagent.prompts.parsers.tool_parser import MixedToolParser, ToolParser
-from lagent.schema import ToolStatusCode
+from lagent.prompts.parsers.tool_parser import MixedToolParser, ToolParser, ToolStatusCode
 
 
 class InternLMToolAggregator(DefaultAggregator):

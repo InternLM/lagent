@@ -9,8 +9,8 @@ from lagent.agents.aggregator import InternLMToolAggregator
 from lagent.hooks import InternLMActionProcessor
 from lagent.llms import BaseLLM
 from lagent.memory import Memory
-from lagent.prompts.parsers import InterpreterParser, MixedToolParser, PluginParser
-from lagent.schema import AgentMessage, ToolStatusCode
+from lagent.prompts.parsers import InterpreterParser, MixedToolParser, PluginParser, ToolStatusCode
+from lagent.schema import AgentMessage
 from lagent.utils import create_object
 
 API_PREFIX = (
