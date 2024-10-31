@@ -93,7 +93,7 @@ def filter_suffix(response: Union[str, List[str]],
 
 
 def get_logger(
-    name: str = osp.split(osp.splitext(sys.argv[0])[0])[-1],
+    name: str = 'lagent',
     level: str = 'debug',
     fmt:
     str = '%(asctime)s %(levelname)8s %(filename)20s %(lineno)4s - %(message)s',

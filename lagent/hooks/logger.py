@@ -9,7 +9,7 @@ from .hook import Hook
 
 class MessageLogger(Hook):
 
-    def __init__(self, name: Optional[str] = None):
+    def __init__(self, name: str = 'lagent'):
         self.logger = get_logger(name, 'info')
         self.sender2color = {}
 
