@@ -1,4 +1,7 @@
 from itertools import count
+from typing import Tuple
+
+from lagent.schema import AgentMessage
 
 
 class Hook:
@@ -6,32 +9,32 @@ class Hook:
     def before_agent(
         self,
         agent,
-        message,
-        session_id,
+        message: Tuple[AgentMessage],
+        session_id: int,
     ):
         pass
 
     def after_agent(
         self,
         agent,
-        message,
-        session_id,
+        message: AgentMessage,
+        session_id: int,
     ):
         pass
 
     def before_action(
         self,
         executor,
-        message,
-        session_id,
+        message: AgentMessage,
+        session_id: int,
     ):
         pass
 
     def after_action(
         self,
         executor,
-        message,
-        session_id,
+        message: AgentMessage,
+        session_id: int,
     ):
         pass
 
