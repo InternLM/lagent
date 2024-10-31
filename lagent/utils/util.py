@@ -1,8 +1,13 @@
 import asyncio
 import importlib
 import inspect
+import logging
+import os
+import os.path as osp
 import sys
+import time
 from functools import partial
+from logging.handlers import RotatingFileHandler
 from typing import Any, Dict, Generator, Iterable, List, Optional, Union
 
 
@@ -85,6 +90,41 @@ def filter_suffix(response: Union[str, List[str]],
     if not batched:
         return processed[0]
     return processed
+
+
+def get_logger(
+    name: str = 'lagent',
+    level: str = 'debug',
+    fmt:
+    str = '%(asctime)s %(levelname)8s %(filename)20s %(lineno)4s - %(message)s',
+    add_file_handler: bool = False,
+    log_dir: str = 'log',
+    log_file: str = time.strftime('%Y-%m-%d.log', time.localtime()),
+    max_bytes: int = 5 * 1024 * 1024,
+    backup_count: int = 3,
+):
+    logger = logging.getLogger(name)
+    logger.propagate = False
+    logger.setLevel(getattr(logging, level.upper(), logging.DEBUG))
+
+    formatter = logging.Formatter(fmt)
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    if add_file_handler:
+        if not osp.exists(log_dir):
+            os.makedirs(log_dir)
+        log_file_path = osp.join(log_dir, log_file)
+        file_handler = RotatingFileHandler(
+            log_file_path,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding='utf-8')
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+    return logger
 
 
 class GeneratorWithReturn:

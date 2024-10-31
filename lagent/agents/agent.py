@@ -168,6 +168,9 @@ class Agent:
         if self.memory:
             self.memory.reset(session_id=session_id)
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(name='{self.name}', description='{self.description or ''}')"
+
 
 class AsyncAgent(Agent):
 
@@ -273,7 +276,7 @@ class AgentContainerMixin:
                 setattr(cls, method, wrap_api(getattr(cls, method)))
 
 
-class AgentList(Agent, UserList, AgentContainerMixin):
+class AgentList(UserList, Agent, AgentContainerMixin):
 
     def __init__(self,
                  agents: Optional[Iterable[Union[Agent, AsyncAgent]]] = None):
@@ -281,7 +284,7 @@ class AgentList(Agent, UserList, AgentContainerMixin):
         UserList.__init__(self, agents)
 
 
-class AgentDict(Agent, UserDict, AgentContainerMixin):
+class AgentDict(UserDict, Agent, AgentContainerMixin):
 
     def __init__(self,
                  agents: Optional[Mapping[str, Union[Agent,
