@@ -679,7 +679,6 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                 if self.org_ctr == len(self.orgs):
                     self.org_ctr = 0
                 header['OpenAI-Organization'] = self.orgs[self.org_ctr]
-
             response = dict()
             try:
                 async with aiohttp.ClientSession() as session:
@@ -713,6 +712,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                                   (await resp.text(errors='replace')))
                 continue
             except KeyError:
+                print(response)
                 if 'error' in response:
                     if response['error']['code'] == 'rate_limit_exceeded':
                         time.sleep(1)
