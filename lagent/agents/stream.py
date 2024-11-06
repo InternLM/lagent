@@ -128,7 +128,7 @@ class AgentForInternLM(Agent):
         for msg in self.agent.memory.get_memory(session_id):
             if msg.sender == self.agent.name:
                 steps.append(
-                    dict(role='language', content=msg.formatted['thought']))
+                    dict(role='thought', content=msg.formatted['thought']))
                 if msg.formatted['tool_type']:
                     tool_type = msg.formatted['tool_type']
                     steps.append(
@@ -253,7 +253,7 @@ class AsyncAgentForInternLM(AsyncAgent):
         for msg in self.agent.memory.get_memory(session_id):
             if msg.sender == self.agent.name:
                 steps.append(
-                    dict(role='language', content=msg.formatted['thought']))
+                    dict(role='thought', content=msg.formatted['thought']))
                 if msg.formatted['tool_type']:
                     tool_type = msg.formatted['tool_type']
                     steps.append(
@@ -314,35 +314,3 @@ class AsyncMathCoder(AsyncAgentForInternLM):
                 iter(self.interpreter_executor.actions.values()))
             if interpreter.name == 'AsyncIPythonInterpreter':
                 await interpreter.close_session(session_id)
-
-
-if __name__ == '__main__':
-    from lagent.llms import GPTAPI
-
-    interpreter_prompt = (
-        'Below is a math problem. Please solve it step by step with the assistance of Python programming. Consider using Sympy or Numpy library '
-        'to facilitate your derivation, calculation and equation solving. Utilize the "pi" symbol and "Rational" from Sympy '
-        'for $$\pi$$ and fractions, and simplify all fractions and square roots without converting them to decimal values. '
-        'Please encapsulate each generated Jupyter Python code block with tags "{begin}" and "{end}". Conclude the '
-        r'final answer when observations are sufficient and encapsulate the numerical result with LaTeX syntax "\boxed{{}}" '
-        'without any unit, and end your conclusion with the special token "[END]" to denote the completion of your response. '
-        'Keep the following points in mind:\n'
-        '- You must alternately use human and programming languages in the chain of thought;\n'
-        '- The number of your reasoning steps should not exceed **three**, which means you may merge some intermediate steps when the original answer is tedious.'
-    )
-
-    llm = dict(
-        type=GPTAPI,
-        model_type='gpt-4o-2024-05-13',
-        retry=50,
-        key=None,
-        max_new_tokens=2048,
-        stop_words=['</python'],
-    )
-    agent = MathCoder(
-        llm=llm,
-        output_format=InterpreterParser(
-            template=interpreter_prompt, begin='<python>', end='</python>'),
-        aggregator=InternLMToolAggregator(
-            environment_begin='<output>\n', environment_end='\n</output>'),
-        finish_condition=lambda m: '[END]' in m.content)

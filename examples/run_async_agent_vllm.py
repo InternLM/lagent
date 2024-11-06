@@ -14,7 +14,7 @@ loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 # initialize the model
 model = AsyncVllmModel(
-    path='internlm/internlm2_5-7b-chat',
+    path='Qwen/Qwen2-7B-Instruct',
     meta_template=INTERNLM2_META,
     tp=1,
     top_k=1,
