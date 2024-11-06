@@ -12,9 +12,9 @@ jsonschema
 jupyter==1.0.0
 jupyter_core==5.7.2
 jupyter_client==8.6.2
+pydantic==2.6.4
 requests
 stdlib_list==0.10.0
-streamlit
 termcolor
 tiktoken
 timeout-decorator

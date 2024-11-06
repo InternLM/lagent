@@ -16,7 +16,7 @@ interpreter_prompt = (
     'Below is a math problem. Please solve it step by step with the assistance of Python programming. Consider using Sympy or Numpy library '
     'to facilitate your derivation, calculation and equation solving. Utilize the "pi" symbol and "Rational" from Sympy '
     'for $$\pi$$ and fractions, and simplify all fractions and square roots without converting them to decimal values. '
-    'Please encapsulate each generated Jupyter Python code block with tags "{start}" and "{end}". Conclude the '
+    'Please encapsulate each generated Jupyter Python code block with tags "{begin}" and "{end}". Conclude the '
     r'final answer when observations are sufficient and encapsulate the numerical result with LaTeX syntax "\boxed{{}}" '
     'without any unit, and end your conclusion with the special token "[END]" to denote the completion of your response. '
     'Keep the following points in mind:\n'
