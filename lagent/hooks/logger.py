@@ -10,7 +10,8 @@ from .hook import Hook
 class MessageLogger(Hook):
 
     def __init__(self, name: str = 'lagent'):
-        self.logger = get_logger(name, 'info')
+        self.logger = get_logger(
+            name, 'info', '%(asctime)s %(levelname)8s %(name)8s - %(message)s')
         self.sender2color = {}
 
     def before_agent(self, agent, messages, session_id):

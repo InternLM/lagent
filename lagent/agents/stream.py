@@ -128,7 +128,7 @@ class AgentForInternLM(Agent):
         for msg in self.agent.memory.get_memory(session_id):
             if msg.sender == self.agent.name:
                 steps.append(
-                    dict(role='language', content=msg.formatted['thought']))
+                    dict(role='thought', content=msg.formatted['thought']))
                 if msg.formatted['tool_type']:
                     tool_type = msg.formatted['tool_type']
                     steps.append(
@@ -253,7 +253,7 @@ class AsyncAgentForInternLM(AsyncAgent):
         for msg in self.agent.memory.get_memory(session_id):
             if msg.sender == self.agent.name:
                 steps.append(
-                    dict(role='language', content=msg.formatted['thought']))
+                    dict(role='thought', content=msg.formatted['thought']))
                 if msg.formatted['tool_type']:
                     tool_type = msg.formatted['tool_type']
                     steps.append(
