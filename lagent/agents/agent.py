@@ -252,6 +252,8 @@ class Sequential(Agent):
             raise ValueError('At least one agent should be provided')
         if isinstance(agents[0],
                       Iterable) and not isinstance(agents[0], Agent):
+            if not agents[0]:
+                raise ValueError('At least one agent should be provided')
             agents = agents[0]
         for key, agent in enumerate(agents):
             if isinstance(agents, Mapping):
