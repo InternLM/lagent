@@ -170,7 +170,22 @@ class Agent:
             self.memory.reset(session_id=session_id)
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(name='{self.name}', description='{self.description or ''}')"
+
+        def _rcsv_repr(agent, n_indent=1):
+            res = agent.__class__.__name__ + (f"(name='{agent.name}')"
+                                              if agent.name else '')
+            modules = [
+                f"{n_indent * '  '}({name}): {_rcsv_repr(agent, n_indent + 1)}"
+                for name, agent in getattr(agent, '_agents', {}).items()
+            ]
+            if modules:
+                res += '(\n' + '\n'.join(
+                    modules) + f'\n{(n_indent - 1) * "  "})'
+            elif not res.endswith(')'):
+                res += '()'
+            return res
+
+        return _rcsv_repr(self)
 
 
 class AsyncAgent(Agent):
@@ -347,18 +362,20 @@ class AgentContainerMixin:
                 setattr(cls, method, wrap_api(getattr(cls, method)))
 
 
-class AgentList(UserList, Agent, AgentContainerMixin):
+class AgentList(Agent, UserList, AgentContainerMixin):
 
     def __init__(self,
                  agents: Optional[Iterable[Union[Agent, AsyncAgent]]] = None):
         Agent.__init__(self, memory=None)
         UserList.__init__(self, agents)
+        self.name = None
 
 
-class AgentDict(UserDict, Agent, AgentContainerMixin):
+class AgentDict(Agent, UserDict, AgentContainerMixin):
 
     def __init__(self,
                  agents: Optional[Mapping[str, Union[Agent,
                                                      AsyncAgent]]] = None):
         Agent.__init__(self, memory=None)
         UserDict.__init__(self, agents)
+        self.name = None
