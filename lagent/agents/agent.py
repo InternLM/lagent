@@ -2,6 +2,7 @@ import copy
 import warnings
 from collections import OrderedDict, UserDict, UserList, abc
 from functools import wraps
+from itertools import chain, repeat
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Union
 
 from lagent.agents.aggregator import DefaultAggregator
@@ -223,6 +224,76 @@ class AsyncAgent(Agent):
                 formatted=formatted_messages,
             )
         return llm_response
+
+
+class Sequential(Agent):
+    """Sequential is an agent container that forwards messages to each agent 
+    in the order they are added."""
+
+    def __init__(self, *agents: Union[Agent, AsyncAgent, Iterable], **kwargs):
+        super().__init__(**kwargs)
+        self._agents = OrderedDict()
+        if not agents:
+            raise ValueError('At least one agent should be provided')
+        if isinstance(agents[0],
+                      Iterable) and not isinstance(agents[0], Agent):
+            agents = agents[0]
+        for key, agent in enumerate(agents):
+            if isinstance(agents, Mapping):
+                key, agent = agent, agents[agent]
+            elif isinstance(agent, tuple):
+                key, agent = agent
+            self.add_agent(key, agent)
+
+    def add_agent(self, name: str, agent: Union[Agent, AsyncAgent]):
+        assert isinstance(
+            agent, (Agent, AsyncAgent
+                    )), f'{type(agent)} is not an Agent or AsyncAgent subclass'
+        self._agents[str(name)] = agent
+
+    def forward(self,
+                *message: AgentMessage,
+                session_id=0,
+                rounds: int = 1,
+                exit_at: int = -1,
+                **kwargs) -> AgentMessage:
+        assert rounds > 0, 'rounds should be greater than 0'
+        iterator = chain.from_iterable(repeat(self._agents.values()))
+        for _ in range((rounds - 1 + int(exit_at < 0)) * len(self) + exit_at +
+                       1):
+            agent = next(iterator)
+            if isinstance(message, AgentMessage):
+                message = (message, )
+            message = agent(*message, session_id=session_id, **kwargs)
+        return message
+
+    def __getitem__(self, key):
+        if isinstance(key, int) and key < 0:
+            assert key >= -len(self), 'index out of range'
+            key = len(self) + key
+        return self._agents[str(key)]
+
+    def __len__(self):
+        return len(self._agents)
+
+
+class AsyncSequential(Sequential, AsyncAgent):
+
+    async def forward(self,
+                      *message: AgentMessage,
+                      session_id=0,
+                      rounds: int = 1,
+                      exit_at: int = -1,
+                      **kwargs) -> AgentMessage:
+        assert rounds > 0, 'rounds should be greater than 0'
+        iterator = chain.from_iterable(repeat(self._agents.values()))
+        for _ in range((rounds - 1 + int(exit_at < 0)) * len(self) + exit_at +
+                       1):
+            agent = next(iterator)
+            if isinstance(message, AgentMessage):
+                message = (message, )
+            message = await agent(*message, session_id=session_id, **kwargs)
+        return message
 
 
 class AgentContainerMixin:
