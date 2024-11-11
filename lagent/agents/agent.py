@@ -271,13 +271,13 @@ class Sequential(Agent):
     def forward(self,
                 *message: AgentMessage,
                 session_id=0,
-                rounds: int = 1,
-                exit_at: int = -1,
+                exit_at: Optional[int] = None,
                 **kwargs) -> AgentMessage:
-        assert rounds > 0, 'rounds should be greater than 0'
+        assert exit_at is None or exit_at >= 0, 'exit_at should be greater than or equal to 0'
+        if exit_at is None:
+            exit_at = len(self) - 1
         iterator = chain.from_iterable(repeat(self._agents.values()))
-        for _ in range((rounds - 1 + int(exit_at < 0)) * len(self) + exit_at +
-                       1):
+        for _ in range(exit_at + 1):
             agent = next(iterator)
             if isinstance(message, AgentMessage):
                 message = (message, )
@@ -299,13 +299,13 @@ class AsyncSequential(Sequential, AsyncAgent):
     async def forward(self,
                       *message: AgentMessage,
                       session_id=0,
-                      rounds: int = 1,
-                      exit_at: int = -1,
+                      exit_at: Optional[int] = None,
                       **kwargs) -> AgentMessage:
-        assert rounds > 0, 'rounds should be greater than 0'
+        assert exit_at is None or exit_at >= 0, 'exit_at should be greater than or equal to 0'
+        if exit_at is None:
+            exit_at = len(self) - 1
         iterator = chain.from_iterable(repeat(self._agents.values()))
-        for _ in range((rounds - 1 + int(exit_at < 0)) * len(self) + exit_at +
-                       1):
+        for _ in range(exit_at + 1):
             agent = next(iterator)
             if isinstance(message, AgentMessage):
                 message = (message, )
