@@ -7,7 +7,7 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor
 from logging import getLogger
 from threading import Lock
-from typing import Dict, List, Optional, Union
+from typing import AsyncGenerator, Dict, List, Optional, Union
 
 import aiohttp
 import requests
@@ -701,7 +701,8 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                            f'{max_num_retries} times. Check the logs for '
                            f'details. errmsg: {errmsg}')
 
-    async def _stream_chat(self, messages: List[dict], **gen_params) -> str:
+    async def _stream_chat(self, messages: List[dict],
+                           **gen_params) -> AsyncGenerator[str, None]:
         """Generate completion from a list of templates.
 
         Args:
