@@ -1,6 +1,6 @@
 from typing import Optional, Type
 
-from aioify import aioify
+from asyncer import asyncify
 
 from lagent.actions.base_action import AsyncActionMixin, BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
@@ -42,12 +42,10 @@ Electrical Engineering, and Economics from scientific articles on arxiv.org.
 
         try:
             results = arxiv.Search(  # type: ignore
-                query[:self.max_query_len],
-                max_results=self.top_k_results).results()
+                query[: self.max_query_len], max_results=self.top_k_results
+            ).results()
         except Exception as exc:
-            return ActionReturn(
-                errmsg=f'Arxiv exception: {exc}',
-                state=ActionStatusCode.HTTP_ERROR)
+            return ActionReturn(errmsg=f'Arxiv exception: {exc}', state=ActionStatusCode.HTTP_ERROR)
         docs = [
             f'Published: {result.updated.date()}\nTitle: {result.title}\n'
             f'Authors: {", ".join(a.name for a in result.authors)}\n'
@@ -67,7 +65,7 @@ Electrical Engineering, and Economics from scientific articles on arxiv.org.
     """
 
     @tool_api(explode_return=True)
-    @aioify
+    @asyncify
     def get_arxiv_article_information(self, query: str) -> dict:
         """Run Arxiv search and get the article meta information.
 

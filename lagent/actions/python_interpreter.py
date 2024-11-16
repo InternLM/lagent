@@ -4,7 +4,7 @@ import io
 from contextlib import redirect_stdout
 from typing import Any, Optional, Type
 
-from aioify import aioify
+from asyncer import asyncify
 
 from lagent.actions.base_action import AsyncActionMixin, BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
@@ -18,8 +18,7 @@ class GenericRuntime:
 
     def __init__(self):
         self._global_vars = copy.copy(self.GLOBAL_DICT)
-        self._local_vars = copy.copy(
-            self.LOCAL_DICT) if self.LOCAL_DICT else None
+        self._local_vars = copy.copy(self.LOCAL_DICT) if self.LOCAL_DICT else None
 
         for c in self.HEADERS:
             self.exec_code(c)
@@ -85,6 +84,7 @@ class PythonInterpreter(BaseAction):
             command (:class:`str`): Python code snippet
         """
         from func_timeout import FunctionTimedOut, func_set_timeout
+
         self.runtime = GenericRuntime()
         try:
             tool_return = func_set_timeout(self.timeout)(self._call)(command)
@@ -151,7 +151,7 @@ class AsyncPythonInterpreter(AsyncActionMixin, PythonInterpreter):
     """
 
     @tool_api
-    @aioify
+    @asyncify
     def run(self, command: str) -> ActionReturn:
         """用来执行Python代码。代码必须是一个函数，函数名必须得是 'solution'，代码对应你的思考过程。代码实例格式如下：
 
