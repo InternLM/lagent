@@ -165,9 +165,26 @@ class Agent:
         self._hooks[handle.id] = hook
         return handle
 
-    def reset(self, session_id=0):
-        if self.memory:
-            self.memory.reset(session_id=session_id)
+    def reset(self,
+              session_id=0,
+              keypath: Optional[str] = None,
+              recursive: bool = False):
+        assert not (keypath and
+                    recursive), 'keypath and recursive can\'t be used together'
+        if keypath:
+            keys, agent = keypath.split('.'), self
+            for key in keys:
+                agents = getattr(agent, '_agents', {})
+                if key not in agents:
+                    raise KeyError(f'No sub-agent named {key} in {agent}')
+                agent = agents[key]
+            agent.reset(session_id, recursive=False)
+        else:
+            if self.memory:
+                self.memory.reset(session_id=session_id)
+            if recursive:
+                for agent in getattr(self, '_agents', {}).values():
+                    agent.reset(session_id, recursive=True)
 
     def __repr__(self):
 
