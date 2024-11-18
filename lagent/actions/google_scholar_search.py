@@ -2,7 +2,7 @@
 import os
 from typing import Optional, Type
 
-from aioify import aioify
+from asyncer import asyncify
 
 from lagent.actions.base_action import AsyncActionMixin, BaseAction, tool_api
 from lagent.schema import ActionReturn, ActionStatusCode
@@ -31,7 +31,8 @@ class GoogleScholar(BaseAction):
         if api_key is None:
             raise ValueError(
                 'Please set Serper API key either in the environment '
-                'as SERPER_API_KEY or pass it as `api_key` parameter.')
+                'as SERPER_API_KEY or pass it as `api_key` parameter.'
+            )
         self.api_key = api_key
 
     @tool_api(explode_return=True)
@@ -78,6 +79,7 @@ class GoogleScholar(BaseAction):
                 - pub_info: publication information of selected papers
         """
         from serpapi import GoogleSearch
+
         params = {
             'q': query,
             'engine': 'google_scholar',
@@ -94,7 +96,7 @@ class GoogleScholar(BaseAction):
             'as_sdt': as_sdt,
             'safe': safe,
             'filter': filter,
-            'as_vis': as_vis
+            'as_vis': as_vis,
         }
         search = GoogleSearch(params)
         try:
@@ -112,27 +114,24 @@ class GoogleScholar(BaseAction):
                 cited_by.append(citation['total'])
                 snippets.append(item['snippet'])
                 organic_id.append(item['result_id'])
-            return dict(
-                title=title,
-                cited_by=cited_by,
-                organic_id=organic_id,
-                snippets=snippets)
+            return dict(title=title, cited_by=cited_by, organic_id=organic_id, snippets=snippets)
         except Exception as e:
-            return ActionReturn(
-                errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
+            return ActionReturn(errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
 
     @tool_api(explode_return=True)
-    def get_author_information(self,
-                               author_id: str,
-                               hl: Optional[str] = None,
-                               view_op: Optional[str] = None,
-                               sort: Optional[str] = None,
-                               citation_id: Optional[str] = None,
-                               start: Optional[int] = None,
-                               num: Optional[int] = None,
-                               no_cache: Optional[bool] = None,
-                               async_req: Optional[bool] = None,
-                               output: Optional[str] = None) -> dict:
+    def get_author_information(
+        self,
+        author_id: str,
+        hl: Optional[str] = None,
+        view_op: Optional[str] = None,
+        sort: Optional[str] = None,
+        citation_id: Optional[str] = None,
+        start: Optional[int] = None,
+        num: Optional[int] = None,
+        no_cache: Optional[bool] = None,
+        async_req: Optional[bool] = None,
+        output: Optional[str] = None,
+    ) -> dict:
         """Search for an author's information by author's id provided by get_author_id.
 
         Args:
@@ -155,6 +154,7 @@ class GoogleScholar(BaseAction):
                 * website: the author's homepage url
         """
         from serpapi import GoogleSearch
+
         params = {
             'engine': 'google_scholar_author',
             'author_id': author_id,
@@ -167,7 +167,7 @@ class GoogleScholar(BaseAction):
             'num': num,
             'no_cache': no_cache,
             'async': async_req,
-            'output': output
+            'output': output,
         }
         try:
             search = GoogleSearch(params)
@@ -178,20 +178,19 @@ class GoogleScholar(BaseAction):
                 name=author['name'],
                 affiliations=author.get('affiliations', ''),
                 website=author.get('website', ''),
-                articles=[
-                    dict(title=article['title'], authors=article['authors'])
-                    for article in articles[:3]
-                ])
+                articles=[dict(title=article['title'], authors=article['authors']) for article in articles[:3]],
+            )
         except Exception as e:
-            return ActionReturn(
-                errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
+            return ActionReturn(errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
 
     @tool_api(explode_return=True)
-    def get_citation_format(self,
-                            q: str,
-                            no_cache: Optional[bool] = None,
-                            async_: Optional[bool] = None,
-                            output: Optional[str] = 'json') -> dict:
+    def get_citation_format(
+        self,
+        q: str,
+        no_cache: Optional[bool] = None,
+        async_: Optional[bool] = None,
+        output: Optional[str] = 'json',
+    ) -> dict:
         """Function to get MLA citation format by an identification of organic_result's id provided by search_google_scholar.
 
         Args:
@@ -206,13 +205,14 @@ class GoogleScholar(BaseAction):
                 * citation: the citation format of the article
         """
         from serpapi import GoogleSearch
+
         params = {
             'q': q,
             'engine': 'google_scholar_cite',
             'api_key': self.api_key,
             'no_cache': no_cache,
             'async': async_,
-            'output': output
+            'output': output,
         }
         try:
             search = GoogleSearch(params)
@@ -221,18 +221,19 @@ class GoogleScholar(BaseAction):
             citation_info = citation[0]['snippet']
             return citation_info
         except Exception as e:
-            return ActionReturn(
-                errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
+            return ActionReturn(errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
 
     @tool_api(explode_return=True)
-    def get_author_id(self,
-                      mauthors: str,
-                      hl: Optional[str] = 'en',
-                      after_author: Optional[str] = None,
-                      before_author: Optional[str] = None,
-                      no_cache: Optional[bool] = False,
-                      _async: Optional[bool] = False,
-                      output: Optional[str] = 'json') -> dict:
+    def get_author_id(
+        self,
+        mauthors: str,
+        hl: Optional[str] = 'en',
+        after_author: Optional[str] = None,
+        before_author: Optional[str] = None,
+        no_cache: Optional[bool] = False,
+        _async: Optional[bool] = False,
+        output: Optional[str] = 'json',
+    ) -> dict:
         """The getAuthorId function is used to get the author's id by his or her name.
 
         Args:
@@ -249,6 +250,7 @@ class GoogleScholar(BaseAction):
                 * author_id: the author_id of the author
         """
         from serpapi import GoogleSearch
+
         params = {
             'mauthors': mauthors,
             'engine': 'google_scholar_profiles',
@@ -258,7 +260,7 @@ class GoogleScholar(BaseAction):
             'before_author': before_author,
             'no_cache': no_cache,
             'async': _async,
-            'output': output
+            'output': output,
         }
         try:
             search = GoogleSearch(params)
@@ -267,8 +269,7 @@ class GoogleScholar(BaseAction):
             author_info = dict(author_id=profile[0]['author_id'])
             return author_info
         except Exception as e:
-            return ActionReturn(
-                errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
+            return ActionReturn(errmsg=str(e), state=ActionStatusCode.HTTP_ERROR)
 
 
 class AsyncGoogleScholar(AsyncActionMixin, GoogleScholar):
@@ -283,7 +284,7 @@ class AsyncGoogleScholar(AsyncActionMixin, GoogleScholar):
     """
 
     @tool_api(explode_return=True)
-    @aioify
+    @asyncify
     def search_google_scholar(
         self,
         query: str,
@@ -326,23 +327,38 @@ class AsyncGoogleScholar(AsyncActionMixin, GoogleScholar):
                 - organic_id: a list of the organic results' ids of the three selected papers
                 - pub_info: publication information of selected papers
         """
-        return super().search_google_scholar(query, cites, as_ylo, as_yhi,
-                                             scisbd, cluster, hl, lr, start,
-                                             num, as_sdt, safe, filter, as_vis)
+        return super().search_google_scholar(
+            query,
+            cites,
+            as_ylo,
+            as_yhi,
+            scisbd,
+            cluster,
+            hl,
+            lr,
+            start,
+            num,
+            as_sdt,
+            safe,
+            filter,
+            as_vis,
+        )
 
     @tool_api(explode_return=True)
-    @aioify
-    def get_author_information(self,
-                               author_id: str,
-                               hl: Optional[str] = None,
-                               view_op: Optional[str] = None,
-                               sort: Optional[str] = None,
-                               citation_id: Optional[str] = None,
-                               start: Optional[int] = None,
-                               num: Optional[int] = None,
-                               no_cache: Optional[bool] = None,
-                               async_req: Optional[bool] = None,
-                               output: Optional[str] = None) -> dict:
+    @asyncify
+    def get_author_information(
+        self,
+        author_id: str,
+        hl: Optional[str] = None,
+        view_op: Optional[str] = None,
+        sort: Optional[str] = None,
+        citation_id: Optional[str] = None,
+        start: Optional[int] = None,
+        num: Optional[int] = None,
+        no_cache: Optional[bool] = None,
+        async_req: Optional[bool] = None,
+        output: Optional[str] = None,
+    ) -> dict:
         """Search for an author's information by author's id provided by get_author_id.
 
         Args:
@@ -364,17 +380,19 @@ class AsyncGoogleScholar(AsyncActionMixin, GoogleScholar):
                 * articles: at most 3 articles by the author
                 * website: the author's homepage url
         """
-        return super().get_author_information(author_id, hl, view_op, sort,
-                                              citation_id, start, num,
-                                              no_cache, async_req, output)
+        return super().get_author_information(
+            author_id, hl, view_op, sort, citation_id, start, num, no_cache, async_req, output
+        )
 
     @tool_api(explode_return=True)
-    @aioify
-    def get_citation_format(self,
-                            q: str,
-                            no_cache: Optional[bool] = None,
-                            async_: Optional[bool] = None,
-                            output: Optional[str] = 'json') -> dict:
+    @asyncify
+    def get_citation_format(
+        self,
+        q: str,
+        no_cache: Optional[bool] = None,
+        async_: Optional[bool] = None,
+        output: Optional[str] = 'json',
+    ) -> dict:
         """Function to get MLA citation format by an identification of organic_result's id provided by search_google_scholar.
 
         Args:
@@ -391,15 +409,17 @@ class AsyncGoogleScholar(AsyncActionMixin, GoogleScholar):
         return super().get_citation_format(q, no_cache, async_, output)
 
     @tool_api(explode_return=True)
-    @aioify
-    def get_author_id(self,
-                      mauthors: str,
-                      hl: Optional[str] = 'en',
-                      after_author: Optional[str] = None,
-                      before_author: Optional[str] = None,
-                      no_cache: Optional[bool] = False,
-                      _async: Optional[bool] = False,
-                      output: Optional[str] = 'json') -> dict:
+    @asyncify
+    def get_author_id(
+        self,
+        mauthors: str,
+        hl: Optional[str] = 'en',
+        after_author: Optional[str] = None,
+        before_author: Optional[str] = None,
+        no_cache: Optional[bool] = False,
+        _async: Optional[bool] = False,
+        output: Optional[str] = 'json',
+    ) -> dict:
         """The getAuthorId function is used to get the author's id by his or her name.
 
         Args:
@@ -415,5 +435,4 @@ class AsyncGoogleScholar(AsyncActionMixin, GoogleScholar):
             :class:`dict`: author id
                 * author_id: the author_id of the author
         """
-        return super().get_author_id(mauthors, hl, after_author, before_author,
-                                     no_cache, _async, output)
+        return super().get_author_id(mauthors, hl, after_author, before_author, no_cache, _async, output)
