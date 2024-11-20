@@ -114,7 +114,7 @@ class APITemplateParser:
                 api_role = self._role2api_role(prompt)
                 res.append(api_role)
         return res
-
+    
     def _role2api_role(self, role_prompt: Dict) -> Tuple[str, bool]:
         merged_prompt = self.roles[role_prompt['role']]
         if merged_prompt.get('fallback_role'):
@@ -123,7 +123,21 @@ class APITemplateParser:
         res = role_prompt.copy()
         res['role'] = merged_prompt['api_role']
         res['content'] = merged_prompt.get('begin', '')
-        res['content'] += role_prompt.get('content', '')
+        
+        # res['content'] += role_prompt.get('content', '')
+        
+        # 确保起始部分的内容为字符串类型
+        if not isinstance(res['content'], str):
+            res['content'] = ''.join(res['content']) if isinstance(res['content'], list) else str(res['content'])
+        
+        # 获取 role_prompt 中的自定义内容，确保其为字符串类型
+        content_to_add = role_prompt.get('content', '')
+        if not isinstance(content_to_add, str):
+            content_to_add = ''.join(content_to_add) if isinstance(content_to_add, list) else str(content_to_add)
+        
+        # 拼接内容：起始部分 + 自定义内容
+        res['content'] += content_to_add
+        
         res['content'] += merged_prompt.get('end', '')
         return res
 
