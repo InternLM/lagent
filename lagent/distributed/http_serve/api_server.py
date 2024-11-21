@@ -86,7 +86,6 @@ class HTTPAgentServer(HTTPAgentClient):
                     print(line, end='')  # 打印输出
                     if 'Uvicorn running on' in line:
                         self.service_started = True
-                stream.close()
 
         # 启动日志输出线程
         threading.Thread(target=log_output, args=(self.process.stdout,), daemon=True).start()
