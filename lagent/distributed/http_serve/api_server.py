@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import time
+import threading
 
 import aiohttp
 import requests
@@ -77,14 +78,21 @@ class HTTPAgentServer(HTTPAgentClient):
             stderr=subprocess.STDOUT,
             text=True)
 
-        while True:
-            output = self.process.stdout.readline()
-            if not output:  # 如果读到 EOF，跳出循环
-                break
-            sys.stdout.write(output)  # 打印到标准输出
-            sys.stdout.flush()
-            if 'Uvicorn running on' in output:  # 根据实际输出调整
-                break
+        self.service_started = False
+
+        def log_output(stream):
+            if stream is not None:
+                for line in iter(stream.readline, ''):
+                    print(line, end='')
+                    if 'Uvicorn running on' in line:
+                        self.service_started = True
+
+        # Start log output thread
+        threading.Thread(target=log_output, args=(self.process.stdout,), daemon=True).start()
+        threading.Thread(target=log_output, args=(self.process.stderr,), daemon=True).start()
+
+        # Waiting for the service to start
+        while not self.service_started:
             time.sleep(0.1)
 
     def shutdown(self):
