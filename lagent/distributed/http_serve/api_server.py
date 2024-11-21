@@ -83,15 +83,15 @@ class HTTPAgentServer(HTTPAgentClient):
         def log_output(stream):
             if stream is not None:
                 for line in iter(stream.readline, ''):
-                    print(line, end='')  # 打印输出
+                    print(line, end='')
                     if 'Uvicorn running on' in line:
                         self.service_started = True
 
-        # 启动日志输出线程
+        # Start log output thread
         threading.Thread(target=log_output, args=(self.process.stdout,), daemon=True).start()
         threading.Thread(target=log_output, args=(self.process.stderr,), daemon=True).start()
 
-        # 等待服务启动
+        # Waiting for the service to start
         while not self.service_started:
             time.sleep(0.1)
 
