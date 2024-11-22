@@ -181,7 +181,7 @@ class Agent:
         return _rcsv_repr(self)
 
 
-class AsyncAgent(Agent):
+class AsyncAgentMixin:
 
     async def __call__(self, *message: AgentMessage | List[AgentMessage], session_id=0, **kwargs) -> AgentMessage:
         message = [AgentMessage(sender='user', content=m) if isinstance(m, str) else copy.deepcopy(m) for m in message]
@@ -210,6 +210,108 @@ class AsyncAgent(Agent):
             formatted_messages = self.output_format.parse_response(llm_response)
             return AgentMessage(sender=self.name, content=llm_response, formatted=formatted_messages)
         return llm_response
+
+
+class AsyncAgent(AsyncAgentMixin, Agent):
+    """Asynchronous variant of the Agent class"""
+
+    pass
+
+
+class StreamingAgentMixin:
+    """Component that makes agent calling output a streaming response."""
+
+    def __call__(self, *message: Union[AgentMessage, List[AgentMessage]], session_id=0, **kwargs):
+        for hook in self._hooks.values():
+            message = copy.deepcopy(message)
+            result = hook.before_agent(self, message, session_id)
+            if result:
+                message = result
+        self.update_memory(message, session_id=session_id)
+        response_message = AgentMessage(sender=self.name, content="")
+        for response_message in self.forward(*message, session_id=session_id, **kwargs):
+            if not isinstance(response_message, AgentMessage):
+                model_state, response = response_message
+                response_message = AgentMessage(sender=self.name, content=response, stream_state=model_state)
+            yield response_message.model_copy()
+        self.update_memory(response_message, session_id=session_id)
+        for hook in self._hooks.values():
+            response_message = response_message.model_copy(deep=True)
+            result = hook.after_agent(self, response_message, session_id)
+            if result:
+                response_message = result
+        yield response_message
+
+    def forward(self, *message: AgentMessage, session_id=0, **kwargs):
+        formatted_messages = self.aggregator.aggregate(
+            self.memory.get(session_id), self.name, self.output_format, self.template
+        )
+        for model_state, response, *_ in self.llm.stream_chat(formatted_messages, session_id=session_id, **kwargs):
+            yield (
+                AgentMessage(
+                    sender=self.name,
+                    content=response,
+                    formatted=self.output_format.parse_response(response),
+                    stream_state=model_state,
+                )
+                if self.output_format
+                else (model_state, response)
+            )
+
+
+class AsyncStreamingAgentMixin:
+    """Component that makes asynchronous agent calling output a streaming response."""
+
+    async def __call__(self, *message: Union[AgentMessage, List[AgentMessage]], session_id=0, **kwargs):
+        for hook in self._hooks.values():
+            message = copy.deepcopy(message)
+            result = hook.before_agent(self, message, session_id)
+            if result:
+                message = result
+        self.update_memory(message, session_id=session_id)
+        response_message = AgentMessage(sender=self.name, content="")
+        async for response_message in self.forward(*message, session_id=session_id, **kwargs):
+            if not isinstance(response_message, AgentMessage):
+                model_state, response = response_message
+                response_message = AgentMessage(sender=self.name, content=response, stream_state=model_state)
+            yield response_message.model_copy()
+        self.update_memory(response_message, session_id=session_id)
+        for hook in self._hooks.values():
+            response_message = response_message.model_copy(deep=True)
+            result = hook.after_agent(self, response_message, session_id)
+            if result:
+                response_message = result
+        yield response_message
+
+    async def forward(self, *message: AgentMessage, session_id=0, **kwargs):
+        formatted_messages = self.aggregator.aggregate(
+            self.memory.get(session_id), self.name, self.output_format, self.template
+        )
+        async for model_state, response, *_ in self.llm.stream_chat(
+            formatted_messages, session_id=session_id, **kwargs
+        ):
+            yield (
+                AgentMessage(
+                    sender=self.name,
+                    content=response,
+                    formatted=self.output_format.parse_response(response),
+                    stream_state=model_state,
+                )
+                if self.output_format
+                else (model_state, response)
+            )
+
+
+class StreamingAgent(StreamingAgentMixin, Agent):
+    """Streaming variant of the Agent class"""
+
+    pass
+
+
+class AsyncStreamingAgent(AsyncStreamingAgentMixin, Agent):
+    """Streaming variant of the AsyncAgent class"""
+
+    pass
 
 
 class Sequential(Agent):
@@ -258,7 +360,7 @@ class Sequential(Agent):
         return len(self._agents)
 
 
-class AsyncSequential(Sequential, AsyncAgent):
+class AsyncSequential(AsyncAgentMixin, Sequential):
 
     async def forward(
         self, *message: AgentMessage, session_id=0, exit_at: Optional[int] = None, **kwargs
@@ -273,6 +375,38 @@ class AsyncSequential(Sequential, AsyncAgent):
                 message = (message,)
             message = await agent(*message, session_id=session_id, **kwargs)
         return message
+
+
+class StreamingSequential(StreamingAgentMixin, Sequential):
+    """Streaming variant of the Sequential class"""
+
+    def forward(self, *message: AgentMessage, session_id=0, exit_at: Optional[int] = None, **kwargs):
+        assert exit_at is None or exit_at >= 0, 'exit_at should be greater than or equal to 0'
+        if exit_at is None:
+            exit_at = len(self) - 1
+        iterator = chain.from_iterable(repeat(self._agents.values()))
+        for _ in range(exit_at + 1):
+            agent = next(iterator)
+            if isinstance(message, AgentMessage):
+                message = (message,)
+            for message in agent(*message, session_id=session_id, **kwargs):
+                yield message
+
+
+class AsyncStreamingSequential(AsyncStreamingAgentMixin, Sequential):
+    """Streaming variant of the AsyncSequential class"""
+
+    async def forward(self, *message: AgentMessage, session_id=0, exit_at: Optional[int] = None, **kwargs):
+        assert exit_at is None or exit_at >= 0, 'exit_at should be greater than or equal to 0'
+        if exit_at is None:
+            exit_at = len(self) - 1
+        iterator = chain.from_iterable(repeat(self._agents.values()))
+        for _ in range(exit_at + 1):
+            agent = next(iterator)
+            if isinstance(message, AgentMessage):
+                message = (message,)
+            async for message in agent(*message, session_id=session_id, **kwargs):
+                yield message
 
 
 class AgentContainerMixin:
