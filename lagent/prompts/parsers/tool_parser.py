@@ -23,29 +23,24 @@ class ToolStatusCode(IntEnum):
 
 class ToolParser(StrParser):
 
-    def __init__(self,
-                 tool_type: str,
-                 template: str = '',
-                 begin: str = '<tool>\n',
-                 end: str = '</tool>\n',
-                 validate: Callable[[str], Any] = None,
-                 **kwargs):
+    def __init__(
+        self,
+        tool_type: str,
+        template: str = '',
+        begin: str = '<tool>\n',
+        end: str = '</tool>\n',
+        validate: Callable[[str], Any] = None,
+        **kwargs
+    ):
         super().__init__(template, begin=begin, end=end, **kwargs)
         self.template = template
         self.tool_type = tool_type
-        # self.pattern = re.compile(
-        #     '(.*?){}(.*)({})?'.format(re.escape(begin), re.escape(end)),
-        #     re.DOTALL)
-        self.validate = load_class_from_string(validate) if isinstance(
-            validate, str) else validate
+        # self.pattern = re.compile('(.*?){}(.*)({})?'.format(re.escape(begin), re.escape(end)), re.DOTALL)
+        self.validate = load_class_from_string(validate) if isinstance(validate, str) else validate
 
     def parse_response(self, data: str) -> dict:
         if self.format_field['begin'] not in data:
-            return dict(
-                tool_type=None,
-                thought=data,
-                action=None,
-                status=ToolStatusCode.NO_TOOL)
+            return dict(tool_type=None, thought=data, action=None, status=ToolStatusCode.NO_TOOL)
         thought, action, *_ = data.split(self.format_field["begin"])
         action = action.split(self.format_field['end'])[0]
         status = ToolStatusCode.VALID_TOOL
@@ -54,11 +49,7 @@ class ToolParser(StrParser):
                 action = self.validate(action)
             except Exception:
                 status = ToolStatusCode.PARSING_ERROR
-        return dict(
-            tool_type=self.tool_type,
-            thought=thought,
-            action=action,
-            status=status)
+        return dict(tool_type=self.tool_type, thought=thought, action=action, status=status)
 
     def format_response(self, parsed: dict) -> str:
         if parsed['action'] is None:
@@ -68,41 +59,40 @@ class ToolParser(StrParser):
             action = json.dumps(parsed['action'], ensure_ascii=False)
         else:
             action = str(parsed['action'])
-        return parsed['thought'] + self.format_field[
-            'begin'] + action + self.format_field['end']
+        return parsed['thought'] + self.format_field['begin'] + action + self.format_field['end']
 
 
 class InterpreterParser(ToolParser):
 
-    def __init__(self,
-                 tool_type: str = 'interpreter',
-                 template: str = '',
-                 begin: str = '<|action_start|><|interpreter|>\n',
-                 end: str = '<|action_end|>\n',
-                 validate: Callable[[str], Any] = None,
-                 **kwargs):
+    def __init__(
+        self,
+        tool_type: str = 'interpreter',
+        template: str = '',
+        begin: str = '<|action_start|><|interpreter|>\n',
+        end: str = '<|action_end|>\n',
+        validate: Callable[[str], Any] = None,
+        **kwargs
+    ):
         super().__init__(tool_type, template, begin, end, validate, **kwargs)
 
 
 class PluginParser(ToolParser):
 
-    def __init__(self,
-                 tool_type: str = 'plugin',
-                 template: str = '',
-                 begin: str = '<|action_start|><|plugin|>\n',
-                 end: str = '<|action_end|>\n',
-                 validate: Callable[[str], Any] = default_plugin_validate,
-                 **kwargs):
+    def __init__(
+        self,
+        tool_type: str = 'plugin',
+        template: str = '',
+        begin: str = '<|action_start|><|plugin|>\n',
+        end: str = '<|action_end|>\n',
+        validate: Callable[[str], Any] = default_plugin_validate,
+        **kwargs
+    ):
         super().__init__(tool_type, template, begin, end, validate, **kwargs)
 
 
 class MixedToolParser(StrParser):
 
-    def __init__(self,
-                 tool_type: Optional[str] = None,
-                 template='',
-                 parsers: List[ToolParser] = None,
-                 **format_field):
+    def __init__(self, tool_type: Optional[str] = None, template='', parsers: List[ToolParser] = None, **format_field):
         self.parsers = {}
         self.tool_type = tool_type
         for parser in parsers or []:
@@ -125,11 +115,7 @@ class MixedToolParser(StrParser):
         return inst
 
     def parse_response(self, data: str) -> dict:
-        res = dict(
-            tool_type=None,
-            thought=data,
-            action=None,
-            status=ToolStatusCode.NO_TOOL)
+        res = dict(tool_type=None, thought=data, action=None, status=ToolStatusCode.NO_TOOL)
         for name, parser in self.parsers.items():
             res = parser.parse_response(data)
             if res['tool_type'] == name:

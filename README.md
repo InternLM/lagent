@@ -96,7 +96,7 @@ print(dumped_memory['memory'])
 Clear the memory of this session(`session_id=0` by default):
 
 ```python
-agent.memory.reset()
+agent.reset()
 ```
 
 ### Custom Message Aggregation
