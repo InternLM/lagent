@@ -3,7 +3,7 @@ import warnings
 from collections import OrderedDict, UserDict, UserList, abc
 from functools import wraps
 from itertools import chain, repeat
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Union
+from typing import Any, AsyncGenerator, Callable, Dict, Generator, Iterable, List, Mapping, Optional, Tuple, Union
 
 from lagent.agents.aggregator import DefaultAggregator
 from lagent.hooks import Hook, RemovableHandle
@@ -11,7 +11,7 @@ from lagent.llms import BaseLLM
 from lagent.memory import Memory, MemoryManager
 from lagent.prompts.parsers import StrParser
 from lagent.prompts.prompt_template import PromptTemplate
-from lagent.schema import AgentMessage
+from lagent.schema import AgentMessage, ModelStatusCode
 from lagent.utils import create_object
 
 
@@ -221,7 +221,9 @@ class AsyncAgent(AsyncAgentMixin, Agent):
 class StreamingAgentMixin:
     """Component that makes agent calling output a streaming response."""
 
-    def __call__(self, *message: Union[AgentMessage, List[AgentMessage]], session_id=0, **kwargs):
+    def __call__(
+        self, *message: Union[AgentMessage, List[AgentMessage]], session_id=0, **kwargs
+    ) -> Generator[AgentMessage, None, None]:
         for hook in self._hooks.values():
             message = copy.deepcopy(message)
             result = hook.before_agent(self, message, session_id)
@@ -242,7 +244,9 @@ class StreamingAgentMixin:
                 response_message = result
         yield response_message
 
-    def forward(self, *message: AgentMessage, session_id=0, **kwargs):
+    def forward(
+        self, *message: AgentMessage, session_id=0, **kwargs
+    ) -> Generator[Union[AgentMessage, Tuple[ModelStatusCode, str]], None, None]:
         formatted_messages = self.aggregator.aggregate(
             self.memory.get(session_id), self.name, self.output_format, self.template
         )
@@ -262,7 +266,9 @@ class StreamingAgentMixin:
 class AsyncStreamingAgentMixin:
     """Component that makes asynchronous agent calling output a streaming response."""
 
-    async def __call__(self, *message: Union[AgentMessage, List[AgentMessage]], session_id=0, **kwargs):
+    async def __call__(
+        self, *message: Union[AgentMessage, List[AgentMessage]], session_id=0, **kwargs
+    ) -> AsyncGenerator[AgentMessage, None]:
         for hook in self._hooks.values():
             message = copy.deepcopy(message)
             result = hook.before_agent(self, message, session_id)
@@ -283,7 +289,9 @@ class AsyncStreamingAgentMixin:
                 response_message = result
         yield response_message
 
-    async def forward(self, *message: AgentMessage, session_id=0, **kwargs):
+    async def forward(
+        self, *message: AgentMessage, session_id=0, **kwargs
+    ) -> AsyncGenerator[Union[AgentMessage, Tuple[ModelStatusCode, str]], None]:
         formatted_messages = self.aggregator.aggregate(
             self.memory.get(session_id), self.name, self.output_format, self.template
         )
@@ -318,7 +326,7 @@ class Sequential(Agent):
     """Sequential is an agent container that forwards messages to each agent
     in the order they are added."""
 
-    def __init__(self, *agents: Union[Agent, AsyncAgent, Iterable], **kwargs):
+    def __init__(self, *agents: Union[Agent, Iterable], **kwargs):
         super().__init__(**kwargs)
         self._agents = OrderedDict()
         if not agents:
@@ -334,8 +342,8 @@ class Sequential(Agent):
                 key, agent = agent
             self.add_agent(key, agent)
 
-    def add_agent(self, name: str, agent: Union[Agent, AsyncAgent]):
-        assert isinstance(agent, (Agent, AsyncAgent)), f'{type(agent)} is not an Agent or AsyncAgent subclass'
+    def add_agent(self, name: str, agent: Agent):
+        assert isinstance(agent, Agent), f'{type(agent)} is not an Agent subclass'
         self._agents[str(name)] = agent
 
     def forward(self, *message: AgentMessage, session_id=0, exit_at: Optional[int] = None, **kwargs) -> AgentMessage:
@@ -435,9 +443,9 @@ class AgentContainerMixin:
                     if isinstance(k, str) and '.' in k:
                         _backup(data)
                         raise KeyError(f'agent name can\'t contain ".", got {k}')
-                    if not isinstance(item, (Agent, AsyncAgent)):
+                    if not isinstance(item, Agent):
                         _backup(data)
-                        raise TypeError(f'{type(item)} is not an Agent or AsyncAgent subclass')
+                        raise TypeError(f'{type(item)} is not an Agent subclass')
                     agents[str(k)] = item
                 self._agents = agents
                 return ret
@@ -457,7 +465,7 @@ class AgentContainerMixin:
 
 class AgentList(Agent, UserList, AgentContainerMixin):
 
-    def __init__(self, agents: Optional[Iterable[Union[Agent, AsyncAgent]]] = None):
+    def __init__(self, agents: Optional[Iterable[Agent]] = None):
         Agent.__init__(self, memory=None)
         UserList.__init__(self, agents)
         self.name = None
@@ -465,7 +473,7 @@ class AgentList(Agent, UserList, AgentContainerMixin):
 
 class AgentDict(Agent, UserDict, AgentContainerMixin):
 
-    def __init__(self, agents: Optional[Mapping[str, Union[Agent, AsyncAgent]]] = None):
+    def __init__(self, agents: Optional[Mapping[str, Agent]] = None):
         Agent.__init__(self, memory=None)
         UserDict.__init__(self, agents)
         self.name = None

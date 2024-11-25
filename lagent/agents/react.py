@@ -106,7 +106,9 @@ class AsyncReAct(AsyncAgent):
 
 
 if __name__ == '__main__':
-    from lagent.llms import GPTAPI
+    import asyncio
+
+    from lagent.llms import GPTAPI, AsyncGPTAPI
 
     class ActionCall(BaseModel):
         name: str = Field(description='调用的函数名称')
@@ -127,15 +129,36 @@ if __name__ == '__main__':
     prompt_template = PromptTemplate(select_action_template)
     output_format = JSONParser(output_format_template, function_format=ActionFormat, finish_format=FinishFormat)
 
-    llm = dict(type=GPTAPI, model_type='gpt-4o-2024-05-13', key=None, max_new_tokens=4096, proxies=dict(), retry=1000)
     agent = ReAct(
-        llm=llm,
+        llm=dict(
+            type=GPTAPI,
+            model_type='gpt-4o-2024-05-13',
+            max_new_tokens=4096,
+            proxies=dict(),
+            retry=1000,
+        ),
         template=prompt_template,
         output_format=output_format,
-        aggregator=dict(type='DefaultAggregator'),
-        actions=[dict(type='PythonInterpreter')],
+        aggregator=dict(type='lagent.agents.aggregator.DefaultAggregator'),
+        actions=[dict(type='lagent.actions.PythonInterpreter')],
     )
     response = agent(AgentMessage(sender='user', content='用 Python 计算一下 3 ** 5'))
     print(response)
     response = agent(AgentMessage(sender='user', content=' 2 ** 5 呢'))
     print(response)
+
+    async_agent = AsyncReAct(
+        llm=dict(
+            type=AsyncGPTAPI,
+            model_type='gpt-4o-2024-05-13',
+            max_new_tokens=4096,
+            proxies=dict(),
+            retry=1000,
+        ),
+        template=prompt_template,
+        output_format=output_format,
+        aggregator=dict(type='lagent.agents.aggregator.DefaultAggregator'),
+        actions=[dict(type='lagent.actions.AsyncPythonInterpreter')],
+    )
+    response = asyncio.run(async_agent(AgentMessage(sender='user', content='用 Python 计算一下 3 ** 5')))
+    print(async_agent.state_dict())
