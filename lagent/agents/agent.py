@@ -63,12 +63,7 @@ class Agent:
         if self.memory:
             self.memory.add(message, session_id=session_id)
 
-    def __call__(
-        self,
-        *message: Union[str, AgentMessage, List[AgentMessage]],
-        session_id=0,
-        **kwargs,
-    ) -> AgentMessage:
+    def __call__(self, *message: AgentMessage, session_id=0, **kwargs) -> AgentMessage:
         # message.receiver = self.name
         message = [AgentMessage(sender='user', content=m) if isinstance(m, str) else copy.deepcopy(m) for m in message]
         for hook in self._hooks.values():
@@ -183,7 +178,7 @@ class Agent:
 
 class AsyncAgentMixin:
 
-    async def __call__(self, *message: AgentMessage | List[AgentMessage], session_id=0, **kwargs) -> AgentMessage:
+    async def __call__(self, *message: AgentMessage, session_id=0, **kwargs) -> AgentMessage:
         message = [AgentMessage(sender='user', content=m) if isinstance(m, str) else copy.deepcopy(m) for m in message]
         for hook in self._hooks.values():
             result = hook.before_agent(self, message, session_id)
@@ -221,11 +216,9 @@ class AsyncAgent(AsyncAgentMixin, Agent):
 class StreamingAgentMixin:
     """Component that makes agent calling output a streaming response."""
 
-    def __call__(
-        self, *message: Union[AgentMessage, List[AgentMessage]], session_id=0, **kwargs
-    ) -> Generator[AgentMessage, None, None]:
+    def __call__(self, *message: AgentMessage, session_id=0, **kwargs) -> Generator[AgentMessage, None, None]:
+        message = [AgentMessage(sender='user', content=m) if isinstance(m, str) else copy.deepcopy(m) for m in message]
         for hook in self._hooks.values():
-            message = copy.deepcopy(message)
             result = hook.before_agent(self, message, session_id)
             if result:
                 message = result
@@ -237,8 +230,8 @@ class StreamingAgentMixin:
                 response_message = AgentMessage(sender=self.name, content=response, stream_state=model_state)
             yield response_message.model_copy()
         self.update_memory(response_message, session_id=session_id)
+        response_message = copy.deepcopy(response_message)
         for hook in self._hooks.values():
-            response_message = response_message.model_copy(deep=True)
             result = hook.after_agent(self, response_message, session_id)
             if result:
                 response_message = result
@@ -266,11 +259,9 @@ class StreamingAgentMixin:
 class AsyncStreamingAgentMixin:
     """Component that makes asynchronous agent calling output a streaming response."""
 
-    async def __call__(
-        self, *message: Union[AgentMessage, List[AgentMessage]], session_id=0, **kwargs
-    ) -> AsyncGenerator[AgentMessage, None]:
+    async def __call__(self, *message: AgentMessage, session_id=0, **kwargs) -> AsyncGenerator[AgentMessage, None]:
+        message = [AgentMessage(sender='user', content=m) if isinstance(m, str) else copy.deepcopy(m) for m in message]
         for hook in self._hooks.values():
-            message = copy.deepcopy(message)
             result = hook.before_agent(self, message, session_id)
             if result:
                 message = result
@@ -282,8 +273,8 @@ class AsyncStreamingAgentMixin:
                 response_message = AgentMessage(sender=self.name, content=response, stream_state=model_state)
             yield response_message.model_copy()
         self.update_memory(response_message, session_id=session_id)
+        response_message = copy.deepcopy(response_message)
         for hook in self._hooks.values():
-            response_message = response_message.model_copy(deep=True)
             result = hook.after_agent(self, response_message, session_id)
             if result:
                 response_message = result
