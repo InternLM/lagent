@@ -35,12 +35,11 @@ class BaseSearch:
         filtered_results = {}
         count = 0
         for url, snippet, title in results:
-            if all(domain not in url
-                   for domain in self.black_list) and not url.endswith('.pdf'):
+            if all(domain not in url for domain in self.black_list) and not url.endswith('.pdf'):
                 filtered_results[count] = {
                     'url': url,
                     'summ': json.dumps(snippet, ensure_ascii=False)[1:-1],
-                    'title': title
+                    'title': title,
                 }
                 count += 1
                 if count >= self.topk:
@@ -50,15 +49,17 @@ class BaseSearch:
 
 class DuckDuckGoSearch(BaseSearch):
 
-    def __init__(self,
-                 topk: int = 3,
-                 black_list: List[str] = [
-                     'enoN',
-                     'youtube.com',
-                     'bilibili.com',
-                     'researchgate.net',
-                 ],
-                 **kwargs):
+    def __init__(
+        self,
+        topk: int = 3,
+        black_list: List[str] = [
+            'enoN',
+            'youtube.com',
+            'bilibili.com',
+            'researchgate.net',
+        ],
+        **kwargs,
+    ):
         self.proxy = kwargs.get('proxy')
         self.timeout = kwargs.get('timeout', 30)
         super().__init__(topk, black_list)
@@ -67,40 +68,35 @@ class DuckDuckGoSearch(BaseSearch):
     def search(self, query: str, max_retry: int = 3) -> dict:
         for attempt in range(max_retry):
             try:
-                response = self._call_ddgs(
-                    query, timeout=self.timeout, proxy=self.proxy)
+                response = self._call_ddgs(query, timeout=self.timeout, proxy=self.proxy)
                 return self._parse_response(response)
             except Exception as e:
                 logging.exception(str(e))
-                warnings.warn(
-                    f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                warnings.warn(f'Retry {attempt + 1}/{max_retry} due to error: {e}')
                 time.sleep(random.randint(2, 5))
-        raise Exception(
-            'Failed to get search results from DuckDuckGo after retries.')
+        raise Exception('Failed to get search results from DuckDuckGo after retries.')
 
     @acached(cache=TTLCache(maxsize=100, ttl=600))
     async def asearch(self, query: str, max_retry: int = 3) -> dict:
         for attempt in range(max_retry):
             try:
                 ddgs = AsyncDDGS(timeout=self.timeout, proxy=self.proxy)
-                response = await ddgs.atext(query.strip("'"), max_results=10)
+                response = await ddgs.text(query.strip("'"), max_results=10)
                 return self._parse_response(response)
             except Exception as e:
                 if isinstance(e, asyncio.TimeoutError):
                     logging.exception('Request to DDGS timed out.')
                 logging.exception(str(e))
-                warnings.warn(
-                    f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                warnings.warn(f'Retry {attempt + 1}/{max_retry} due to error: {e}')
                 await asyncio.sleep(random.randint(2, 5))
-        raise Exception(
-            'Failed to get search results from DuckDuckGo after retries.')
+        raise Exception('Failed to get search results from DuckDuckGo after retries.')
 
     async def _async_call_ddgs(self, query: str, **kwargs) -> dict:
         ddgs = DDGS(**kwargs)
         try:
             response = await asyncio.wait_for(
-                asyncio.to_thread(ddgs.text, query.strip("'"), max_results=10),
-                timeout=self.timeout)
+                asyncio.to_thread(ddgs.text, query.strip("'"), max_results=10), timeout=self.timeout
+            )
             return response
         except asyncio.TimeoutError:
             logging.exception('Request to DDGS timed out.')
@@ -110,34 +106,35 @@ class DuckDuckGoSearch(BaseSearch):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            response = loop.run_until_complete(
-                self._async_call_ddgs(query, **kwargs))
+            response = loop.run_until_complete(self._async_call_ddgs(query, **kwargs))
             return response
         finally:
             loop.close()
 
-    def _parse_response(self, response: dict) -> dict:
+    def _parse_response(self, response: List[dict]) -> dict:
         raw_results = []
         for item in response:
             raw_results.append(
-                (item['href'], item['description']
-                 if 'description' in item else item['body'], item['title']))
+                (item['href'], item['description'] if 'description' in item else item['body'], item['title'])
+            )
         return self._filter_results(raw_results)
 
 
 class BingSearch(BaseSearch):
 
-    def __init__(self,
-                 api_key: str,
-                 region: str = 'zh-CN',
-                 topk: int = 3,
-                 black_list: List[str] = [
-                     'enoN',
-                     'youtube.com',
-                     'bilibili.com',
-                     'researchgate.net',
-                 ],
-                 **kwargs):
+    def __init__(
+        self,
+        api_key: str,
+        region: str = 'zh-CN',
+        topk: int = 3,
+        black_list: List[str] = [
+            'enoN',
+            'youtube.com',
+            'bilibili.com',
+            'researchgate.net',
+        ],
+        **kwargs,
+    ):
         self.api_key = api_key
         self.market = region
         self.proxy = kwargs.get('proxy')
@@ -151,11 +148,9 @@ class BingSearch(BaseSearch):
                 return self._parse_response(response)
             except Exception as e:
                 logging.exception(str(e))
-                warnings.warn(
-                    f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                warnings.warn(f'Retry {attempt + 1}/{max_retry} due to error: {e}')
                 time.sleep(random.randint(2, 5))
-        raise Exception(
-            'Failed to get search results from Bing Search after retries.')
+        raise Exception('Failed to get search results from Bing Search after retries.')
 
     @acached(cache=TTLCache(maxsize=100, ttl=600))
     async def asearch(self, query: str, max_retry: int = 3) -> dict:
@@ -165,18 +160,15 @@ class BingSearch(BaseSearch):
                 return self._parse_response(response)
             except Exception as e:
                 logging.exception(str(e))
-                warnings.warn(
-                    f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                warnings.warn(f'Retry {attempt + 1}/{max_retry} due to error: {e}')
                 await asyncio.sleep(random.randint(2, 5))
-        raise Exception(
-            'Failed to get search results from Bing Search after retries.')
+        raise Exception('Failed to get search results from Bing Search after retries.')
 
     def _call_bing_api(self, query: str) -> dict:
         endpoint = 'https://api.bing.microsoft.com/v7.0/search'
         params = {'q': query, 'mkt': self.market, 'count': f'{self.topk * 2}'}
         headers = {'Ocp-Apim-Subscription-Key': self.api_key}
-        response = requests.get(
-            endpoint, headers=headers, params=params, proxies=self.proxy)
+        response = requests.get(endpoint, headers=headers, params=params, proxies=self.proxy)
         response.raise_for_status()
         return response.json()
 
@@ -186,32 +178,25 @@ class BingSearch(BaseSearch):
         headers = {'Ocp-Apim-Subscription-Key': self.api_key}
         async with aiohttp.ClientSession(raise_for_status=True) as session:
             async with session.get(
-                    endpoint,
-                    headers=headers,
-                    params=params,
-                    proxy=self.proxy and
-                (self.proxy.get('http') or self.proxy.get('https'))) as resp:
+                endpoint,
+                headers=headers,
+                params=params,
+                proxy=self.proxy and (self.proxy.get('http') or self.proxy.get('https')),
+            ) as resp:
                 return await resp.json()
 
     def _parse_response(self, response: dict) -> dict:
-        webpages = {
-            w['id']: w
-            for w in response.get('webPages', {}).get('value', [])
-        }
+        webpages = {w['id']: w for w in response.get('webPages', {}).get('value', [])}
         raw_results = []
 
-        for item in response.get('rankingResponse',
-                                 {}).get('mainline', {}).get('items', []):
+        for item in response.get('rankingResponse', {}).get('mainline', {}).get('items', []):
             if item['answerType'] == 'WebPages':
                 webpage = webpages.get(item['value']['id'])
                 if webpage:
-                    raw_results.append(
-                        (webpage['url'], webpage['snippet'], webpage['name']))
-            elif item['answerType'] == 'News' and item['value'][
-                    'id'] == response.get('news', {}).get('id'):
+                    raw_results.append((webpage['url'], webpage['snippet'], webpage['name']))
+            elif item['answerType'] == 'News' and item['value']['id'] == response.get('news', {}).get('id'):
                 for news in response.get('news', {}).get('value', []):
-                    raw_results.append(
-                        (news['url'], news['description'], news['name']))
+                    raw_results.append((news['url'], news['description'], news['name']))
 
         return self._filter_results(raw_results)
 
@@ -235,19 +220,21 @@ class BraveSearch(BaseSearch):
             https://api.search.brave.com/app/documentation/web-search/get-started.
     """
 
-    def __init__(self,
-                 api_key: str,
-                 region: str = 'ALL',
-                 language: str = 'zh-hans',
-                 extra_snippests: bool = True,
-                 topk: int = 3,
-                 black_list: List[str] = [
-                     'enoN',
-                     'youtube.com',
-                     'bilibili.com',
-                     'researchgate.net',
-                 ],
-                 **kwargs):
+    def __init__(
+        self,
+        api_key: str,
+        region: str = 'ALL',
+        language: str = 'zh-hans',
+        extra_snippests: bool = True,
+        topk: int = 3,
+        black_list: List[str] = [
+            'enoN',
+            'youtube.com',
+            'bilibili.com',
+            'researchgate.net',
+        ],
+        **kwargs,
+    ):
         self.api_key = api_key
         self.market = region
         self.proxy = kwargs.get('proxy')
@@ -265,11 +252,9 @@ class BraveSearch(BaseSearch):
                 return self._parse_response(response)
             except Exception as e:
                 logging.exception(str(e))
-                warnings.warn(
-                    f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                warnings.warn(f'Retry {attempt + 1}/{max_retry} due to error: {e}')
                 time.sleep(random.randint(2, 5))
-        raise Exception(
-            'Failed to get search results from Brave Search after retries.')
+        raise Exception('Failed to get search results from Brave Search after retries.')
 
     @acached(cache=TTLCache(maxsize=100, ttl=600))
     async def asearch(self, query: str, max_retry: int = 3) -> dict:
@@ -279,11 +264,9 @@ class BraveSearch(BaseSearch):
                 return self._parse_response(response)
             except Exception as e:
                 logging.exception(str(e))
-                warnings.warn(
-                    f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                warnings.warn(f'Retry {attempt + 1}/{max_retry} due to error: {e}')
                 await asyncio.sleep(random.randint(2, 5))
-        raise Exception(
-            'Failed to get search results from Brave Search after retries.')
+        raise Exception('Failed to get search results from Brave Search after retries.')
 
     def _call_brave_api(self, query: str) -> dict:
         endpoint = f'https://api.search.brave.com/res/v1/{self.search_type}/search'
@@ -293,17 +276,10 @@ class BraveSearch(BaseSearch):
             'search_lang': self.language,
             'extra_snippets': self.extra_snippests,
             'count': self.topk,
-            **{
-                key: value
-                for key, value in self.kwargs.items() if value is not None
-            },
+            **{key: value for key, value in self.kwargs.items() if value is not None},
         }
-        headers = {
-            'X-Subscription-Token': self.api_key or '',
-            'Accept': 'application/json'
-        }
-        response = requests.get(
-            endpoint, headers=headers, params=params, proxies=self.proxy)
+        headers = {'X-Subscription-Token': self.api_key or '', 'Accept': 'application/json'}
+        response = requests.get(endpoint, headers=headers, params=params, proxies=self.proxy)
         response.raise_for_status()
         return response.json()
 
@@ -315,22 +291,16 @@ class BraveSearch(BaseSearch):
             'search_lang': self.language,
             'extra_snippets': self.extra_snippests,
             'count': self.topk,
-            **{
-                key: value
-                for key, value in self.kwargs.items() if value is not None
-            },
+            **{key: value for key, value in self.kwargs.items() if value is not None},
         }
-        headers = {
-            'X-Subscription-Token': self.api_key or '',
-            'Accept': 'application/json'
-        }
+        headers = {'X-Subscription-Token': self.api_key or '', 'Accept': 'application/json'}
         async with aiohttp.ClientSession(raise_for_status=True) as session:
             async with session.get(
-                    endpoint,
-                    headers=headers,
-                    params=params,
-                    proxy=self.proxy and
-                (self.proxy.get('http') or self.proxy.get('https'))) as resp:
+                endpoint,
+                headers=headers,
+                params=params,
+                proxy=self.proxy and (self.proxy.get('http') or self.proxy.get('https')),
+            ) as resp:
                 return await resp.json()
 
     def _parse_response(self, response: dict) -> dict:
@@ -341,15 +311,13 @@ class BraveSearch(BaseSearch):
         raw_results = []
 
         for item in filtered_result:
-            raw_results.append((
-                item.get('url', ''),
-                ' '.join(
-                    filter(None, [
-                        item.get('description'),
-                        *item.get('extra_snippets', [])
-                    ])),
-                item.get('title', ''),
-            ))
+            raw_results.append(
+                (
+                    item.get('url', ''),
+                    ' '.join(filter(None, [item.get('description'), *item.get('extra_snippets', [])])),
+                    item.get('title', ''),
+                )
+            )
         return self._filter_results(raw_results)
 
 
@@ -376,16 +344,18 @@ class GoogleSearch(BaseSearch):
         'search': 'organic',
     }
 
-    def __init__(self,
-                 api_key: str,
-                 topk: int = 3,
-                 black_list: List[str] = [
-                     'enoN',
-                     'youtube.com',
-                     'bilibili.com',
-                     'researchgate.net',
-                 ],
-                 **kwargs):
+    def __init__(
+        self,
+        api_key: str,
+        topk: int = 3,
+        black_list: List[str] = [
+            'enoN',
+            'youtube.com',
+            'bilibili.com',
+            'researchgate.net',
+        ],
+        **kwargs,
+    ):
         self.api_key = api_key
         self.proxy = kwargs.get('proxy')
         self.search_type = kwargs.get('search_type', 'search')
@@ -400,12 +370,9 @@ class GoogleSearch(BaseSearch):
                 return self._parse_response(response)
             except Exception as e:
                 logging.exception(str(e))
-                warnings.warn(
-                    f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                warnings.warn(f'Retry {attempt + 1}/{max_retry} due to error: {e}')
                 time.sleep(random.randint(2, 5))
-        raise Exception(
-            'Failed to get search results from Google Serper Search after retries.'
-        )
+        raise Exception('Failed to get search results from Google Serper Search after retries.')
 
     @acached(cache=TTLCache(maxsize=100, ttl=600))
     async def asearch(self, query: str, max_retry: int = 3) -> dict:
@@ -415,29 +382,19 @@ class GoogleSearch(BaseSearch):
                 return self._parse_response(response)
             except Exception as e:
                 logging.exception(str(e))
-                warnings.warn(
-                    f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                warnings.warn(f'Retry {attempt + 1}/{max_retry} due to error: {e}')
                 await asyncio.sleep(random.randint(2, 5))
-        raise Exception(
-            'Failed to get search results from Google Serper Search after retries.'
-        )
+        raise Exception('Failed to get search results from Google Serper Search after retries.')
 
     def _call_serper_api(self, query: str) -> dict:
         endpoint = f'https://google.serper.dev/{self.search_type}'
         params = {
             'q': query,
             'num': self.topk,
-            **{
-                key: value
-                for key, value in self.kwargs.items() if value is not None
-            },
+            **{key: value for key, value in self.kwargs.items() if value is not None},
         }
-        headers = {
-            'X-API-KEY': self.api_key or '',
-            'Content-Type': 'application/json'
-        }
-        response = requests.get(
-            endpoint, headers=headers, params=params, proxies=self.proxy)
+        headers = {'X-API-KEY': self.api_key or '', 'Content-Type': 'application/json'}
+        response = requests.get(endpoint, headers=headers, params=params, proxies=self.proxy)
         response.raise_for_status()
         return response.json()
 
@@ -446,22 +403,16 @@ class GoogleSearch(BaseSearch):
         params = {
             'q': query,
             'num': self.topk,
-            **{
-                key: value
-                for key, value in self.kwargs.items() if value is not None
-            },
+            **{key: value for key, value in self.kwargs.items() if value is not None},
         }
-        headers = {
-            'X-API-KEY': self.api_key or '',
-            'Content-Type': 'application/json'
-        }
+        headers = {'X-API-KEY': self.api_key or '', 'Content-Type': 'application/json'}
         async with aiohttp.ClientSession(raise_for_status=True) as session:
             async with session.get(
-                    endpoint,
-                    headers=headers,
-                    params=params,
-                    proxy=self.proxy and
-                (self.proxy.get('http') or self.proxy.get('https'))) as resp:
+                endpoint,
+                headers=headers,
+                params=params,
+                proxy=self.proxy and (self.proxy.get('http') or self.proxy.get('https')),
+            ) as resp:
                 return await resp.json()
 
     def _parse_response(self, response: dict) -> dict:
@@ -472,33 +423,34 @@ class GoogleSearch(BaseSearch):
             if answer_box.get('answer'):
                 raw_results.append(('', answer_box.get('answer'), ''))
             elif answer_box.get('snippet'):
-                raw_results.append(
-                    ('', answer_box.get('snippet').replace('\n', ' '), ''))
+                raw_results.append(('', answer_box.get('snippet').replace('\n', ' '), ''))
             elif answer_box.get('snippetHighlighted'):
-                raw_results.append(
-                    ('', answer_box.get('snippetHighlighted'), ''))
+                raw_results.append(('', answer_box.get('snippetHighlighted'), ''))
 
         if response.get('knowledgeGraph'):
             kg = response.get('knowledgeGraph', {})
             description = kg.get('description', '')
-            attributes = '. '.join(
-                f'{attribute}: {value}'
-                for attribute, value in kg.get('attributes', {}).items())
+            attributes = '. '.join(f'{attribute}: {value}' for attribute, value in kg.get('attributes', {}).items())
             raw_results.append(
-                (kg.get('descriptionLink', ''),
-                 f'{description}. {attributes}' if attributes else description,
-                 f"{kg.get('title', '')}: {kg.get('type', '')}."))
+                (
+                    kg.get('descriptionLink', ''),
+                    f'{description}. {attributes}' if attributes else description,
+                    f"{kg.get('title', '')}: {kg.get('type', '')}.",
+                )
+            )
 
-        for result in response[self.result_key_for_type[
-                self.search_type]][:self.topk]:
+        for result in response[self.result_key_for_type[self.search_type]][: self.topk]:
             description = result.get('snippet', '')
             attributes = '. '.join(
-                f'{attribute}: {value}'
-                for attribute, value in result.get('attributes', {}).items())
+                f'{attribute}: {value}' for attribute, value in result.get('attributes', {}).items()
+            )
             raw_results.append(
-                (result.get('link', ''),
-                 f'{description}. {attributes}' if attributes else description,
-                 result.get('title', '')))
+                (
+                    result.get('link', ''),
+                    f'{description}. {attributes}' if attributes else description,
+                    result.get('title', ''),
+                )
+            )
 
         return self._filter_results(raw_results)
 
@@ -529,25 +481,27 @@ class TencentSearch(BaseSearch):
             Supports multiple values separated by commas. Example: `30010255`.
     """
 
-    def __init__(self,
-                 secret_id: str = 'Your SecretId',
-                 secret_key: str = 'Your SecretKey',
-                 api_key: str = '',
-                 action: str = 'SearchCommon',
-                 version: str = '2020-12-29',
-                 service: str = 'tms',
-                 host: str = 'tms.tencentcloudapi.com',
-                 topk: int = 3,
-                 tsn: int = None,
-                 insite: str = None,
-                 category: str = None,
-                 vrid: str = None,
-                 black_list: List[str] = [
-                     'enoN',
-                     'youtube.com',
-                     'bilibili.com',
-                     'researchgate.net',
-                 ]):
+    def __init__(
+        self,
+        secret_id: str = 'Your SecretId',
+        secret_key: str = 'Your SecretKey',
+        api_key: str = '',
+        action: str = 'SearchCommon',
+        version: str = '2020-12-29',
+        service: str = 'tms',
+        host: str = 'tms.tencentcloudapi.com',
+        topk: int = 3,
+        tsn: int = None,
+        insite: str = None,
+        category: str = None,
+        vrid: str = None,
+        black_list: List[str] = [
+            'enoN',
+            'youtube.com',
+            'bilibili.com',
+            'researchgate.net',
+        ],
+    ):
         self.secret_id = secret_id
         self.secret_key = secret_key
         self.api_key = api_key
@@ -569,11 +523,9 @@ class TencentSearch(BaseSearch):
                 return self._parse_response(response)
             except Exception as e:
                 logging.exception(str(e))
-                warnings.warn(
-                    f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                warnings.warn(f'Retry {attempt + 1}/{max_retry} due to error: {e}')
                 time.sleep(random.randint(2, 5))
-        raise Exception(
-            'Failed to get search results from Bing Search after retries.')
+        raise Exception('Failed to get search results from Bing Search after retries.')
 
     @acached(cache=TTLCache(maxsize=100, ttl=600))
     async def asearch(self, query: str, max_retry: int = 3) -> dict:
@@ -583,11 +535,9 @@ class TencentSearch(BaseSearch):
                 return self._parse_response(response)
             except Exception as e:
                 logging.exception(str(e))
-                warnings.warn(
-                    f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                warnings.warn(f'Retry {attempt + 1}/{max_retry} due to error: {e}')
                 await asyncio.sleep(random.randint(2, 5))
-        raise Exception(
-            'Failed to get search results from Bing Search after retries.')
+        raise Exception('Failed to get search results from Bing Search after retries.')
 
     def _get_headers_and_payload(self, query: str) -> tuple:
 
@@ -617,33 +567,47 @@ class TencentSearch(BaseSearch):
         ct = 'application/json; charset=utf-8'
         canonical_headers = f'content-type:{ct}\nhost:{self.host}\nx-tc-action:{self.action.lower()}\n'
         signed_headers = 'content-type;host;x-tc-action'
-        hashed_request_payload = hashlib.sha256(
-            payload.encode('utf-8')).hexdigest()
+        hashed_request_payload = hashlib.sha256(payload.encode('utf-8')).hexdigest()
         canonical_request = (
-            http_request_method + '\n' + canonical_uri + '\n' +
-            canonical_querystring + '\n' + canonical_headers + '\n' +
-            signed_headers + '\n' + hashed_request_payload)
+            http_request_method
+            + '\n'
+            + canonical_uri
+            + '\n'
+            + canonical_querystring
+            + '\n'
+            + canonical_headers
+            + '\n'
+            + signed_headers
+            + '\n'
+            + hashed_request_payload
+        )
 
         # ************* 步骤 2：拼接待签名字符串 *************
         credential_scope = date + '/' + self.service + '/' + 'tc3_request'
-        hashed_canonical_request = hashlib.sha256(
-            canonical_request.encode('utf-8')).hexdigest()
-        string_to_sign = (
-            algorithm + '\n' + str(timestamp) + '\n' + credential_scope +
-            '\n' + hashed_canonical_request)
+        hashed_canonical_request = hashlib.sha256(canonical_request.encode('utf-8')).hexdigest()
+        string_to_sign = algorithm + '\n' + str(timestamp) + '\n' + credential_scope + '\n' + hashed_canonical_request
 
         # ************* 步骤 3：计算签名 *************
         secret_date = sign(('TC3' + self.secret_key).encode('utf-8'), date)
         secret_service = sign(secret_date, self.service)
         secret_signing = sign(secret_service, 'tc3_request')
-        signature = hmac.new(secret_signing, string_to_sign.encode('utf-8'),
-                             hashlib.sha256).hexdigest()
+        signature = hmac.new(secret_signing, string_to_sign.encode('utf-8'), hashlib.sha256).hexdigest()
 
         # ************* 步骤 4：拼接 Authorization *************
         authorization = (
-            algorithm + ' ' + 'Credential=' + self.secret_id + '/' +
-            credential_scope + ', ' + 'SignedHeaders=' + signed_headers +
-            ', ' + 'Signature=' + signature)
+            algorithm
+            + ' '
+            + 'Credential='
+            + self.secret_id
+            + '/'
+            + credential_scope
+            + ', '
+            + 'SignedHeaders='
+            + signed_headers
+            + ', '
+            + 'Signature='
+            + signature
+        )
 
         # ************* 步骤 5：构造并发起请求 *************
         headers = {
@@ -652,7 +616,7 @@ class TencentSearch(BaseSearch):
             'Host': self.host,
             'X-TC-Action': self.action,
             'X-TC-Timestamp': str(timestamp),
-            'X-TC-Version': self.version
+            'X-TC-Version': self.version,
         }
         # if self.region:
         #     headers["X-TC-Region"] = self.region
@@ -670,16 +634,14 @@ class TencentSearch(BaseSearch):
         except Exception as e:
             logging.warning(str(e))
             import ast
+
             resp = ast.literal_eval(resp)
         return resp.get('Response', dict())
 
     async def _async_call_tencent_api(self, query: str):
         headers, payload = self._get_headers_and_payload(query)
         async with aiohttp.ClientSession(raise_for_status=True) as session:
-            async with session.post(
-                    'https://' + self.host.lstrip('/'),
-                    headers=headers,
-                    data=payload) as resp:
+            async with session.post('https://' + self.host.lstrip('/'), headers=headers, data=payload) as resp:
                 return (await resp.json()).get('Response', {})
 
     def _parse_response(self, response: dict) -> dict:
@@ -688,8 +650,7 @@ class TencentSearch(BaseSearch):
             display = json.loads(item['Display'])
             if not display['url']:
                 continue
-            raw_results.append((display['url'], display['content']
-                                or display['abstract_info'], display['title']))
+            raw_results.append((display['url'], display['content'] or display['abstract_info'], display['title']))
         return self._filter_results(raw_results)
 
 
@@ -715,8 +676,8 @@ class ContentFetcher:
     async def afetch(self, url: str) -> Tuple[bool, str]:
         try:
             async with aiohttp.ClientSession(
-                    raise_for_status=True,
-                    timeout=aiohttp.ClientTimeout(self.timeout)) as session:
+                raise_for_status=True, timeout=aiohttp.ClientTimeout(self.timeout)
+            ) as session:
                 async with session.get(url) as resp:
                     html = await resp.text(errors='ignore')
                     text = BeautifulSoup(html, 'html.parser').get_text()
@@ -727,24 +688,24 @@ class ContentFetcher:
 
 
 class WebBrowser(BaseAction):
-    """Wrapper around the Web Browser Tool.
-    """
+    """Wrapper around the Web Browser Tool."""
 
-    def __init__(self,
-                 searcher_type: str = 'DuckDuckGoSearch',
-                 timeout: int = 5,
-                 black_list: Optional[List[str]] = [
-                     'enoN',
-                     'youtube.com',
-                     'bilibili.com',
-                     'researchgate.net',
-                 ],
-                 topk: int = 20,
-                 description: Optional[dict] = None,
-                 parser: Type[BaseParser] = JsonParser,
-                 **kwargs):
-        self.searcher = eval(searcher_type)(
-            black_list=black_list, topk=topk, **kwargs)
+    def __init__(
+        self,
+        searcher_type: str = 'DuckDuckGoSearch',
+        timeout: int = 5,
+        black_list: Optional[List[str]] = [
+            'enoN',
+            'youtube.com',
+            'bilibili.com',
+            'researchgate.net',
+        ],
+        topk: int = 20,
+        description: Optional[dict] = None,
+        parser: Type[BaseParser] = JsonParser,
+        **kwargs,
+    ):
+        self.searcher = eval(searcher_type)(black_list=black_list, topk=topk, **kwargs)
         self.fetcher = ContentFetcher(timeout=timeout)
         self.search_results = None
         super().__init__(description, parser)
@@ -759,10 +720,7 @@ class WebBrowser(BaseAction):
         search_results = {}
 
         with ThreadPoolExecutor() as executor:
-            future_to_query = {
-                executor.submit(self.searcher.search, q): q
-                for q in queries
-            }
+            future_to_query = {executor.submit(self.searcher.search, q): q for q in queries}
 
             for future in as_completed(future_to_query):
                 query = future_to_query[future]
@@ -775,13 +733,9 @@ class WebBrowser(BaseAction):
                         if result['url'] not in search_results:
                             search_results[result['url']] = result
                         else:
-                            search_results[
-                                result['url']]['summ'] += f"\n{result['summ']}"
+                            search_results[result['url']]['summ'] += f"\n{result['summ']}"
 
-        self.search_results = {
-            idx: result
-            for idx, result in enumerate(search_results.values())
-        }
+        self.search_results = {idx: result for idx, result in enumerate(search_results.values())}
         return self.search_results
 
     @tool_api
@@ -798,7 +752,8 @@ class WebBrowser(BaseAction):
         with ThreadPoolExecutor() as executor:
             future_to_id = {
                 executor.submit(self.fetcher.fetch, self.search_results[select_id]['url']): select_id
-                for select_id in select_ids if select_id in self.search_results
+                for select_id in select_ids
+                if select_id in self.search_results
             }
             for future in as_completed(future_to_id):
                 select_id = future_to_id[future]
@@ -808,10 +763,8 @@ class WebBrowser(BaseAction):
                     warnings.warn(f'{select_id} generated an exception: {exc}')
                 else:
                     if web_success:
-                        self.search_results[select_id][
-                            'content'] = web_content[:8192]
-                        new_search_results[select_id] = self.search_results[
-                            select_id].copy()
+                        self.search_results[select_id]['content'] = web_content[:8192]
+                        new_search_results[select_id] = self.search_results[select_id].copy()
                         new_search_results[select_id].pop('summ')
 
         return new_search_results
@@ -827,13 +780,12 @@ class WebBrowser(BaseAction):
 
 
 class AsyncWebBrowser(AsyncActionMixin, WebBrowser):
-    """Wrapper around the Web Browser Tool.
-    """
+    """Wrapper around the Web Browser Tool."""
 
     @tool_api
     async def search(self, query: Union[str, List[str]]) -> dict:
         """BING search API
-        
+
         Args:
             query (List[str]): list of search query strings
         """
@@ -856,13 +808,9 @@ class AsyncWebBrowser(AsyncActionMixin, WebBrowser):
                     if result['url'] not in search_results:
                         search_results[result['url']] = result
                     else:
-                        search_results[
-                            result['url']]['summ'] += f"\n{result['summ']}"
+                        search_results[result['url']]['summ'] += f"\n{result['summ']}"
 
-        self.search_results = {
-            idx: result
-            for idx, result in enumerate(search_results.values())
-        }
+        self.search_results = {idx: result for idx, result in enumerate(search_results.values())}
         return self.search_results
 
     @tool_api
@@ -879,8 +827,7 @@ class AsyncWebBrowser(AsyncActionMixin, WebBrowser):
         tasks = []
         for select_id in select_ids:
             if select_id in self.search_results:
-                task = asyncio.create_task(
-                    self.fetcher.afetch(self.search_results[select_id]['url']))
+                task = asyncio.create_task(self.fetcher.afetch(self.search_results[select_id]['url']))
                 task.select_id = select_id
                 tasks.append(task)
         async for future in async_as_completed(tasks):
@@ -891,10 +838,8 @@ class AsyncWebBrowser(AsyncActionMixin, WebBrowser):
                 warnings.warn(f'{select_id} generated an exception: {exc}')
             else:
                 if web_success:
-                    self.search_results[select_id][
-                        'content'] = web_content[:8192]
-                    new_search_results[select_id] = self.search_results[
-                        select_id].copy()
+                    self.search_results[select_id]['content'] = web_content[:8192]
+                    new_search_results[select_id] = self.search_results[select_id].copy()
                     new_search_results[select_id].pop('summ')
         return new_search_results
 
