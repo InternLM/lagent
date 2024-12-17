@@ -19,6 +19,7 @@ from .base_api import AsyncBaseAPILLM, BaseAPILLM
 warnings.simplefilter('default')
 
 OPENAI_API_BASE = 'https://api.openai.com/v1/chat/completions'
+OPENAI_API_BASE = os.getenv('OPENAI_API_BASE', OPENAI_API_BASE)
 
 
 class GPTAPI(BaseAPILLM):
@@ -902,6 +903,12 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                 'parameters': {
                     **gen_params
                 }
+            }
+        elif 'llama' in model_type.lower():
+            data = {
+                'model': model_type,
+                'messages': messages,
+                **gen_params
             }
         else:
             raise NotImplementedError(
