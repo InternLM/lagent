@@ -18,7 +18,6 @@ import requests
 from asyncache import cached as acached
 from bs4 import BeautifulSoup
 from cachetools import TTLCache, cached
-from duckduckgo_search import DDGS, AsyncDDGS
 
 from lagent.actions.base_action import AsyncActionMixin, BaseAction, tool_api
 from lagent.actions.parser import BaseParser, JsonParser
@@ -78,6 +77,8 @@ class DuckDuckGoSearch(BaseSearch):
 
     @acached(cache=TTLCache(maxsize=100, ttl=600))
     async def asearch(self, query: str, max_retry: int = 3) -> dict:
+        from duckduckgo_search import AsyncDDGS
+
         for attempt in range(max_retry):
             try:
                 ddgs = AsyncDDGS(timeout=self.timeout, proxy=self.proxy)
@@ -92,6 +93,8 @@ class DuckDuckGoSearch(BaseSearch):
         raise Exception('Failed to get search results from DuckDuckGo after retries.')
 
     async def _async_call_ddgs(self, query: str, **kwargs) -> dict:
+        from duckduckgo_search import DDGS
+
         ddgs = DDGS(**kwargs)
         try:
             response = await asyncio.wait_for(
@@ -215,7 +218,8 @@ class BraveSearch(BaseSearch):
         topk (int): The number of search results returned in response from API search results.
         region (str): The country code string. Specifies the country where the search results come from.
         language (str): The language code string. Specifies the preferred language for the search results.
-        extra_snippets (bool): Allows retrieving up to 5 additional snippets, which are alternative excerpts from the search results.
+        extra_snippets (bool): Allows retrieving up to 5 additional snippets, which are alternative excerpts from the
+        search results.
         **kwargs: Any other parameters related to the Brave Search API. Find more details at
             https://api.search.brave.com/app/documentation/web-search/get-started.
     """

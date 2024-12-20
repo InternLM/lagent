@@ -4,7 +4,6 @@ arxiv
 asyncache
 asyncer
 distro
-duckduckgo_search==5.3.1b1
 filelock
 func_timeout
 griffe<1.0

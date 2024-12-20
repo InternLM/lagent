@@ -9,7 +9,7 @@ import httpx
 from anthropic import NOT_GIVEN
 from requests.exceptions import ProxyError
 
-from lagent.llms import AsyncBaseAPILLM, BaseAPILLM
+from .base_api import AsyncBaseAPILLM, BaseAPILLM
 
 
 class ClaudeAPI(BaseAPILLM):
@@ -222,7 +222,12 @@ class AsyncClaudeAPI(AsyncBaseAPILLM):
         retry: int = 5,
         key: Union[str, List[str]] = 'ENV',
         proxies: Optional[Dict] = None,
-        meta_template: Optional[Dict] = None,
+        meta_template: Optional[Dict] = [
+            dict(role='system', api_role='system'),
+            dict(role='user', api_role='user'),
+            dict(role='assistant', api_role='assistant'),
+            dict(role='environment', api_role='user'),
+        ],
         temperature: float = NOT_GIVEN,
         max_new_tokens: int = 512,
         top_p: float = NOT_GIVEN,
@@ -278,8 +283,7 @@ class AsyncClaudeAPI(AsyncBaseAPILLM):
         assert isinstance(inputs, list)
         gen_params = {**self.gen_params, **gen_params}
         tasks = [
-            self._chat(self.template_parser(messages), **gen_params)
-            for messages in ([inputs] if isinstance(inputs[0], dict) else inputs)
+            self._chat(messages, **gen_params) for messages in ([inputs] if isinstance(inputs[0], dict) else inputs)
         ]
         ret = await asyncio.gather(*tasks)
         return ret[0] if isinstance(inputs[0], dict) else ret
@@ -333,7 +337,7 @@ class AsyncClaudeAPI(AsyncBaseAPILLM):
             str: The generated string.
         """
         assert isinstance(messages, list)
-
+        messages = self.template_parser(messages)
         data = self.generate_request_data(model_type=self.model_type, messages=messages, gen_params=gen_params)
         max_num_retries = 0
 
