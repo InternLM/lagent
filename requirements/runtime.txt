@@ -1,4 +1,5 @@
 aiohttp
+anthropic
 arxiv
 asyncache
 asyncer
@@ -14,8 +15,8 @@ jupyter_client==8.6.2
 jupyter_core==5.7.2
 pydantic==2.6.4
 requests
+tenacity
 termcolor
 tiktoken
 timeout-decorator
 typing-extensions
-tenacity

@@ -29,8 +29,8 @@ def load_class_from_string(class_path: str, path=None):
 
 
 def create_object(config: Union[Dict, Any] = None):
-    """Create an instance based on the configuration where 'type' is a 
-    preserved key to indicate the class (path). When accepting non-dictionary 
+    """Create an instance based on the configuration where 'type' is a
+    preserved key to indicate the class (path). When accepting non-dictionary
     input, the function degenerates to an identity.
     """
     if config is None or not isinstance(config, dict):
@@ -62,8 +62,7 @@ async def async_as_completed(futures: Iterable[asyncio.Future]):
         yield await next_completed
 
 
-def filter_suffix(response: Union[str, List[str]],
-                  suffixes: Optional[List[str]] = None) -> str:
+def filter_suffix(response: Union[str, List[str]], suffixes: Optional[List[str]] = None) -> str:
     """Filter response with suffixes.
 
     Args:
@@ -95,12 +94,11 @@ def filter_suffix(response: Union[str, List[str]],
 def get_logger(
     name: str = 'lagent',
     level: str = 'debug',
-    fmt:
-    str = '%(asctime)s %(levelname)8s %(filename)20s %(lineno)4s - %(message)s',
+    fmt: str = '%(asctime)s %(levelname)8s %(filename)20s %(lineno)4s - %(message)s',
     add_file_handler: bool = False,
     log_dir: str = 'log',
-    log_file: str = time.strftime('%Y-%m-%d.log', time.localtime()),
-    max_bytes: int = 5 * 1024 * 1024,
+    log_file: str = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime()) + '.log',
+    max_bytes: int = 50 * 1024 * 1024,
     backup_count: int = 3,
 ):
     logger = logging.getLogger(name)
@@ -117,10 +115,8 @@ def get_logger(
             os.makedirs(log_dir)
         log_file_path = osp.join(log_dir, log_file)
         file_handler = RotatingFileHandler(
-            log_file_path,
-            maxBytes=max_bytes,
-            backupCount=backup_count,
-            encoding='utf-8')
+            log_file_path, maxBytes=max_bytes, backupCount=backup_count, encoding='utf-8'
+        )
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 
