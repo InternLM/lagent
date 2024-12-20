@@ -1,3 +1,4 @@
+duckduckgo_search==5.3.1b1
 google-search-results
 lmdeploy>=0.2.5
 pillow
