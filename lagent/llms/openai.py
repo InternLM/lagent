@@ -47,30 +47,27 @@ class GPTAPI(BaseAPILLM):
 
     is_api: bool = True
 
-    def __init__(self,
-                 model_type: str = 'gpt-3.5-turbo',
-                 retry: int = 2,
-                 json_mode: bool = False,
-                 key: Union[str, List[str]] = 'ENV',
-                 org: Optional[Union[str, List[str]]] = None,
-                 meta_template: Optional[Dict] = [
-                     dict(role='system', api_role='system'),
-                     dict(role='user', api_role='user'),
-                     dict(role='assistant', api_role='assistant'),
-                     dict(role='environment', api_role='system')
-                 ],
-                 api_base: str = OPENAI_API_BASE,
-                 proxies: Optional[Dict] = None,
-                 **gen_params):
+    def __init__(
+        self,
+        model_type: str = 'gpt-3.5-turbo',
+        retry: int = 2,
+        json_mode: bool = False,
+        key: Union[str, List[str]] = 'ENV',
+        org: Optional[Union[str, List[str]]] = None,
+        meta_template: Optional[Dict] = [
+            dict(role='system', api_role='system'),
+            dict(role='user', api_role='user'),
+            dict(role='assistant', api_role='assistant'),
+            dict(role='environment', api_role='system'),
+        ],
+        api_base: str = OPENAI_API_BASE,
+        proxies: Optional[Dict] = None,
+        **gen_params,
+    ):
         if 'top_k' in gen_params:
-            warnings.warn('`top_k` parameter is deprecated in OpenAI APIs.',
-                          DeprecationWarning)
+            warnings.warn('`top_k` parameter is deprecated in OpenAI APIs.', DeprecationWarning)
             gen_params.pop('top_k')
-        super().__init__(
-            model_type=model_type,
-            meta_template=meta_template,
-            retry=retry,
-            **gen_params)
+        super().__init__(model_type=model_type, meta_template=meta_template, retry=retry, **gen_params)
         self.gen_params.pop('top_k')
         self.logger = getLogger(__name__)
 
@@ -115,11 +112,8 @@ class GPTAPI(BaseAPILLM):
         gen_params = {**self.gen_params, **gen_params}
         with ThreadPoolExecutor(max_workers=20) as executor:
             tasks = [
-                executor.submit(self._chat,
-                                self.template_parser._prompt2api(messages),
-                                **gen_params)
-                for messages in (
-                    [inputs] if isinstance(inputs[0], dict) else inputs)
+                executor.submit(self._chat, self.template_parser._prompt2api(messages), **gen_params)
+                for messages in ([inputs] if isinstance(inputs[0], dict) else inputs)
             ]
         ret = [task.result() for task in tasks]
         return ret[0] if isinstance(inputs[0], dict) else ret
@@ -182,10 +176,8 @@ class GPTAPI(BaseAPILLM):
         assert isinstance(messages, list)
 
         header, data = self.generate_request_data(
-            model_type=self.model_type,
-            messages=messages,
-            gen_params=gen_params,
-            json_mode=self.json_mode)
+            model_type=self.model_type, messages=messages, gen_params=gen_params, json_mode=self.json_mode
+        )
 
         max_num_retries, errmsg = 0, ''
         while max_num_retries < self.retry:
@@ -214,11 +206,7 @@ class GPTAPI(BaseAPILLM):
 
             response = dict()
             try:
-                raw_response = requests.post(
-                    self.url,
-                    headers=header,
-                    data=json.dumps(data),
-                    proxies=self.proxies)
+                raw_response = requests.post(self.url, headers=header, data=json.dumps(data), proxies=self.proxies)
                 response = raw_response.json()
                 return response['choices'][0]['message']['content'].strip()
             except requests.ConnectionError:
@@ -239,17 +227,18 @@ class GPTAPI(BaseAPILLM):
                         self.logger.warn(f'insufficient_quota key: {key}')
                         continue
 
-                    errmsg = 'Find error message in response: ' + str(
-                        response['error'])
+                    errmsg = 'Find error message in response: ' + str(response['error'])
                     self.logger.error(errmsg)
             except Exception as error:
                 errmsg = str(error) + '\n' + str(traceback.format_exc())
                 self.logger.error(errmsg)
             max_num_retries += 1
 
-        raise RuntimeError('Calling OpenAI failed after retrying for '
-                           f'{max_num_retries} times. Check the logs for '
-                           f'details. errmsg: {errmsg}')
+        raise RuntimeError(
+            'Calling OpenAI failed after retrying for '
+            f'{max_num_retries} times. Check the logs for '
+            f'details. errmsg: {errmsg}'
+        )
 
     def _stream_chat(self, messages: List[dict], **gen_params) -> str:
         """Generate completion from a list of templates.
@@ -263,8 +252,7 @@ class GPTAPI(BaseAPILLM):
         """
 
         def streaming(raw_response):
-            for chunk in raw_response.iter_lines(
-                    chunk_size=8192, decode_unicode=False, delimiter=b'\n'):
+            for chunk in raw_response.iter_lines(chunk_size=8192, decode_unicode=False, delimiter=b'\n'):
                 if chunk:
                     decoded = chunk.decode('utf-8')
                     if decoded.startswith('data: [DONE]'):
@@ -300,10 +288,8 @@ class GPTAPI(BaseAPILLM):
         assert isinstance(messages, list)
 
         header, data = self.generate_request_data(
-            model_type=self.model_type,
-            messages=messages,
-            gen_params=gen_params,
-            json_mode=self.json_mode)
+            model_type=self.model_type, messages=messages, gen_params=gen_params, json_mode=self.json_mode
+        )
 
         max_num_retries, errmsg = 0, ''
         while max_num_retries < self.retry:
@@ -330,11 +316,7 @@ class GPTAPI(BaseAPILLM):
 
             response = dict()
             try:
-                raw_response = requests.post(
-                    self.url,
-                    headers=header,
-                    data=json.dumps(data),
-                    proxies=self.proxies)
+                raw_response = requests.post(self.url, headers=header, data=json.dumps(data), proxies=self.proxies)
                 return streaming(raw_response)
             except requests.ConnectionError:
                 errmsg = 'Got connection error ' + str(traceback.format_exc())
@@ -354,23 +336,20 @@ class GPTAPI(BaseAPILLM):
                         self.logger.warn(f'insufficient_quota key: {key}')
                         continue
 
-                    errmsg = 'Find error message in response: ' + str(
-                        response['error'])
+                    errmsg = 'Find error message in response: ' + str(response['error'])
                     self.logger.error(errmsg)
             except Exception as error:
                 errmsg = str(error) + '\n' + str(traceback.format_exc())
                 self.logger.error(errmsg)
             max_num_retries += 1
 
-        raise RuntimeError('Calling OpenAI failed after retrying for '
-                           f'{max_num_retries} times. Check the logs for '
-                           f'details. errmsg: {errmsg}')
+        raise RuntimeError(
+            'Calling OpenAI failed after retrying for '
+            f'{max_num_retries} times. Check the logs for '
+            f'details. errmsg: {errmsg}'
+        )
 
-    def generate_request_data(self,
-                              model_type,
-                              messages,
-                              gen_params,
-                              json_mode=False):
+    def generate_request_data(self, model_type, messages, gen_params, json_mode=False):
         """
         Generates the request data for different model types.
 
@@ -401,34 +380,21 @@ class GPTAPI(BaseAPILLM):
         if 'stop_words' in gen_params:
             gen_params['stop'] = gen_params.pop('stop_words')
         if 'repetition_penalty' in gen_params:
-            gen_params['frequency_penalty'] = gen_params.pop(
-                'repetition_penalty')
+            gen_params['frequency_penalty'] = gen_params.pop('repetition_penalty')
 
         # Model-specific processing
         data = {}
         if model_type.lower().startswith('gpt'):
             if 'top_k' in gen_params:
-                warnings.warn(
-                    '`top_k` parameter is deprecated in OpenAI APIs.',
-                    DeprecationWarning)
+                warnings.warn('`top_k` parameter is deprecated in OpenAI APIs.', DeprecationWarning)
                 gen_params.pop('top_k')
             gen_params.pop('skip_special_tokens', None)
             gen_params.pop('session_id', None)
-            data = {
-                'model': model_type,
-                'messages': messages,
-                'n': 1,
-                **gen_params
-            }
+            data = {'model': model_type, 'messages': messages, 'n': 1, **gen_params}
             if json_mode:
                 data['response_format'] = {'type': 'json_object'}
         elif model_type.lower().startswith('internlm'):
-            data = {
-                'model': model_type,
-                'messages': messages,
-                'n': 1,
-                **gen_params
-            }
+            data = {'model': model_type, 'messages': messages, 'n': 1, **gen_params}
             if json_mode:
                 data['response_format'] = {'type': 'json_object'}
         elif model_type.lower().startswith('qwen'):
@@ -436,21 +402,11 @@ class GPTAPI(BaseAPILLM):
             gen_params.pop('skip_special_tokens', None)
             gen_params.pop('session_id', None)
             if 'frequency_penalty' in gen_params:
-                gen_params['repetition_penalty'] = gen_params.pop(
-                    'frequency_penalty')
+                gen_params['repetition_penalty'] = gen_params.pop('frequency_penalty')
             gen_params['result_format'] = 'message'
-            data = {
-                'model': model_type,
-                'input': {
-                    'messages': messages
-                },
-                'parameters': {
-                    **gen_params
-                }
-            }
+            data = {'model': model_type, 'input': {'messages': messages}, 'parameters': {**gen_params}}
         else:
-            raise NotImplementedError(
-                f'Model type {model_type} is not supported')
+            raise NotImplementedError(f'Model type {model_type} is not supported')
 
         return header, data
 
@@ -464,6 +420,7 @@ class GPTAPI(BaseAPILLM):
             list: token ids
         """
         import tiktoken
+
         self.tiktoken = tiktoken
         enc = self.tiktoken.encoding_for_model(self.model_type)
         return enc.encode(prompt)
@@ -495,29 +452,27 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
 
     is_api: bool = True
 
-    def __init__(self,
-                 model_type: str = 'gpt-3.5-turbo',
-                 retry: int = 2,
-                 json_mode: bool = False,
-                 key: Union[str, List[str]] = 'ENV',
-                 org: Optional[Union[str, List[str]]] = None,
-                 meta_template: Optional[Dict] = [
-                     dict(role='system', api_role='system'),
-                     dict(role='user', api_role='user'),
-                     dict(role='assistant', api_role='assistant')
-                 ],
-                 api_base: str = OPENAI_API_BASE,
-                 proxies: Optional[Dict] = None,
-                 **gen_params):
+    def __init__(
+        self,
+        model_type: str = 'gpt-3.5-turbo',
+        retry: int = 2,
+        json_mode: bool = False,
+        key: Union[str, List[str]] = 'ENV',
+        org: Optional[Union[str, List[str]]] = None,
+        meta_template: Optional[Dict] = [
+            dict(role='system', api_role='system'),
+            dict(role='user', api_role='user'),
+            dict(role='assistant', api_role='assistant'),
+            dict(role='environment', api_role='system'),
+        ],
+        api_base: str = OPENAI_API_BASE,
+        proxies: Optional[Dict] = None,
+        **gen_params,
+    ):
         if 'top_k' in gen_params:
-            warnings.warn('`top_k` parameter is deprecated in OpenAI APIs.',
-                          DeprecationWarning)
+            warnings.warn('`top_k` parameter is deprecated in OpenAI APIs.', DeprecationWarning)
             gen_params.pop('top_k')
-        super().__init__(
-            model_type=model_type,
-            meta_template=meta_template,
-            retry=retry,
-            **gen_params)
+        super().__init__(model_type=model_type, meta_template=meta_template, retry=retry, **gen_params)
         self.gen_params.pop('top_k')
         self.logger = getLogger(__name__)
 
@@ -562,8 +517,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
             raise NotImplementedError('unsupported parameter: max_tokens')
         gen_params = {**self.gen_params, **gen_params}
         tasks = [
-            self._chat(messages, **gen_params) for messages in (
-                [inputs] if isinstance(inputs[0], dict) else inputs)
+            self._chat(messages, **gen_params) for messages in ([inputs] if isinstance(inputs[0], dict) else inputs)
         ]
         ret = await asyncio.gather(*tasks)
         return ret[0] if isinstance(inputs[0], dict) else ret
@@ -624,12 +578,10 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
             str: The generated string.
         """
         assert isinstance(messages, list)
-
+        messages = self.template_parser(messages)
         header, data = self.generate_request_data(
-            model_type=self.model_type,
-            messages=messages,
-            gen_params=gen_params,
-            json_mode=self.json_mode)
+            model_type=self.model_type, messages=messages, gen_params=gen_params, json_mode=self.json_mode
+        )
 
         max_num_retries, errmsg = 0, ''
         while max_num_retries < self.retry:
@@ -658,14 +610,10 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
-                            self.url,
-                            headers=header,
-                            json=data,
-                            proxy=self.proxies.get(
-                                'https', self.proxies.get('http'))) as resp:
+                        self.url, headers=header, json=data, proxy=self.proxies.get('https', self.proxies.get('http'))
+                    ) as resp:
                         response = await resp.json()
-                        return response['choices'][0]['message'][
-                            'content'].strip()
+                        return response['choices'][0]['message']['content'].strip()
             except aiohttp.ClientConnectionError:
                 errmsg = 'Got connection error ' + str(traceback.format_exc())
                 self.logger.error(errmsg)
@@ -675,8 +623,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                 self.logger.error(errmsg)
                 continue
             except json.JSONDecodeError:
-                errmsg = 'JsonDecode error, got ' + (await resp.text(
-                    errors='replace'))
+                errmsg = 'JsonDecode error, got ' + (await resp.text(errors='replace'))
                 self.logger.error(errmsg)
                 continue
             except KeyError:
@@ -689,20 +636,20 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                         self.logger.warn(f'insufficient_quota key: {key}')
                         continue
 
-                    errmsg = 'Find error message in response: ' + str(
-                        response['error'])
+                    errmsg = 'Find error message in response: ' + str(response['error'])
                     self.logger.error(errmsg)
             except Exception as error:
                 errmsg = str(error) + '\n' + str(traceback.format_exc())
                 self.logger.error(errmsg)
             max_num_retries += 1
 
-        raise RuntimeError('Calling OpenAI failed after retrying for '
-                           f'{max_num_retries} times. Check the logs for '
-                           f'details. errmsg: {errmsg}')
+        raise RuntimeError(
+            'Calling OpenAI failed after retrying for '
+            f'{max_num_retries} times. Check the logs for '
+            f'details. errmsg: {errmsg}'
+        )
 
-    async def _stream_chat(self, messages: List[dict],
-                           **gen_params) -> AsyncGenerator[str, None]:
+    async def _stream_chat(self, messages: List[dict], **gen_params) -> AsyncGenerator[str, None]:
         """Generate completion from a list of templates.
 
         Args:
@@ -750,10 +697,8 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
         assert isinstance(messages, list)
 
         header, data = self.generate_request_data(
-            model_type=self.model_type,
-            messages=messages,
-            gen_params=gen_params,
-            json_mode=self.json_mode)
+            model_type=self.model_type, messages=messages, gen_params=gen_params, json_mode=self.json_mode
+        )
 
         max_num_retries, errmsg = 0, ''
         while max_num_retries < self.retry:
@@ -782,12 +727,8 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
-                            self.url,
-                            headers=header,
-                            json=data,
-                            proxy=self.proxies.get(
-                                'https',
-                                self.proxies.get('http'))) as raw_response:
+                        self.url, headers=header, json=data, proxy=self.proxies.get('https', self.proxies.get('http'))
+                    ) as raw_response:
                         async for msg in streaming(raw_response):
                             yield msg
                         return
@@ -809,23 +750,20 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                         self.logger.warn(f'insufficient_quota key: {key}')
                         continue
 
-                    errmsg = 'Find error message in response: ' + str(
-                        response['error'])
+                    errmsg = 'Find error message in response: ' + str(response['error'])
                     self.logger.error(errmsg)
             except Exception as error:
                 errmsg = str(error) + '\n' + str(traceback.format_exc())
                 self.logger.error(errmsg)
             max_num_retries += 1
 
-        raise RuntimeError('Calling OpenAI failed after retrying for '
-                           f'{max_num_retries} times. Check the logs for '
-                           f'details. errmsg: {errmsg}')
+        raise RuntimeError(
+            'Calling OpenAI failed after retrying for '
+            f'{max_num_retries} times. Check the logs for '
+            f'details. errmsg: {errmsg}'
+        )
 
-    def generate_request_data(self,
-                              model_type,
-                              messages,
-                              gen_params,
-                              json_mode=False):
+    def generate_request_data(self, model_type, messages, gen_params, json_mode=False):
         """
         Generates the request data for different model types.
 
@@ -856,34 +794,21 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
         if 'stop_words' in gen_params:
             gen_params['stop'] = gen_params.pop('stop_words')
         if 'repetition_penalty' in gen_params:
-            gen_params['frequency_penalty'] = gen_params.pop(
-                'repetition_penalty')
+            gen_params['frequency_penalty'] = gen_params.pop('repetition_penalty')
 
         # Model-specific processing
         data = {}
         if model_type.lower().startswith('gpt'):
             if 'top_k' in gen_params:
-                warnings.warn(
-                    '`top_k` parameter is deprecated in OpenAI APIs.',
-                    DeprecationWarning)
+                warnings.warn('`top_k` parameter is deprecated in OpenAI APIs.', DeprecationWarning)
                 gen_params.pop('top_k')
             gen_params.pop('skip_special_tokens', None)
             gen_params.pop('session_id', None)
-            data = {
-                'model': model_type,
-                'messages': messages,
-                'n': 1,
-                **gen_params
-            }
+            data = {'model': model_type, 'messages': messages, 'n': 1, **gen_params}
             if json_mode:
                 data['response_format'] = {'type': 'json_object'}
         elif model_type.lower().startswith('internlm'):
-            data = {
-                'model': model_type,
-                'messages': messages,
-                'n': 1,
-                **gen_params
-            }
+            data = {'model': model_type, 'messages': messages, 'n': 1, **gen_params}
             if json_mode:
                 data['response_format'] = {'type': 'json_object'}
         elif model_type.lower().startswith('qwen'):
@@ -891,21 +816,11 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
             gen_params.pop('skip_special_tokens', None)
             gen_params.pop('session_id', None)
             if 'frequency_penalty' in gen_params:
-                gen_params['repetition_penalty'] = gen_params.pop(
-                    'frequency_penalty')
+                gen_params['repetition_penalty'] = gen_params.pop('frequency_penalty')
             gen_params['result_format'] = 'message'
-            data = {
-                'model': model_type,
-                'input': {
-                    'messages': messages
-                },
-                'parameters': {
-                    **gen_params
-                }
-            }
+            data = {'model': model_type, 'input': {'messages': messages}, 'parameters': {**gen_params}}
         else:
-            raise NotImplementedError(
-                f'Model type {model_type} is not supported')
+            raise NotImplementedError(f'Model type {model_type} is not supported')
 
         return header, data
 
@@ -919,6 +834,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
             list: token ids
         """
         import tiktoken
+
         self.tiktoken = tiktoken
         enc = self.tiktoken.encoding_for_model(self.model_type)
         return enc.encode(prompt)

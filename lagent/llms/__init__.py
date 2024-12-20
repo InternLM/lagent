@@ -1,9 +1,15 @@
+from .anthropic_llm import AsyncClaudeAPI, ClaudeAPI
 from .base_api import AsyncBaseAPILLM, BaseAPILLM
 from .base_llm import AsyncBaseLLM, BaseLLM
 from .huggingface import HFTransformer, HFTransformerCasualLM, HFTransformerChat
-from .lmdeploy_wrapper import (AsyncLMDeployClient, AsyncLMDeployPipeline,
-                               AsyncLMDeployServer, LMDeployClient,
-                               LMDeployPipeline, LMDeployServer)
+from .lmdeploy_wrapper import (
+    AsyncLMDeployClient,
+    AsyncLMDeployPipeline,
+    AsyncLMDeployServer,
+    LMDeployClient,
+    LMDeployPipeline,
+    LMDeployServer,
+)
 from .meta_template import INTERNLM2_META
 from .openai import GPTAPI, AsyncGPTAPI
 from .sensenova import SensenovaAPI
@@ -29,4 +35,6 @@ __all__ = [
     'VllmModel',
     'AsyncVllmModel',
     'SensenovaAPI',
+    'AsyncClaudeAPI',
+    'ClaudeAPI',
 ]
