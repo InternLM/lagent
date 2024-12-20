@@ -112,7 +112,7 @@ class GPTAPI(BaseAPILLM):
         gen_params = {**self.gen_params, **gen_params}
         with ThreadPoolExecutor(max_workers=20) as executor:
             tasks = [
-                executor.submit(self._chat, self.template_parser._prompt2api(messages), **gen_params)
+                executor.submit(self._chat, messages, **gen_params)
                 for messages in ([inputs] if isinstance(inputs[0], dict) else inputs)
             ]
         ret = [task.result() for task in tasks]
@@ -144,7 +144,7 @@ class GPTAPI(BaseAPILLM):
         if stop_words is None:
             stop_words = []
         # mapping to role that openai supports
-        messages = self.template_parser._prompt2api(inputs)
+        messages = self.template_parser(inputs)
         for text in self._stream_chat(messages, **gen_params):
             if self.model_type.lower().startswith('qwen'):
                 resp = text
@@ -174,7 +174,7 @@ class GPTAPI(BaseAPILLM):
             str: The generated string.
         """
         assert isinstance(messages, list)
-
+        messages = self.template_parser(messages)
         header, data = self.generate_request_data(
             model_type=self.model_type, messages=messages, gen_params=gen_params, json_mode=self.json_mode
         )
@@ -548,7 +548,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
         if stop_words is None:
             stop_words = []
         # mapping to role that openai supports
-        messages = self.template_parser._prompt2api(inputs)
+        messages = self.template_parser(inputs)
         async for text in self._stream_chat(messages, **gen_params):
             if self.model_type.lower().startswith('qwen'):
                 resp = text
