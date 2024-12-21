@@ -320,7 +320,8 @@ class AsyncClaudeAPI(AsyncBaseAPILLM):
         if messages[0]['role'] == 'system':
             system = messages.pop(0)
             system = system['content']
-
+        for message in messages:
+            message.pop('name', None)
         data = {'model': model_type, 'messages': messages, **gen_params}
         if system:
             data['system'] = system
@@ -389,6 +390,8 @@ class AsyncClaudeAPI(AsyncBaseAPILLM):
                 ):
                     self.invalid_keys.add(key)
                     print(f'API has no quota: {key}, Valid keys: {len(self.keys) - len(self.invalid_keys)}')
+                else:
+                    raise error
             max_num_retries += 1
 
         raise RuntimeError(
