@@ -804,6 +804,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                 gen_params.pop('top_k')
             gen_params.pop('skip_special_tokens', None)
             gen_params.pop('session_id', None)
+
             data = {'model': model_type, 'messages': messages, 'n': 1, **gen_params}
             if json_mode:
                 data['response_format'] = {'type': 'json_object'}
@@ -819,6 +820,8 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                 gen_params['repetition_penalty'] = gen_params.pop('frequency_penalty')
             gen_params['result_format'] = 'message'
             data = {'model': model_type, 'input': {'messages': messages}, 'parameters': {**gen_params}}
+        elif model_type.lower().startswith('o1'):
+            data = {'model': model_type, 'messages': messages, 'n': 1}
         else:
             raise NotImplementedError(f'Model type {model_type} is not supported')
 
