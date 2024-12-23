@@ -12,7 +12,6 @@ from typing import AsyncGenerator, Dict, List, Optional, Union
 import aiohttp
 import requests
 
-from ..actions.ipython_interpreter import escape_ansi
 from ..schema import ModelStatusCode
 from ..utils import filter_suffix
 from .base_api import AsyncBaseAPILLM, BaseAPILLM
