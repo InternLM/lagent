@@ -556,7 +556,19 @@ class AsyncLMDeployPipeline(AsyncLLMMixin, LMDeployPipeline):
         assert len(inputs) == len(session_ids)
 
         prompt = inputs
+        do_sample = kwargs.pop('do_sample', None)
         gen_params = self.update_gen_params(**kwargs)
+        if do_sample is None:
+            do_sample = self.do_sample
+        if do_sample is not None and self.version < (0, 6, 0):
+            raise RuntimeError(
+                '`do_sample` parameter is not supported by lmdeploy until '
+                f'v0.6.0, but currently using lmdeloy {self.str_version}')
+        if self.version >= (0, 6, 0):
+            if do_sample is None:
+                do_sample = gen_params['top_k'] > 1 or gen_params[
+                    'temperature'] > 0
+            gen_params.update(do_sample=do_sample)
         gen_config = GenerationConfig(
             skip_special_tokens=skip_special_tokens, **gen_params)
 
