@@ -146,10 +146,7 @@ class GPTAPI(BaseAPILLM):
         # mapping to role that openai supports
         messages = self.template_parser(inputs)
         for text in self._stream_chat(messages, **gen_params):
-            if self.model_type.lower().startswith('qwen'):
-                resp = text
-            else:
-                resp += text
+            resp += text
             if not resp:
                 continue
             # remove stop_words
@@ -270,16 +267,11 @@ class GPTAPI(BaseAPILLM):
                             # Context exceeds maximum length
                             yield ''
                             return
-                        if self.model_type.lower().startswith('qwen'):
-                            choice = response['output']['choices'][0]
-                            yield choice['message']['content']
-                            if choice['finish_reason'] == 'stop':
-                                return
-                        else:
-                            choice = response['choices'][0]
-                            if choice['finish_reason'] == 'stop':
-                                return
-                            yield choice['delta'].get('content', '')
+
+                        choice = response['choices'][0]
+                        if choice['finish_reason'] == 'stop':
+                            return
+                        yield choice['delta'].get('content', '')
                     except Exception as exc:
                         msg = f'response {decoded} lead to exception of {str(exc)}'
                         self.logger.error(msg)
@@ -316,7 +308,7 @@ class GPTAPI(BaseAPILLM):
 
             response = dict()
             try:
-                raw_response = requests.post(self.url, headers=header, data=json.dumps(data), proxies=self.proxies)
+                raw_response = requests.post(self.url, headers=header, data=json.dumps(data), proxies=self.proxies, stream=True)
                 return streaming(raw_response)
             except requests.ConnectionError:
                 errmsg = 'Got connection error ' + str(traceback.format_exc())
@@ -384,7 +376,7 @@ class GPTAPI(BaseAPILLM):
 
         # Model-specific processing
         data = {}
-        if model_type.lower().startswith('gpt'):
+        if model_type.lower().startswith('gpt') or model_type.lower().startswith('qwen'):
             if 'top_k' in gen_params:
                 warnings.warn('`top_k` parameter is deprecated in OpenAI APIs.', DeprecationWarning)
                 gen_params.pop('top_k')
@@ -397,14 +389,6 @@ class GPTAPI(BaseAPILLM):
             data = {'model': model_type, 'messages': messages, 'n': 1, **gen_params}
             if json_mode:
                 data['response_format'] = {'type': 'json_object'}
-        elif model_type.lower().startswith('qwen'):
-            header['X-DashScope-SSE'] = 'enable'
-            gen_params.pop('skip_special_tokens', None)
-            gen_params.pop('session_id', None)
-            if 'frequency_penalty' in gen_params:
-                gen_params['repetition_penalty'] = gen_params.pop('frequency_penalty')
-            gen_params['result_format'] = 'message'
-            data = {'model': model_type, 'input': {'messages': messages}, 'parameters': {**gen_params}}
         else:
             raise NotImplementedError(f'Model type {model_type} is not supported')
 
@@ -550,10 +534,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
         # mapping to role that openai supports
         messages = self.template_parser(inputs)
         async for text in self._stream_chat(messages, **gen_params):
-            if self.model_type.lower().startswith('qwen'):
-                resp = text
-            else:
-                resp += text
+            resp += text
             if not resp:
                 continue
             # remove stop_words
@@ -679,16 +660,11 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                             # Context exceeds maximum length
                             yield ''
                             return
-                        if self.model_type.lower().startswith('qwen'):
-                            choice = response['output']['choices'][0]
-                            yield choice['message']['content']
-                            if choice['finish_reason'] == 'stop':
-                                return
-                        else:
-                            choice = response['choices'][0]
-                            if choice['finish_reason'] == 'stop':
-                                return
-                            yield choice['delta'].get('content', '')
+
+                        choice = response['choices'][0]
+                        if choice['finish_reason'] == 'stop':
+                            return
+                        yield choice['delta'].get('content', '')
                     except Exception as exc:
                         msg = f'response {decoded} lead to exception of {str(exc)}'
                         self.logger.error(msg)
@@ -798,7 +774,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
 
         # Model-specific processing
         data = {}
-        if model_type.lower().startswith('gpt'):
+        if model_type.lower().startswith('gpt') or model_type.lower().startswith('qwen'):
             if 'top_k' in gen_params:
                 warnings.warn('`top_k` parameter is deprecated in OpenAI APIs.', DeprecationWarning)
                 gen_params.pop('top_k')
@@ -812,14 +788,6 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
             data = {'model': model_type, 'messages': messages, 'n': 1, **gen_params}
             if json_mode:
                 data['response_format'] = {'type': 'json_object'}
-        elif model_type.lower().startswith('qwen'):
-            header['X-DashScope-SSE'] = 'enable'
-            gen_params.pop('skip_special_tokens', None)
-            gen_params.pop('session_id', None)
-            if 'frequency_penalty' in gen_params:
-                gen_params['repetition_penalty'] = gen_params.pop('frequency_penalty')
-            gen_params['result_format'] = 'message'
-            data = {'model': model_type, 'input': {'messages': messages}, 'parameters': {**gen_params}}
         elif model_type.lower().startswith('o1'):
             data = {'model': model_type, 'messages': messages, 'n': 1}
         else:
