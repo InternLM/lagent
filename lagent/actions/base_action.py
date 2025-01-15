@@ -96,7 +96,10 @@ def tool_api(
     """
     if include_arguments is None:
         exclude_arguments = exclude_arguments or set()
-        exclude_arguments = {exclude_arguments} if isinstance(exclude_arguments, str) else set(exclude_arguments)
+        if isinstance(exclude_arguments, str):
+            exclude_arguments = {exclude_arguments}
+        elif not isinstance(exclude_arguments, set):
+            exclude_arguments = set(exclude_arguments)
         if 'self' not in exclude_arguments:
             exclude_arguments.add('self')
     else:
