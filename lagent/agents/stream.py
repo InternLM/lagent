@@ -38,7 +38,7 @@ PLUGIN_CN = (
 )
 
 
-def get_plugin_prompt(actions, api_desc_template=API_PREFIX):
+def get_plugin_prompt(actions, api_desc_template='{description}'):
     plugin_descriptions = []
     for action in actions if isinstance(actions, list) else [actions]:
         action = create_object(action)
@@ -47,15 +47,8 @@ def get_plugin_prompt(actions, api_desc_template=API_PREFIX):
             for api in action_desc['api_list']:
                 api['name'] = f"{action.name}.{api['name']}"
                 api['description'] = api_desc_template.format(tool_name=action.name, description=api['description'])
-                api['parameters'] = [param for param in api['parameters'] if param['name'] in api['required']]
                 plugin_descriptions.append(api)
         else:
-            action_desc['description'] = api_desc_template.format(
-                tool_name=action.name, description=action_desc['description']
-            )
-            action_desc['parameters'] = [
-                param for param in action_desc['parameters'] if param['name'] in action_desc['required']
-            ]
             plugin_descriptions.append(action_desc)
     return json.dumps(plugin_descriptions, ensure_ascii=False, indent=4)
 
