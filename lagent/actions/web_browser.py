@@ -203,6 +203,125 @@ class BingSearch(BaseSearch):
 
         return self._filter_results(raw_results)
 
+import os
+
+class SearxngSearch(BaseSearch):
+    """
+    创建SearXNG客户端。
+    （PS： 1. 首先自建SearXNG搜索引擎服务端：https://docs.searxng.org/
+     2、 如果是SearXNG等不需要apiKey的服务端，则auth_name、api_key不需要关注
+     3、如果需要传apiKey的服务端，auth_name为header中的key值，api_key为value值。当然这里入参param还没支持自定义）
+
+     SearXNG之类不需要鉴权的搜索引擎服务端：
+      需要设置服务端地址：两种方式：
+        方式一：环境变量：export SEARXNG_URL="http://192.168.26.xxx:18080/search"
+        方式二：初始化SearxngSearch时赋值url； tool = SearxngSearch(url="")
+        若两者都设置，以方式一的值为准
+      需要鉴权的搜索引擎服务端：
+        略
+    Args:
+        api_key (str): API密钥，默认值为'sk-xxxx'。
+        auth_name (str): 认证名称，默认值为'searxng'。
+        language (str): 语言设置，默认值为'zh'。
+        categories (str): 类别设置，默认值为'general'。
+        url (str): SearXNG服务的URL，默认值为'http://127.0.0.1:18883'。
+        topk (int): 返回的顶部结果数量，默认值为3。
+        black_list (List[str]): 黑名单列表，包含不希望搜索到的域名。
+        **kwargs: 其他可变关键字参数，如代理设置。
+    """
+
+    def __init__(
+        self,
+        api_key: str='sk-xxxx',
+        auth_name: str = 'searxng',
+        language: str = 'zh',
+        categories:str = 'general',
+        url:str="http://127.0.0.1:18883",
+        topk: int = 3,
+        black_list: List[str] = [
+            'enoN',
+            'youtube.com',
+            'bilibili.com',
+            'researchgate.net',
+        ],
+        **kwargs,
+    ):
+        self.api_key = api_key
+        self.auth_name = auth_name
+        self.language = language
+        self.categories = categories
+        self.proxy = kwargs.get('proxy')
+        self.SEARXNG_URL = os.getenv("SEARXNG_URL")
+        if self.SEARXNG_URL is None or self.SEARXNG_URL == "":
+            self.SEARXNG_URL = url
+        super().__init__(topk, black_list)
+
+    @cached(cache=TTLCache(maxsize=100, ttl=600))
+    def search(self, query: str, max_retry: int = 3) -> dict:
+        for attempt in range(max_retry):
+            try:
+                response = self._call_searxng_api(query)
+                return self._parse_response(response)
+            except Exception as e:
+                logging.exception(str(e))
+                warnings.warn(f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                time.sleep(random.randint(2, 5))
+        raise Exception('Failed to get search results from Bing Search after retries.')
+
+    @acached(cache=TTLCache(maxsize=100, ttl=600))
+    async def asearch(self, query: str, max_retry: int = 3) -> dict:
+        for attempt in range(max_retry):
+            try:
+                response = await self._async_call_searxng_api(query)
+                return self._parse_response(response)
+            except Exception as e:
+                logging.exception(str(e))
+                warnings.warn(f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                await asyncio.sleep(random.randint(2, 5))
+        raise Exception('Failed to get search results from Bing Search after retries.')
+
+    def _call_searxng_api(self, query: str) -> dict:
+        # params = {'q': query, 'mkt': self.market, 'count': f'{self.topk * 2}'}
+        params = {
+            "q": query,  # 搜索查询
+            "categories": self.categories,  # 搜索类别
+            "language": self.language,  # 语言
+            "format": "json"  # 输出格式
+            ,'count': f'{self.topk * 2}'
+        }
+        headers = {self.auth_name: self.api_key or ''}
+        response = requests.get(self.SEARXNG_URL, headers=headers, params=params, proxies=self.proxy)
+        response.raise_for_status()
+        return response.json()
+
+    async def _async_call_searxng_api(self, query: str) -> dict:
+        params = {
+            "q": query,  # 搜索查询
+            "categories": self.categories,  # 搜索类别
+            "language": self.language,  # 语言
+            "format": "json"  # 输出格式
+            , 'count': f'{self.topk * 2}'
+        }
+        headers = {self.auth_name: self.api_key or ''}
+        async with aiohttp.ClientSession(raise_for_status=True) as session:
+            async with session.get(
+                self.SEARXNG_URL,
+                headers=headers,
+                params=params,
+                proxy=self.proxy and (self.proxy.get('http') or self.proxy.get('https')),
+            ) as resp:
+                return await resp.json()
+
+    def _parse_response(self, response: dict) -> dict:
+        raw_results = []
+
+        for result in response["results"]:
+            title = result["title"]
+            url = result["url"]
+            content = result["content"]
+            raw_results.append((url, content, title))
+
+        return self._filter_results(raw_results)
 
 class BraveSearch(BaseSearch):
     """
@@ -782,7 +901,14 @@ class WebBrowser(BaseAction):
         else:
             return {'error': web_content}
 
+import asyncio
 
+async def main():
+    search_tool = SearxngSearch(api_key='abc')
+    # search_tool = DuckDuckGoSearch(proxy= 'http://192.168.26.xxx:7890')
+    tool_return = await search_tool.asearch("What's the capital of China?")
+    for key, value in tool_return.items():
+        print(f"{key}: {value}")
 class AsyncWebBrowser(AsyncActionMixin, WebBrowser):
     """Wrapper around the Web Browser Tool."""
 
@@ -855,3 +981,9 @@ class AsyncWebBrowser(AsyncActionMixin, WebBrowser):
             return {'type': 'text', 'content': web_content}
         else:
             return {'error': web_content}
+if __name__ == '__main__':
+    os.environ['SEARXNG_URL'] = "http://192.168.26.xxx:18080/search"
+    # tool_return =  search_tool.search("What's the capital of China?")
+    # for key, value in tool_return.items():
+    #     print(f"{key}: {value}")
+    asyncio.run(main())
