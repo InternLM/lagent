@@ -323,7 +323,10 @@ class GPTStyleAPI(BaseAPILLM):
                         choice = response['choices'][0]
                         if choice['finish_reason'] == 'stop':
                             return
-                        yield choice['delta'].get('content', '')
+                        res = choice['delta'].get('content', '')
+                        if res is None or "null"==res: # 处理硅基流动的特例
+                            res = ''
+                        yield res
                     except Exception as exc:
                         msg = f'response {decoded} lead to exception of {str(exc)}'
                         self.logger.error(msg)
