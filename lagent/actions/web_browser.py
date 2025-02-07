@@ -207,27 +207,27 @@ import os
 
 class SearxngSearch(BaseSearch):
     """
-    创建SearXNG客户端。
-    （PS： 1. 首先自建SearXNG搜索引擎服务端：https://docs.searxng.org/
-     2、 如果是SearXNG等不需要apiKey的服务端，则auth_name、api_key不需要关注
-     3、如果需要传apiKey的服务端，auth_name为header中的key值，api_key为value值。当然这里入参param还没支持自定义）
+    Create a SearXNG client.
+    (PS: 1. First, set up your own SearXNG search engine server: https://docs.searxng.org/
+     2. For servers like SearXNG that do not require an apiKey, you don't need to concern yourself with auth_name and api_key.
+     3. For servers that require passing an apiKey, auth_name would be the key in the header, and api_key would be the value. Note that custom parameters are not yet supported for input.)
 
-     SearXNG之类不需要鉴权的搜索引擎服务端：
-      需要设置服务端地址：两种方式：
-        方式一：环境变量：export SEARXNG_URL="http://192.168.26.xxx:18080/search"
-        方式二：初始化SearxngSearch时赋值url； tool = SearxngSearch(url="")
-        若两者都设置，以方式一的值为准
-      需要鉴权的搜索引擎服务端：
-        略
+    For SearXNG-like search engine servers that do not require authentication:
+      You need to set the server address in one of two ways:
+        Method One: Environment variable: export SEARXNG_URL="http://192.168.26.xxx:18080/search"
+        Method Two: Assign the URL when initializing SearxngSearch: tool = SearxngSearch(url="")
+        If both methods are used, the value from method one takes precedence.
+    For search engine servers that require authentication:
+      Omitted
     Args:
-        api_key (str): API密钥，默认值为'sk-xxxx'。
-        auth_name (str): 认证名称，默认值为'searxng'。
-        language (str): 语言设置，默认值为'zh'。
-        categories (str): 类别设置，默认值为'general'。
-        url (str): SearXNG服务的URL，默认值为'http://127.0.0.1:18883'。
-        topk (int): 返回的顶部结果数量，默认值为3。
-        black_list (List[str]): 黑名单列表，包含不希望搜索到的域名。
-        **kwargs: 其他可变关键字参数，如代理设置。
+        api_key (str): API key, default is 'sk-xxxx'.
+        auth_name (str): Authentication name, default is 'searxng'.
+        language (str): Language setting, default is 'zh'.
+        categories (str): Category setting, default is 'general'.
+        url (str): URL of the SearXNG service, default is 'http://127.0.0.1:18883'.
+        topk (int): Number of top results to return, default is 3.
+        black_list (List[str]): Blacklist of domains you do not wish to see in search results.
+        **kwargs: Other variable keyword arguments, such as proxy settings.
     """
 
     def __init__(
