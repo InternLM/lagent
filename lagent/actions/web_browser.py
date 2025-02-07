@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 import random
 import re
 import time
@@ -203,14 +204,16 @@ class BingSearch(BaseSearch):
 
         return self._filter_results(raw_results)
 
-import os
 
 class SearxngSearch(BaseSearch):
     """
     Create a SearXNG client.
     (PS: 1. First, set up your own SearXNG search engine server: https://docs.searxng.org/
-     2. For servers like SearXNG that do not require an apiKey, you don't need to concern yourself with auth_name and api_key.
-     3. For servers that require passing an apiKey, auth_name would be the key in the header, and api_key would be the value. Note that custom parameters are not yet supported for input.)
+     2. For servers like SearXNG that do not require an apiKey,
+                you don't need to concern yourself with auth_name and api_key.
+     3. For servers that require passing an apiKey, auth_name would be the key in the header,
+        and api_key would be the value.
+      Note that custom parameters are not yet supported for input.
 
     For SearXNG-like search engine servers that do not require authentication:
       You need to set the server address in one of two ways:
@@ -232,11 +235,11 @@ class SearxngSearch(BaseSearch):
 
     def __init__(
         self,
-        api_key: str='sk-xxxx',
+        api_key: str = 'sk-xxxx',
         auth_name: str = 'searxng',
         language: str = 'zh',
-        categories:str = 'general',
-        url:str="http://127.0.0.1:18883",
+        categories: str = 'general',
+        url: str = 'http://127.0.0.1:18883',
         topk: int = 3,
         black_list: List[str] = [
             'enoN',
@@ -251,8 +254,8 @@ class SearxngSearch(BaseSearch):
         self.language = language
         self.categories = categories
         self.proxy = kwargs.get('proxy')
-        self.SEARXNG_URL = os.getenv("SEARXNG_URL")
-        if self.SEARXNG_URL is None or self.SEARXNG_URL == "":
+        self.SEARXNG_URL = os.getenv('SEARXNG_URL')
+        if self.SEARXNG_URL is None or self.SEARXNG_URL == '':
             self.SEARXNG_URL = url
         super().__init__(topk, black_list)
 
@@ -283,11 +286,11 @@ class SearxngSearch(BaseSearch):
     def _call_searxng_api(self, query: str) -> dict:
         # params = {'q': query, 'mkt': self.market, 'count': f'{self.topk * 2}'}
         params = {
-            "q": query,  # 搜索查询
-            "categories": self.categories,  # 搜索类别
-            "language": self.language,  # 语言
-            "format": "json"  # 输出格式
-            ,'count': f'{self.topk * 2}'
+            'q': query,  # 搜索查询
+            'categories': self.categories,  # 搜索类别
+            'language': self.language,  # 语言
+            'format': 'json',  # 输出格式
+            'count': f'{self.topk * 2}',
         }
         headers = {self.auth_name: self.api_key or ''}
         response = requests.get(self.SEARXNG_URL, headers=headers, params=params, proxies=self.proxy)
@@ -296,11 +299,11 @@ class SearxngSearch(BaseSearch):
 
     async def _async_call_searxng_api(self, query: str) -> dict:
         params = {
-            "q": query,  # 搜索查询
-            "categories": self.categories,  # 搜索类别
-            "language": self.language,  # 语言
-            "format": "json"  # 输出格式
-            , 'count': f'{self.topk * 2}'
+            'q': query,  # 搜索查询
+            'categories': self.categories,  # 搜索类别
+            'language': self.language,  # 语言
+            'format': 'json',  # 输出格式
+            'count': f'{self.topk * 2}',
         }
         headers = {self.auth_name: self.api_key or ''}
         async with aiohttp.ClientSession(raise_for_status=True) as session:
@@ -315,13 +318,14 @@ class SearxngSearch(BaseSearch):
     def _parse_response(self, response: dict) -> dict:
         raw_results = []
 
-        for result in response["results"]:
-            title = result["title"]
-            url = result["url"]
-            content = result["content"]
+        for result in response['results']:
+            title = result['title']
+            url = result['url']
+            content = result['content']
             raw_results.append((url, content, title))
 
         return self._filter_results(raw_results)
+
 
 class BraveSearch(BaseSearch):
     """
@@ -901,14 +905,15 @@ class WebBrowser(BaseAction):
         else:
             return {'error': web_content}
 
-import asyncio
 
 async def main():
     search_tool = SearxngSearch(api_key='abc')
     # search_tool = DuckDuckGoSearch(proxy= 'http://192.168.26.xxx:7890')
     tool_return = await search_tool.asearch("What's the capital of China?")
     for key, value in tool_return.items():
-        print(f"{key}: {value}")
+        print(f'{key}: {value}')
+
+
 class AsyncWebBrowser(AsyncActionMixin, WebBrowser):
     """Wrapper around the Web Browser Tool."""
 
@@ -981,8 +986,10 @@ class AsyncWebBrowser(AsyncActionMixin, WebBrowser):
             return {'type': 'text', 'content': web_content}
         else:
             return {'error': web_content}
+
+
 if __name__ == '__main__':
-    os.environ['SEARXNG_URL'] = "http://192.168.26.xxx:18080/search"
+    os.environ['SEARXNG_URL'] = 'http://192.168.26.xxx:18080/search'
     # tool_return =  search_tool.search("What's the capital of China?")
     # for key, value in tool_return.items():
     #     print(f"{key}: {value}")
