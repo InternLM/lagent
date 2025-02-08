@@ -286,10 +286,10 @@ class SearxngSearch(BaseSearch):
     def _call_searxng_api(self, query: str) -> dict:
         # params = {'q': query, 'mkt': self.market, 'count': f'{self.topk * 2}'}
         params = {
-            'q': query,  # 搜索查询
-            'categories': self.categories,  # 搜索类别
-            'language': self.language,  # 语言
-            'format': 'json',  # 输出格式
+            'q': query,  #
+            'categories': self.categories,
+            'language': self.language,
+            'format': 'json',
             'count': f'{self.topk * 2}',
         }
         headers = {self.auth_name: self.api_key or ''}
@@ -299,10 +299,10 @@ class SearxngSearch(BaseSearch):
 
     async def _async_call_searxng_api(self, query: str) -> dict:
         params = {
-            'q': query,  # 搜索查询
-            'categories': self.categories,  # 搜索类别
-            'language': self.language,  # 语言
-            'format': 'json',  # 输出格式
+            'q': query,  # question
+            'categories': self.categories,  # categories
+            'language': self.language,  # language
+            'format': 'json',  # format
             'count': f'{self.topk * 2}',
         }
         headers = {self.auth_name: self.api_key or ''}
@@ -906,14 +906,6 @@ class WebBrowser(BaseAction):
             return {'error': web_content}
 
 
-async def main():
-    search_tool = SearxngSearch(api_key='abc')
-    # search_tool = DuckDuckGoSearch(proxy= 'http://192.168.26.xxx:7890')
-    tool_return = await search_tool.asearch("What's the capital of China?")
-    for key, value in tool_return.items():
-        print(f'{key}: {value}')
-
-
 class AsyncWebBrowser(AsyncActionMixin, WebBrowser):
     """Wrapper around the Web Browser Tool."""
 
@@ -986,11 +978,3 @@ class AsyncWebBrowser(AsyncActionMixin, WebBrowser):
             return {'type': 'text', 'content': web_content}
         else:
             return {'error': web_content}
-
-
-if __name__ == '__main__':
-    os.environ['SEARXNG_URL'] = 'http://192.168.26.xxx:18080/search'
-    # tool_return =  search_tool.search("What's the capital of China?")
-    # for key, value in tool_return.items():
-    #     print(f"{key}: {value}")
-    asyncio.run(main())
