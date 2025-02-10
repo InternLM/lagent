@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 import random
 import re
 import time
@@ -200,6 +201,128 @@ class BingSearch(BaseSearch):
             elif item['answerType'] == 'News' and item['value']['id'] == response.get('news', {}).get('id'):
                 for news in response.get('news', {}).get('value', []):
                     raw_results.append((news['url'], news['description'], news['name']))
+
+        return self._filter_results(raw_results)
+
+
+class SearxngSearch(BaseSearch):
+    """
+    Create a SearXNG client.
+    (PS: 1. First, set up your own SearXNG search engine server: https://docs.searxng.org/
+     2. For servers like SearXNG that do not require an apiKey,
+                you don't need to concern yourself with auth_name and api_key.
+     3. For servers that require passing an apiKey, auth_name would be the key in the header,
+        and api_key would be the value.
+      Note that custom parameters are not yet supported for input.
+
+    For SearXNG-like search engine servers that do not require authentication:
+      You need to set the server address in one of two ways:
+        Method One: Environment variable: export SEARXNG_URL="http://192.168.26.xxx:18080/search"
+        Method Two: Assign the URL when initializing SearxngSearch: tool = SearxngSearch(url="")
+        If both methods are used, the value from method one takes precedence.
+    For search engine servers that require authentication:
+      Omitted
+    Args:
+        api_key (str): API key, default is 'sk-xxxx'.
+        auth_name (str): Authentication name, default is 'searxng'.
+        language (str): Language setting, default is 'zh'.
+        categories (str): Category setting, default is 'general'.
+        url (str): URL of the SearXNG service, default is 'http://127.0.0.1:18883'.
+        topk (int): Number of top results to return, default is 3.
+        black_list (List[str]): Blacklist of domains you do not wish to see in search results.
+        **kwargs: Other variable keyword arguments, such as proxy settings.
+    """
+
+    def __init__(
+        self,
+        api_key: str = 'sk-xxxx',
+        auth_name: str = 'searxng',
+        language: str = 'zh',
+        categories: str = 'general',
+        url: str = 'http://127.0.0.1:18883',
+        topk: int = 3,
+        black_list: List[str] = [
+            'enoN',
+            'youtube.com',
+            'bilibili.com',
+            'researchgate.net',
+        ],
+        **kwargs,
+    ):
+        self.api_key = api_key
+        self.auth_name = auth_name
+        self.language = language
+        self.categories = categories
+        self.proxy = kwargs.get('proxy')
+        self.SEARXNG_URL = os.getenv('SEARXNG_URL')
+        if self.SEARXNG_URL is None or self.SEARXNG_URL == '':
+            self.SEARXNG_URL = url
+        super().__init__(topk, black_list)
+
+    @cached(cache=TTLCache(maxsize=100, ttl=600))
+    def search(self, query: str, max_retry: int = 3) -> dict:
+        for attempt in range(max_retry):
+            try:
+                response = self._call_searxng_api(query)
+                return self._parse_response(response)
+            except Exception as e:
+                logging.exception(str(e))
+                warnings.warn(f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                time.sleep(random.randint(2, 5))
+        raise Exception('Failed to get search results from Bing Search after retries.')
+
+    @acached(cache=TTLCache(maxsize=100, ttl=600))
+    async def asearch(self, query: str, max_retry: int = 3) -> dict:
+        for attempt in range(max_retry):
+            try:
+                response = await self._async_call_searxng_api(query)
+                return self._parse_response(response)
+            except Exception as e:
+                logging.exception(str(e))
+                warnings.warn(f'Retry {attempt + 1}/{max_retry} due to error: {e}')
+                await asyncio.sleep(random.randint(2, 5))
+        raise Exception('Failed to get search results from Bing Search after retries.')
+
+    def _call_searxng_api(self, query: str) -> dict:
+        # params = {'q': query, 'mkt': self.market, 'count': f'{self.topk * 2}'}
+        params = {
+            'q': query,  #
+            'categories': self.categories,
+            'language': self.language,
+            'format': 'json',
+            'count': f'{self.topk * 2}',
+        }
+        headers = {self.auth_name: self.api_key or ''}
+        response = requests.get(self.SEARXNG_URL, headers=headers, params=params, proxies=self.proxy)
+        response.raise_for_status()
+        return response.json()
+
+    async def _async_call_searxng_api(self, query: str) -> dict:
+        params = {
+            'q': query,  # question
+            'categories': self.categories,  # categories
+            'language': self.language,  # language
+            'format': 'json',  # format
+            'count': f'{self.topk * 2}',
+        }
+        headers = {self.auth_name: self.api_key or ''}
+        async with aiohttp.ClientSession(raise_for_status=True) as session:
+            async with session.get(
+                self.SEARXNG_URL,
+                headers=headers,
+                params=params,
+                proxy=self.proxy and (self.proxy.get('http') or self.proxy.get('https')),
+            ) as resp:
+                return await resp.json()
+
+    def _parse_response(self, response: dict) -> dict:
+        raw_results = []
+
+        for result in response['results']:
+            title = result['title']
+            url = result['url']
+            content = result['content']
+            raw_results.append((url, content, title))
 
         return self._filter_results(raw_results)
 
