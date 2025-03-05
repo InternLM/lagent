@@ -12,6 +12,7 @@ from .lmdeploy_wrapper import (
 )
 from .meta_template import INTERNLM2_META
 from .openai import GPTAPI, AsyncGPTAPI
+from .openai_style import GPTStyleAPI, AsyncGPTStyleAPI
 from .sensenova import SensenovaAPI
 from .vllm_wrapper import AsyncVllmModel, VllmModel
 
@@ -22,6 +23,7 @@ __all__ = [
     'BaseAPILLM',
     'AsyncGPTAPI',
     'GPTAPI',
+'GPTStyleAPI', 'AsyncGPTStyleAPI',
     'LMDeployClient',
     'AsyncLMDeployClient',
     'LMDeployPipeline',
