@@ -401,7 +401,7 @@ class GPTAPI(BaseAPILLM):
         gen_params = gen_params.copy()
 
         # Hold out 100 tokens due to potential errors in token calculation
-        max_tokens = min(gen_params.pop('max_new_tokens', 4096), 4096)
+        max_tokens = gen_params.pop('max_new_tokens', 4096)
         if max_tokens <= 0:
             return '', ''
 
@@ -871,7 +871,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
         gen_params = gen_params.copy()
 
         # Hold out 100 tokens due to potential errors in token calculation
-        max_tokens = min(gen_params.pop('max_new_tokens'), 4096)
+        max_tokens = gen_params.pop('max_new_tokens', 4096)
         if max_tokens <= 0:
             return '', ''
 
