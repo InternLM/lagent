@@ -53,7 +53,7 @@ class LMTemplateParser:
                     if item:
                         prompt += last_sep + item
                 elif item.get('content', ''):
-                    prompt += last_sep + item.get('prompt', '')
+                    prompt += last_sep + item.get('content', '')
                 last_sep = '\n'
         return prompt
 
