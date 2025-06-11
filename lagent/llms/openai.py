@@ -358,7 +358,7 @@ class GPTAPI(BaseAPILLM):
         gen_params = gen_params.copy()
 
         # Hold out 100 tokens due to potential errors in token calculation
-        max_tokens = min(gen_params.pop('max_new_tokens'), 4096)
+        max_tokens = gen_params.pop('max_new_tokens')
         if max_tokens <= 0:
             return '', ''
 
@@ -374,23 +374,19 @@ class GPTAPI(BaseAPILLM):
         if 'repetition_penalty' in gen_params:
             gen_params['frequency_penalty'] = gen_params.pop('repetition_penalty')
 
-        # Model-specific processing
         data = {}
-        if model_type.lower().startswith('gpt') or model_type.lower().startswith('qwen'):
+        if any(x in model_type.lower() for x in ['o1', 'o3', 'o4']):
+            data = {'model': model_type, 'messages': messages, 'n': 1}
+        else:
             if 'top_k' in gen_params:
                 warnings.warn('`top_k` parameter is deprecated in OpenAI APIs.', DeprecationWarning)
                 gen_params.pop('top_k')
             gen_params.pop('skip_special_tokens', None)
             gen_params.pop('session_id', None)
+
             data = {'model': model_type, 'messages': messages, 'n': 1, **gen_params}
             if json_mode:
                 data['response_format'] = {'type': 'json_object'}
-        elif model_type.lower().startswith('internlm'):
-            data = {'model': model_type, 'messages': messages, 'n': 1, **gen_params}
-            if json_mode:
-                data['response_format'] = {'type': 'json_object'}
-        else:
-            raise NotImplementedError(f'Model type {model_type} is not supported')
 
         return header, data
 
@@ -756,7 +752,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
         gen_params = gen_params.copy()
 
         # Hold out 100 tokens due to potential errors in token calculation
-        max_tokens = min(gen_params.pop('max_new_tokens'), 4096)
+        max_tokens = gen_params.pop('max_new_tokens')
         if max_tokens <= 0:
             return '', ''
 
@@ -772,9 +768,10 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
         if 'repetition_penalty' in gen_params:
             gen_params['frequency_penalty'] = gen_params.pop('repetition_penalty')
 
-        # Model-specific processing
         data = {}
-        if model_type.lower().startswith('gpt') or model_type.lower().startswith('qwen'):
+        if any(x in model_type.lower() for x in ['o1', 'o3', 'o4']):
+            data = {'model': model_type, 'messages': messages, 'n': 1}
+        else:
             if 'top_k' in gen_params:
                 warnings.warn('`top_k` parameter is deprecated in OpenAI APIs.', DeprecationWarning)
                 gen_params.pop('top_k')
@@ -784,14 +781,6 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
             data = {'model': model_type, 'messages': messages, 'n': 1, **gen_params}
             if json_mode:
                 data['response_format'] = {'type': 'json_object'}
-        elif model_type.lower().startswith('internlm'):
-            data = {'model': model_type, 'messages': messages, 'n': 1, **gen_params}
-            if json_mode:
-                data['response_format'] = {'type': 'json_object'}
-        elif model_type.lower().startswith('o1'):
-            data = {'model': model_type, 'messages': messages, 'n': 1}
-        else:
-            raise NotImplementedError(f'Model type {model_type} is not supported')
 
         return header, data
 
