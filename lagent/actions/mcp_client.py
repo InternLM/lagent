@@ -39,7 +39,7 @@ class AsyncMCPClient(BaseAction):
 
     def __init__(self, name: str, server_type: ServerType, **server_params):
         self._is_toolkit = True
-        self._session = None
+        self._sessions: dict = {}
         self.server_type = server_type
         self.server_params = server_params
         self.exit_stack = AsyncExitStack()
@@ -70,10 +70,10 @@ class AsyncMCPClient(BaseAction):
             parser=JsonParser,
         )
 
-    async def _initialize(self):
+    async def initialize(self, session_id):
         """Initialize the MCP client and connect to the server."""
-        if self._session is not None:
-            return
+        if session_id in self._sessions:
+            return self._sessions[session_id]
 
         from mcp import ClientSession, StdioServerParameters
 
@@ -114,14 +114,17 @@ class AsyncMCPClient(BaseAction):
         else:
             raise ValueError(f"Unsupported server type: {self.server_type}")
 
-        self._session = await self.exit_stack.enter_async_context(ClientSession(read, write))
-
-    async def list_tools(self) -> list:
-        await self._initialize()
-        return (await self._session.list_tools()).tools
+        session = await self.exit_stack.enter_async_context(ClientSession(read, write))
+        await session.initialize()
+        self._sessions[session_id] = session
+        return session
 
     async def cleanup(self):
         await self.exit_stack.aclose()
+
+    async def list_tools(self, session_id=0) -> list:
+        session = await self.initialize(session_id=session_id)
+        return (await session.list_tools()).tools
 
     def __del__(self):
         loop = asyncio.get_event_loop()
@@ -142,8 +145,8 @@ class AsyncMCPClient(BaseAction):
         except ParseError as exc:
             return ActionReturn(fallback_args, type=self.name, errmsg=exc.err_msg, state=ActionStatusCode.ARGS_ERROR)
         try:
-            await self._initialize()
-            outputs = await self._session.call_tool(name, inputs)
+            session = await self.initialize(inputs.pop('session_id', 0))
+            outputs = await session.call_tool(name, inputs)
             outputs = outputs.content[0].text
         except Exception as exc:
             return ActionReturn(inputs, type=self.name, errmsg=str(exc), state=ActionStatusCode.API_ERROR)
