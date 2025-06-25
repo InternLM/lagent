@@ -10,6 +10,32 @@ from lagent.schema import ActionReturn, ActionStatusCode
 ServerType: TypeAlias = Literal["stdio", "sse", "http"]
 
 logger = logging.getLogger(__name__)
+_loop = None
+
+
+def _get_event_loop():
+    try:
+        event_loop = asyncio.get_event_loop()
+    except Exception:
+        logger.warning('Can not found event loop in current thread. Create a new event loop.')
+        event_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(event_loop)
+
+    if event_loop.is_running():
+        global _loop
+        if _loop:
+            return _loop
+
+        from threading import Thread
+
+        def _start_loop(loop):
+            asyncio.set_event_loop(loop)
+            loop.run_forever()
+
+        event_loop = asyncio.new_event_loop()
+        Thread(target=_start_loop, args=(event_loop,), daemon=True).start()
+        _loop = event_loop
+    return event_loop
 
 
 class AsyncMCPClient(BaseAction):
@@ -37,14 +63,16 @@ class AsyncMCPClient(BaseAction):
             - terminate_on_close (bool, optional): Whether to terminate the connection on close.
     """
 
+    is_stateful = True
+
     def __init__(self, name: str, server_type: ServerType, **server_params):
         self._is_toolkit = True
         self._sessions: dict = {}
         self.server_type = server_type
         self.server_params = server_params
         self.exit_stack = AsyncExitStack()
-        # initialze the session
-        loop = asyncio.get_event_loop()
+        # get the list of tools from the MCP server
+        loop = _get_event_loop()
         if loop.is_running():
             fut = asyncio.run_coroutine_threadsafe(self.list_tools(), loop)
             tools = fut.result()
@@ -127,7 +155,7 @@ class AsyncMCPClient(BaseAction):
         return (await session.list_tools()).tools
 
     def __del__(self):
-        loop = asyncio.get_event_loop()
+        loop = _get_event_loop()
         if loop.is_running():
             fut = asyncio.run_coroutine_threadsafe(self.cleanup(), loop)
             fut.result()
@@ -135,6 +163,7 @@ class AsyncMCPClient(BaseAction):
             loop.run_until_complete(self.cleanup())
 
     async def __call__(self, inputs: str, name: str) -> ActionReturn:
+        session_id = inputs.pop('session_id', 0) if isinstance(inputs, dict) else 0
         fallback_args = {'inputs': inputs, 'name': name}
         if name not in self._api_names:
             return ActionReturn(
@@ -145,7 +174,7 @@ class AsyncMCPClient(BaseAction):
         except ParseError as exc:
             return ActionReturn(fallback_args, type=self.name, errmsg=exc.err_msg, state=ActionStatusCode.ARGS_ERROR)
         try:
-            session = await self.initialize(inputs.pop('session_id', 0))
+            session = await self.initialize(session_id)
             outputs = await session.call_tool(name, inputs)
             outputs = outputs.content[0].text
         except Exception as exc:
