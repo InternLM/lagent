@@ -340,6 +340,8 @@ class BaseAction(metaclass=ToolMeta):
             action = Calculator()
     """
 
+    is_stateful = False
+
     def __init__(
         self,
         description: Optional[dict] = None,
