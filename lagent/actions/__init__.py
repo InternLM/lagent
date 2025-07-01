@@ -8,6 +8,7 @@ from .google_search import AsyncGoogleSearch, GoogleSearch
 from .ipython_interactive import AsyncIPythonInteractive, IPythonInteractive
 from .ipython_interpreter import AsyncIPythonInterpreter, IPythonInterpreter
 from .ipython_manager import IPythonInteractiveManager
+from .mcp_client import AsyncMCPClient
 from .parser import BaseParser, JsonParser, TupleParser
 from .ppt import PPT, AsyncPPT
 from .python_interpreter import AsyncPythonInterpreter, PythonInterpreter
@@ -39,6 +40,7 @@ __all__ = [
     'AsyncPPT',
     'WebBrowser',
     'AsyncWebBrowser',
+    'AsyncMCPClient',
     'BaseParser',
     'JsonParser',
     'TupleParser',
