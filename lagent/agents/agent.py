@@ -99,20 +99,19 @@ class Agent:
             super().__setattr__('_agents', _agents)
         super().__setattr__(__name, __value)
 
-    def state_dict(self, session_id=0):
-        state_dict, stack = {}, [('', self)]
-        while stack:
-            prefix, node = stack.pop()
-            key = prefix + 'memory'
-            if node.memory is not None:
-                if session_id not in node.memory.memory_map:
-                    warnings.warn(f'No session id {session_id} in {key}')
-                memory = node.memory.get(session_id)
-                state_dict[key] = memory and memory.save() or []
-            if hasattr(node, '_agents'):
-                for name, value in reversed(node._agents.items()):
-                    stack.append((prefix + name + '.', value))
-        return state_dict
+    def state_dict(self, session_id=None, prefix='', destination=None) -> Dict:
+        if destination is None:
+            destination = {}
+        if self.memory is not None:
+            if session_id not in self.memory.memory_map:
+                warnings.warn(f'No session id {session_id} in {prefix}memory')
+            memory = self.memory.get(session_id)
+            saved_memory = memory and memory.save() or []
+            destination.update({prefix + 'memory': saved_memory})
+        for name, agent in getattr(self, '_agents', {}).items():
+            if isinstance(agent, Agent):
+                agent.state_dict(destination=destination, prefix=prefix + name + ".", session_id=session_id)
+        return destination
 
     def load_state_dict(self, state_dict: Dict, session_id=0):
         _state_dict = self.state_dict()
