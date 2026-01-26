@@ -5,6 +5,8 @@ from lagent.schema import AgentMessage
 
 class Memory:
 
+    _item_cls = AgentMessage
+
     def __init__(self, recent_n=None) -> None:
         self.memory: List[AgentMessage] = []
         self.recent_n = recent_n
@@ -24,11 +26,12 @@ class Memory:
         return memory
 
     def add(self, memories: Union[List[Dict], Dict, None]) -> None:
-        for memory in memories if isinstance(memories,
-                                             (list, tuple)) else [memories]:
+        for memory in memories if isinstance(memories, (list, tuple)) else [memories]:
             if isinstance(memory, str):
-                memory = AgentMessage(sender='user', content=memory)
+                memory = self._item_cls(sender='user', content=memory)
             if isinstance(memory, AgentMessage):
+                if not isinstance(memory, self._item_cls):
+                    memory = self._item_cls.model_validate(memory, from_attributes=True)
                 self.memory.append(memory)
 
     def delete(self, index: Union[List, int]) -> None:
@@ -46,10 +49,10 @@ class Memory:
         if overwrite:
             self.memory = []
         if isinstance(memories, dict):
-            self.memory.append(AgentMessage(**memories))
+            self.memory.append(self._item_cls.model_validate(memories))
         elif isinstance(memories, list):
             for m in memories:
-                self.memory.append(AgentMessage(**m))
+                self.memory.append(self._item_cls.model_validate(m))
         else:
             raise TypeError(f'{type(memories)} is not supported')
 
