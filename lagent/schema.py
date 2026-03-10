@@ -86,12 +86,20 @@ class AgentStatusCode(IntEnum):
     CODE_END = 7  # end python
     CODE_RETURN = 8  # python return
 
-
+from datetime import datetime
 class AgentMessage(BaseModel):
     content: Any
     sender: str = 'user'
+    role: Optional[str] = None
     formatted: Optional[Any] = None
     extra_info: Optional[Any] = None
     type: Optional[str] = None
     receiver: Optional[str] = None
     stream_state: Union[ModelStatusCode, AgentStatusCode] = AgentStatusCode.END
+    tool_calls: Optional[List[Dict]] = None
+    timestamp: str = datetime.now().isoformat()
+    reasoning_content: Optional[str] = None
+
+    def model_post_init(self, context):
+        if self.role is None:
+            self.role = self.sender
