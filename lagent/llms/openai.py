@@ -1,8 +1,10 @@
 import asyncio
 import json
 import os
+import random
 import time
 import traceback
+import uuid
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from logging import getLogger
@@ -10,7 +12,12 @@ from threading import Lock
 from typing import AsyncGenerator, Dict, List, Optional, Union
 
 import aiohttp
+import httpx
 import requests
+from openai import NOT_GIVEN, APITimeoutError, AsyncOpenAI
+from openai.types.chat import ChatCompletion
+from openai.types.chat.chat_completion import Choice
+from openai.types.chat.chat_completion_message import ChatCompletionMessage
 
 from ..schema import ModelStatusCode
 from ..utils import filter_suffix
@@ -308,7 +315,9 @@ class GPTAPI(BaseAPILLM):
 
             response = dict()
             try:
-                raw_response = requests.post(self.url, headers=header, data=json.dumps(data), proxies=self.proxies, stream=True)
+                raw_response = requests.post(
+                    self.url, headers=header, data=json.dumps(data), proxies=self.proxies, stream=True
+                )
                 return streaming(raw_response)
             except requests.ConnectionError:
                 errmsg = 'Got connection error ' + str(traceback.format_exc())
@@ -809,3 +818,79 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
         self.tiktoken = tiktoken
         enc = self.tiktoken.encoding_for_model(self.model_type)
         return enc.encode(prompt)
+
+
+class AsyncOpenAIWrapper:
+    def __init__(
+        self,
+        model: str,
+        base_url: str | List[str],
+        api_key: str = None,
+        sample_params: dict = None,
+        proxy: str = None,
+        timeout: int = 600,
+        max_retry: int = 50,
+        sleep_interval: int = 5,
+        extra_body: dict = None,
+    ):
+        self.model = model
+        http_client = httpx.AsyncClient(proxy=proxy, timeout=timeout) if proxy else None
+        self.clients = [
+            AsyncOpenAI(api_key=api_key, base_url=url, http_client=http_client)
+            for url in (base_url if isinstance(base_url, list) else [base_url])
+        ]
+        self.sample_params = sample_params or {}
+        self.timeout = timeout
+        self.max_retry = max_retry
+        self.sleep_interval = sleep_interval
+        self.extra_body = extra_body
+
+    async def chat(self, messages: list[dict], session_id: str | int = None, **kwargs) -> ChatCompletion:
+        fallback_response = ChatCompletion(
+            id=f'chatcmpl-{uuid.uuid4()}',
+            object='chat.completion',
+            created=int(time.time()),
+            model=self.model,
+            choices=[
+                Choice(message=ChatCompletionMessage(role='assistant', content=''), finish_reason='stop', index=0)
+            ],
+        )
+        for attempt in range(self.max_retry):
+            try:
+                client = random.choice(self.clients)
+                response = await client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    stream=False,
+                    temperature=kwargs.get('temperature') or self.sample_params.get("temperature", 0.7),
+                    top_p=kwargs.get('top_p') or self.sample_params.get("top_p", 1.0),
+                    timeout=self.timeout,
+                    extra_body=self.extra_body,
+                    max_tokens=kwargs.get('max_tokens') or self.sample_params.get("max_tokens", 64 * 1024),
+                    reasoning_effort=kwargs.get('reasoning_effort')
+                    or self.sample_params.get("reasoning_effort", NOT_GIVEN),
+                )
+                return response
+            except (APITimeoutError, TimeoutError) as e:
+                print(f"LLM Call Timeout: {e}")
+                if attempt == self.max_retry - 1:
+                    return fallback_response
+                await asyncio.sleep(self.sleep_interval)
+            except Exception as e:
+                for val in [
+                    "用户额度不足",
+                    "剩余额度",
+                    "TimeoutError",
+                    "litellm.BadRequestError",
+                    "litellm.APIError: APIError",
+                    "Call `/v1/models` to view available models",
+                ]:
+                    if val in str(e):
+                        print(f"LLM Call Error: {e}")
+                        if attempt == self.max_retry - 1:
+                            return fallback_response
+                        await asyncio.sleep(self.sleep_interval)
+                        break
+                else:
+                    return fallback_response
+        return fallback_response

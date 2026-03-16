@@ -6,9 +6,16 @@ from .util import (
     filter_suffix,
     get_logger,
     load_class_from_string,
+    truncate_text,
 )
 
 __all__ = [
-    'is_module_exist', 'filter_suffix', 'create_object', 'get_logger',
-    'load_class_from_string', 'async_as_completed', 'GeneratorWithReturn'
+    'is_module_exist',
+    'filter_suffix',
+    'create_object',
+    'get_logger',
+    'load_class_from_string',
+    'async_as_completed',
+    'GeneratorWithReturn',
+    'truncate_text',
 ]

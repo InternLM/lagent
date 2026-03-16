@@ -2,12 +2,12 @@ from dataclasses import asdict, dataclass
 from enum import IntEnum
 from typing import Any, Dict, List, Optional, Union
 
+from openai.types.chat import ChatCompletion
 from pydantic import BaseModel
 
 
 def enum_dict_factory(inputs):
-    inputs = [(i[0], i[-1].value) if isinstance(i[-1], IntEnum) else i
-              for i in inputs]
+    inputs = [(i[0], i[-1].value) if isinstance(i[-1], IntEnum) else i for i in inputs]
     return dict(inputs)
 
 
@@ -47,6 +47,7 @@ class ActionReturn:
     state: Union[ActionStatusCode, int] = ActionStatusCode.SUCCESS
     thought: Optional[str] = None
     valid: Optional[ActionValidCode] = ActionValidCode.OPEN
+    tool_call_id: Optional[str] = None
 
     def format_result(self) -> str:
         """Concatenate items in result."""
@@ -89,9 +90,47 @@ class AgentStatusCode(IntEnum):
 
 class AgentMessage(BaseModel):
     content: Any
+    thinking: Optional[str] = None
     sender: str = 'user'
+    tool_calls: Optional[List[dict]] = None
+    tool_calls_ids: Optional[List[str]] = None
     formatted: Optional[Any] = None
     extra_info: Optional[Any] = None
     type: Optional[str] = None
     receiver: Optional[str] = None
     stream_state: Union[ModelStatusCode, AgentStatusCode] = AgentStatusCode.END
+    finish_reason: Optional[str] = None
+
+    @classmethod
+    def from_model_response(cls, response: ChatCompletion, sender: str) -> "AgentMessage":
+        """Convert model response dict to AgentMessage."""
+        chat_message = response.choices[0].message
+        tool_calls = chat_message.tool_calls and [tool_call.model_dump() for tool_call in chat_message.tool_calls]
+        return cls(
+            sender=sender,
+            content=chat_message.content or "",
+            thinking=getattr(chat_message, 'reasoning_content', None),
+            tool_calls=[tool_call['function'] for tool_call in tool_calls] if tool_calls else None,
+            tool_calls_ids=[tool_call['id'] for tool_call in tool_calls] if tool_calls else None,
+            stream_state=(
+                ModelStatusCode.SESSION_OUT_OF_LIMIT
+                if response.choices[0].finish_reason == 'length'
+                else ModelStatusCode.END
+            ),
+            finish_reason=response.choices[0].finish_reason,
+        )
+
+    def to_model_request(self, role: str = 'assistant') -> dict:
+        """Convert AgentMessage to model request dict."""
+        tool_calls = [
+            {'id': tool_call_id, 'function': tool_call, 'type': 'function'}
+            for tool_call, tool_call_id in zip(self.tool_calls or [], self.tool_calls_ids or [])
+        ]
+        return {
+            "role": role,
+            "content": self.content,
+            "reasoning_content": self.thinking,
+            "tool_calls": tool_calls if tool_calls else None,
+            "extra_info": self.extra_info,
+            "stream_state": self.stream_state,
+        }
