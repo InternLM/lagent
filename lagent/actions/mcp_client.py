@@ -243,11 +243,13 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
         max_concurrency: int = None,
         # 注意：这里的 name 主要用于 Lagent 注册，但工具的实际元数据来自 MCP Server
         name: Optional[str] = None,
+        extra_args: Optional[dict] = None,
         **server_params,
     ):
         self._is_toolkit = False
         self.server_type = server_type
         self.server_params = server_params
+        self.extra_args = extra_args or {}
 
         # 并发控制组件
         self.rate_limiter = FairAsyncTokenBucket(rate_limit) if rate_limit is not None else None
@@ -280,6 +282,7 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
                 'parameters': [
                     {'name': k, 'type': v['type'].upper(), 'description': v.get('description', '')}
                     for k, v in self.tool_info.inputSchema['properties'].items()
+                    if k not in self.extra_args
                 ],
                 'required': self.tool_info.inputSchema.get('required', []),
             },
@@ -374,7 +377,7 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
 
                     # 调用 MCP 工具
                     # 注意：Lagent 传入的是 kwargs 字典，MCP call_tool 正好接受字典
-                    outputs_obj = await session.call_tool(self.tool_info.name, kwargs)
+                    outputs_obj = await session.call_tool(self.tool_info.name, {**kwargs, **self.extra_args})
 
                     # 提取文本结果
                     if outputs_obj.content and hasattr(outputs_obj.content[0], 'text'):
