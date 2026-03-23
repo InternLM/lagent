@@ -35,7 +35,7 @@ class Memory:
         if isinstance(index, int):
             del self.memory[index]
         else:
-            for i in index:
+            for i in sorted(index, reverse=True):
                 del self.memory[i]
 
     def load(self, memories: Union[str, dict, List], overwrite: bool = True) -> None:
