@@ -70,8 +70,23 @@ class Agent:
             result = hook.before_agent(self, message, session_id)
             if result:
                 message = result
-        self.update_memory(message, session_id=session_id)
+
+        # resume aborted rollout
+        _message = self._scroll_buffer(message[-1], session_id)
+        if _message is not None:
+            if _message.finish_reason != 'abort':
+                _message = copy.deepcopy(_message)
+                for hook in self._hooks.values():
+                    result = hook.after_agent(self, _message, session_id)
+                    if result:
+                        _message = result
+                return _message
+            message[-1].extra_info['partial_response'] = _message
+        else:
+            self.update_memory(message, session_id=session_id)
         response_message = self.forward(*message, session_id=session_id, **kwargs)
+        if _message and _message.finish_reason == 'abort':
+            message[-1].extra_info.pop('partial_response', None)
         if not isinstance(response_message, AgentMessage):
             if isinstance(response_message, str):
                 response_message = AgentMessage(sender=self.name, content=response_message)
@@ -183,6 +198,24 @@ class Agent:
             return self.aggregator.aggregate(self.memory.get(session_id), self.name, self.output_format, self.template)
         raise ValueError(f'{self.name} has no aggregator to get messages')
 
+    def _scroll_buffer(self, message, session_id, hash_func=lambda m: m.content):
+        memory = self.memory and self.memory.get(session_id)
+        if not memory:
+            return
+        mem = self.memory.get_memory(session_id)
+        is_aborted = [m.finish_reason == 'abort' for m in mem]
+        if not is_aborted.count(True):
+            return
+        aborted_msg_idx = is_aborted.index(True)
+        memory.delete(range(aborted_msg_idx + 1, len(mem)))
+        enc = hash_func(message)
+        for i in range(0, aborted_msg_idx):
+            if mem[i].sender == message.sender and hash_func(mem[i]) == enc:
+                ret = mem[i + 1]
+                if i + 1 == aborted_msg_idx:
+                    memory.delete(aborted_msg_idx)
+                return ret
+
     def __repr__(self):
 
         def _rcsv_repr(agent, n_indent=1):
@@ -208,8 +241,23 @@ class AsyncAgentMixin:
             result = hook.before_agent(self, message, session_id)
             if result:
                 message = result
-        self.update_memory(message, session_id=session_id)
+
+        # resume aborted rollout
+        _message = self._scroll_buffer(message[-1], session_id)
+        if _message is not None:
+            if _message.finish_reason != 'abort':
+                _message = copy.deepcopy(_message)
+                for hook in self._hooks.values():
+                    result = hook.after_agent(self, _message, session_id)
+                    if result:
+                        _message = result
+                return _message
+            message[-1].extra_info['partial_response'] = _message
+        else:
+            self.update_memory(message, session_id=session_id)
         response_message = await self.forward(*message, session_id=session_id, **kwargs)
+        if _message and _message.finish_reason == 'abort':
+            message[-1].extra_info.pop('partial_response', None)
         if not isinstance(response_message, AgentMessage):
             if isinstance(response_message, str):
                 response_message = AgentMessage(sender=self.name, content=response_message)
