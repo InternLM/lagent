@@ -58,6 +58,7 @@ class Agent:
             for hook in hooks:
                 hook = create_object(hook)
                 self.register_hook(hook)
+        self._sessions_to_scroll = set()
 
     def update_memory(self, message, session_id=0):
         if self.memory:
@@ -203,18 +204,35 @@ class Agent:
         if not memory:
             return
         mem = self.memory.get_memory(session_id)
-        is_aborted = [m.finish_reason == 'abort' for m in mem]
-        if not is_aborted.count(True):
+        finish_reasons = [m.finish_reason for m in mem]
+        if not ('abort' in finish_reasons or session_id in self._sessions_to_scroll):
             return
-        aborted_msg_idx = is_aborted.index(True)
+        if session_id not in self._sessions_to_scroll:
+            self._enable_scroll_mode(session_id, recursive=True)
+        aborted_msg_idx = finish_reasons.index('abort') if 'abort' in finish_reasons else len(mem) - 1
         memory.delete(range(aborted_msg_idx + 1, len(mem)))
         enc = hash_func(message)
         for i in range(0, aborted_msg_idx):
             if mem[i].sender == message.sender and hash_func(mem[i]) == enc:
                 ret = mem[i + 1]
                 if i + 1 == aborted_msg_idx:
-                    memory.delete(aborted_msg_idx)
+                    if ret.finish_reason == 'abort':
+                        memory.delete(aborted_msg_idx)
+                    self._disable_scroll_mode(session_id)
                 return ret
+        self._disable_scroll_mode(session_id, recursive=True)
+
+    def _enable_scroll_mode(self, session_id, recursive=False):
+        self._sessions_to_scroll.add(session_id)
+        if recursive:
+            for sub_agent in getattr(self, '_agents', {}).values():
+                sub_agent._enable_scroll_mode(session_id, True)
+
+    def _disable_scroll_mode(self, session_id, recursive=False):
+        self._sessions_to_scroll.discard(session_id)
+        if recursive:
+            for sub_agent in getattr(self, '_agents', {}).values():
+                sub_agent._disable_scroll_mode(session_id, True)
 
     def __repr__(self):
 

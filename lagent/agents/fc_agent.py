@@ -89,10 +89,14 @@ class FunctionCallAgent(AsyncAgent):
             if selection_message.stream_state == AgentStatusCode.SESSION_OUT_OF_LIMIT:
                 for _ in range(2):  # remove the last two messages
                     self.select_agent.memory.get(session_id).delete(-1)
-                return AgentMessage(role='env', content='Context length exceeds the limit')
+                return AgentMessage(
+                    role='env', content='Exceeded context length limit', finish_reason=selection_message.finish_reason
+                )
+            if selection_message.finish_reason == 'abort':
+                return AgentMessage(role='env', content='Aborted request', finish_reason='abort')
             env_message = await self.env_agent(selection_message, session_id=session_id)
             current_turn += 1
-        return AgentMessage(role="env", content="Finished")
+        return AgentMessage(role="env", content="Finished", finish_reason='stop')
 
 
 class EnvAgent(AsyncAgent):
