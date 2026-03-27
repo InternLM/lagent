@@ -10,8 +10,6 @@ from typing import Any, Dict, List
 
 from lagent.agents.aggregator import DefaultAggregator
 
-from lagent.interclaw.memory import MemoryStore
-from lagent.interclaw.skills import SkillsLoader
 from lagent.schema import ActionReturn
 
 class ContextBuilder:
@@ -22,11 +20,9 @@ class ContextBuilder:
 
     def __init__(self, workspace: Path, tools: List[Dict] = None):
         self.workspace = workspace
-        self.memory = MemoryStore(workspace)
-        self.skills = SkillsLoader(workspace)
         self.tools = tools or []  # List of available tools, can be populated from skills or elsewhere
         
-    def build_system_prompt(self, skill_names: list[str] | None = None) -> str:
+    def build_system_prompt(self, env_info: Dict[str, Any] = None) -> str:
         """Build the system prompt from identity, bootstrap files, memory, and skills."""
         parts = [self._get_identity()]
 
@@ -34,24 +30,24 @@ class ContextBuilder:
         if bootstrap:
             parts.append(bootstrap)
 
-        memory = self.memory.get_memory_context()
-        if memory:
-            parts.append(f"# Memory\n\n{memory}")
+        if env_info:
+            memory_info = env_info.get("memory")
+            if memory_info and isinstance(memory_info, dict) and memory_info.get("available") and memory_info.get("long_term"):
+                parts.append(f"# Memory\n\n{memory_info['long_term']}")
 
-        always_skills = self.skills.get_always_skills()
-        if always_skills:
-            always_content = self.skills.load_skills_for_context(always_skills)
-            if always_content:
-                parts.append(f"# Active Skills\n\n{always_content}")
+            active_skills = env_info.get("active_skills")
+            if active_skills:
+                parts.append(f"# Active Skills\n\n{active_skills}")
 
-        skills_summary = self.skills.build_skills_summary()
-        if skills_summary:
-            parts.append(f"""# Skills
+            skills_summary = env_info.get("skills")
+            if skills_summary:
+                parts.append(f"""# Skills
 
 The following skills extend your capabilities. To use a skill, read its SKILL.md file using the read_file tool.
 Skills with available="false" need dependencies installed first - you can try installing them with apt/brew.
 
 {skills_summary}""")
+
         parts.append(self._build_runtime_context(None, None))
 
         return "\n\n---\n\n".join(parts)
@@ -114,10 +110,17 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
                   tools: List[Dict]= None
                   ) -> List[Dict[str, str]]:
         """Aggregate messages into a format suitable for the agent."""
-        _message = [dict(role='system', content=self.build_system_prompt())]
-        messages = messages.get_memory()
+        messages_list = messages.get_memory()
         
-        for message in messages:
+        # Find the latest env_info
+        latest_env_info = None
+        for message in messages_list:
+            if getattr(message, 'env_info', None) is not None:
+                latest_env_info = message.env_info
+
+        _message = [dict(role='system', content=self.build_system_prompt(env_info=latest_env_info))]
+        
+        for message in messages_list:
             if message.sender == name:
                 msg = message.model_dump()
                 msg['role'] = 'assistant'
@@ -137,8 +140,12 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
                         _message[-1]['content'] += user_message
                     else:
                         _message.append(dict(role='user', content=user_message))
-        tools = tools or self.tools
-        return _message, tools
+        
+        tools_to_use = tools or self.tools
+        if latest_env_info and latest_env_info.get("tools"):
+            tools_to_use = latest_env_info.get("tools")
+            
+        return _message, tools_to_use
 
 
 if __name__ == "__main__":
@@ -146,12 +153,17 @@ if __name__ == "__main__":
     from lagent.memory import Memory
     from lagent.schema import AgentMessage
     builder = ContextBuilder(Path("/mnt/shared-storage-user/llmit/user/liukuikun/workspace/lagent/workspace"))
-    system_prompt = builder.build_system_prompt()
+    env_info = {
+        "skills": "<skills><skill><name>weather</name></skill></skills>",
+        "active_skills": "weather skill content",
+        "memory": {"available": True, "long_term": "It's always sunny in Philadelphia."}
+    }
+    system_prompt = builder.build_system_prompt(env_info=env_info)
     print(system_prompt)
     session = Memory(recent_n=0)
     session.add(
         [
-            AgentMessage(sender="user", content="What is the weather today?", role="user"),
+            AgentMessage(sender="user", content="What is the weather today?", role="user", env_info=env_info),
             AgentMessage(sender="agent", content="The weather is sunny.", role="assistant"),
             AgentMessage(sender="user", content="What about tomorrow?", role="user"),
             AgentMessage(sender="agent", content="Tomorrow will be cloudy.", role="assistant"),

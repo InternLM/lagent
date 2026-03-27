@@ -5,9 +5,150 @@ import os
 import re
 import shutil
 from pathlib import Path
+from typing import Any, Callable
+import asyncio
 
 # Default builtin skills directory (relative to this file)
 BUILTIN_SKILLS_DIR = Path(__file__).parent.parent / "skills"
+
+
+class BaseSkillsBackend:
+    """Abstract backend for skill discovery and loading."""
+
+    async def list_skill_entries(self) -> list[dict[str, str]]:
+        raise NotImplementedError
+
+    async def read_skill(self, name: str) -> str | None:
+        raise NotImplementedError
+
+
+class FilesystemSkillsBackend(BaseSkillsBackend):
+    """Filesystem-backed skill backend."""
+
+    def __init__(self, workspace_skills: Path, builtin_skills: Path | None = None):
+        self.workspace_skills = workspace_skills
+        self.builtin_skills = builtin_skills
+
+    async def list_skill_entries(self) -> list[dict[str, str]]:
+        skills: list[dict[str, str]] = []
+
+        if self.workspace_skills.exists():
+            for skill_dir in self.workspace_skills.iterdir():
+                if skill_dir.is_dir():
+                    skill_file = skill_dir / "SKILL.md"
+                    if skill_file.exists():
+                        skills.append({"name": skill_dir.name, "path": str(skill_file), "source": "workspace"})
+
+        if self.builtin_skills and self.builtin_skills.exists():
+            for skill_dir in self.builtin_skills.iterdir():
+                if skill_dir.is_dir():
+                    skill_file = skill_dir / "SKILL.md"
+                    if skill_file.exists() and not any(s["name"] == skill_dir.name for s in skills):
+                        skills.append({"name": skill_dir.name, "path": str(skill_file), "source": "builtin"})
+
+        return skills
+
+    async def read_skill(self, name: str) -> str | None:
+        workspace_skill = self.workspace_skills / name / "SKILL.md"
+        if workspace_skill.exists():
+            return await asyncio.to_thread(workspace_skill.read_text, encoding="utf-8")
+
+        if self.builtin_skills:
+            builtin_skill = self.builtin_skills / name / "SKILL.md"
+            if builtin_skill.exists():
+                return await asyncio.to_thread(builtin_skill.read_text, encoding="utf-8")
+
+        return None
+
+
+class StatefulActionSkillsBackend(BaseSkillsBackend):
+    """Backend adapter that treats a stateful action sandbox as skills storage."""
+
+    def __init__(
+        self,
+        action: Any,
+        *,
+        workspace_root: str = ".",
+        session_id: str | int = "default_session",
+        builtin_skills: Path | None = None,
+        command_builder: Callable[[str, str], str] | None = None,
+    ):
+        self.action = action
+        self.workspace_root = workspace_root.rstrip("/") or "."
+        self.session_id = str(session_id)
+        self.builtin_skills = builtin_skills
+        self.command_builder = command_builder or self._default_command_builder
+
+    def _default_command_builder(self, op: str, target: str) -> str:
+        skills_root = f"{self.workspace_root}/skills"
+        if op == "list":
+            return (
+                f"python - <<'PY'\n"
+                f"from pathlib import Path\n"
+                f"import json\n"
+                f"root = Path({skills_root!r})\n"
+                f"items = []\n"
+                f"if root.exists():\n"
+                f"    for d in root.iterdir():\n"
+                f"        skill = d / 'SKILL.md'\n"
+                f"        if d.is_dir() and skill.exists():\n"
+                f"            items.append({{'name': d.name, 'path': str(skill), 'source': 'workspace'}})\n"
+                f"print(json.dumps(items, ensure_ascii=False))\n"
+                f"PY"
+            )
+        if op == "read":
+            skill_file = f"{skills_root}/{target}/SKILL.md"
+            return f"cat {skill_file!r}"
+        raise ValueError(f"Unsupported operation: {op}")
+
+    async def _run(self, command: str) -> str | None:
+        """异步执行命令并解析输出"""
+        import json
+        from lagent.schema import ActionStatusCode
+
+        result = await self.action.run(session_id=self.session_id, command=command)
+        if result.state != ActionStatusCode.SUCCESS:
+            return None
+        
+        try:
+            # 尝试解析 MCP 格式的返回
+            if isinstance(result.result, list) and len(result.result) > 0:
+                content_str = result.result[0].get('content', '')
+                content_dict = json.loads(content_str)
+                if content_dict.get('exit_code') == 0:
+                    return content_dict.get('stdout', '').strip()
+        except Exception:
+            pass
+        
+        # 兜底逻辑
+        return result.format_result().strip() if hasattr(result, 'format_result') else str(result.result).strip()
+
+    async def list_skill_entries(self) -> list[dict[str, str]]:
+        """异步获取 skill 列表"""
+        import json
+        raw = await self._run(self.command_builder("list", ""))
+        try:
+            skills = json.loads(raw) if raw else []
+        except json.JSONDecodeError:
+            skills = []
+        if self.builtin_skills and self.builtin_skills.exists():
+            for skill_dir in self.builtin_skills.iterdir():
+                if skill_dir.is_dir():
+                    skill_file = skill_dir / "SKILL.md"
+                    if skill_file.exists() and not any(s["name"] == skill_dir.name for s in skills):
+                        skills.append({"name": skill_dir.name, "path": str(skill_file), "source": "builtin"})
+        return skills
+
+    async def read_skill(self, name: str) -> str | None:
+        """异步读取 skill 内容"""
+        content = await self._run(self.command_builder("read", name))
+        if content:
+            return content
+        if self.builtin_skills:
+            builtin_skill = self.builtin_skills / name / "SKILL.md"
+            if builtin_skill.exists():
+                return await asyncio.to_thread(builtin_skill.read_text, encoding="utf-8")
+        return None
 
 
 class SkillsLoader:
@@ -22,8 +163,13 @@ class SkillsLoader:
         self.workspace = workspace
         self.workspace_skills = workspace / "skills"
         self.builtin_skills = builtin_skills_dir or BUILTIN_SKILLS_DIR
+        self.backend: BaseSkillsBackend = FilesystemSkillsBackend(self.workspace_skills, self.builtin_skills)
 
-    def list_skills(self, filter_unavailable: bool = True) -> list[dict[str, str]]:
+    def bind_backend(self, backend: BaseSkillsBackend) -> None:
+        """Replace the default filesystem backend with a custom backend."""
+        self.backend = backend
+
+    async def list_skills(self, filter_unavailable: bool = True) -> list[dict[str, str]]:
         """
         List all available skills.
 
@@ -33,30 +179,19 @@ class SkillsLoader:
         Returns:
             List of skill info dicts with 'name', 'path', 'source'.
         """
-        skills = []
-
-        # Workspace skills (highest priority)
-        if self.workspace_skills.exists():
-            for skill_dir in self.workspace_skills.iterdir():
-                if skill_dir.is_dir():
-                    skill_file = skill_dir / "SKILL.md"
-                    if skill_file.exists():
-                        skills.append({"name": skill_dir.name, "path": str(skill_file), "source": "workspace"})
-
-        # Built-in skills
-        if self.builtin_skills and self.builtin_skills.exists():
-            for skill_dir in self.builtin_skills.iterdir():
-                if skill_dir.is_dir():
-                    skill_file = skill_dir / "SKILL.md"
-                    if skill_file.exists() and not any(s["name"] == skill_dir.name for s in skills):
-                        skills.append({"name": skill_dir.name, "path": str(skill_file), "source": "builtin"})
+        skills = await self.backend.list_skill_entries()
 
         # Filter by requirements
         if filter_unavailable:
-            return [s for s in skills if self._check_requirements(self._get_skill_meta(s["name"]))]
+            filtered_skills = []
+            for s in skills:
+                meta = await self._get_skill_meta(s["name"])
+                if self._check_requirements(meta):
+                    filtered_skills.append(s)
+            return filtered_skills
         return skills
 
-    def load_skill(self, name: str) -> str | None:
+    async def load_skill(self, name: str) -> str | None:
         """
         Load a skill by name.
 
@@ -66,20 +201,9 @@ class SkillsLoader:
         Returns:
             Skill content or None if not found.
         """
-        # Check workspace first
-        workspace_skill = self.workspace_skills / name / "SKILL.md"
-        if workspace_skill.exists():
-            return workspace_skill.read_text(encoding="utf-8")
+        return await self.backend.read_skill(name)
 
-        # Check built-in
-        if self.builtin_skills:
-            builtin_skill = self.builtin_skills / name / "SKILL.md"
-            if builtin_skill.exists():
-                return builtin_skill.read_text(encoding="utf-8")
-
-        return None
-
-    def load_skills_for_context(self, skill_names: list[str]) -> str:
+    async def load_skills_for_context(self, skill_names: list[str]) -> str:
         """
         Load specific skills for inclusion in agent context.
 
@@ -91,14 +215,14 @@ class SkillsLoader:
         """
         parts = []
         for name in skill_names:
-            content = self.load_skill(name)
+            content = await self.load_skill(name)
             if content:
                 content = self._strip_frontmatter(content)
                 parts.append(f"### Skill: {name}\n\n{content}")
 
         return "\n\n---\n\n".join(parts) if parts else ""
 
-    def build_skills_summary(self) -> str:
+    async def build_skills_summary(self) -> str:
         """
         Build a summary of all skills (name, description, path, availability).
 
@@ -108,7 +232,7 @@ class SkillsLoader:
         Returns:
             XML-formatted skills summary.
         """
-        all_skills = self.list_skills(filter_unavailable=False)
+        all_skills = await self.list_skills(filter_unavailable=False)
         if not all_skills:
             return ""
 
@@ -119,8 +243,8 @@ class SkillsLoader:
         for s in all_skills:
             name = escape_xml(s["name"])
             path = s["path"]
-            desc = escape_xml(self._get_skill_description(s["name"]))
-            skill_meta = self._get_skill_meta(s["name"])
+            desc = escape_xml(await self._get_skill_description(s["name"]))
+            skill_meta = await self._get_skill_meta(s["name"])
             available = self._check_requirements(skill_meta)
 
             lines.append(f"  <skill available=\"{str(available).lower()}\">")
@@ -151,9 +275,9 @@ class SkillsLoader:
                 missing.append(f"ENV: {env}")
         return ", ".join(missing)
 
-    def _get_skill_description(self, name: str) -> str:
+    async def _get_skill_description(self, name: str) -> str:
         """Get the description of a skill from its frontmatter."""
-        meta = self.get_skill_metadata(name)
+        meta = await self.get_skill_metadata(name)
         if meta and meta.get("description"):
             return meta["description"]
         return name  # Fallback to skill name
@@ -166,11 +290,11 @@ class SkillsLoader:
                 return content[match.end():].strip()
         return content
 
-    def _parse_nanobot_metadata(self, raw: str) -> dict:
-        """Parse skill metadata JSON from frontmatter (supports nanobot and openclaw keys)."""
+    def _parse_internclaw_metadata(self, raw: str) -> dict:
+        """Parse skill metadata JSON from frontmatter (supports internclaw and openclaw keys)."""
         try:
             data = json.loads(raw)
-            return data.get("nanobot", data.get("openclaw", {})) if isinstance(data, dict) else {}
+            return data.get("internclaw", data.get("openclaw", {})) if isinstance(data, dict) else {}
         except (json.JSONDecodeError, TypeError):
             return {}
 
@@ -185,22 +309,22 @@ class SkillsLoader:
                 return False
         return True
 
-    def _get_skill_meta(self, name: str) -> dict:
-        """Get nanobot metadata for a skill (cached in frontmatter)."""
-        meta = self.get_skill_metadata(name) or {}
-        return self._parse_nanobot_metadata(meta.get("metadata", ""))
+    async def _get_skill_meta(self, name: str) -> dict:
+        """Get internclaw metadata for a skill (cached in frontmatter)."""
+        meta = await self.get_skill_metadata(name) or {}
+        return self._parse_internclaw_metadata(meta.get("metadata", ""))
 
-    def get_always_skills(self) -> list[str]:
+    async def get_always_skills(self) -> list[str]:
         """Get skills marked as always=true that meet requirements."""
         result = []
-        for s in self.list_skills(filter_unavailable=True):
-            meta = self.get_skill_metadata(s["name"]) or {}
-            skill_meta = self._parse_nanobot_metadata(meta.get("metadata", ""))
+        for s in await self.list_skills(filter_unavailable=True):
+            meta = await self.get_skill_metadata(s["name"]) or {}
+            skill_meta = self._parse_internclaw_metadata(meta.get("metadata", ""))
             if skill_meta.get("always") or meta.get("always"):
                 result.append(s["name"])
         return result
 
-    def get_skill_metadata(self, name: str) -> dict | None:
+    async def get_skill_metadata(self, name: str) -> dict | None:
         """
         Get metadata from a skill's frontmatter.
 
@@ -210,7 +334,7 @@ class SkillsLoader:
         Returns:
             Metadata dict or None.
         """
-        content = self.load_skill(name)
+        content = await self.load_skill(name)
         if not content:
             return None
 
@@ -226,3 +350,33 @@ class SkillsLoader:
                 return metadata
 
         return None
+
+
+if __name__ == '__main__':
+    from lagent.actions.mcp_client import AsyncMCPClientStatefulAction
+    import asyncio
+    import json
+    from pathlib import Path
+    init_dir = "/mnt/shared-storage-user/llmit/user/liukuikun/workspace/lagent/workspace"
+
+    async def main():
+        shell_action = AsyncMCPClientStatefulAction('http',url='http://simple-shell.ailab.ailab.ai/mcp', init_dir=init_dir)
+        home_path = await shell_action.run(command='ls -la', session_id='tmp1')
+        home_path = json.loads(home_path.result[0]['content'])['cwd']
+        
+        skill_loader = SkillsLoader(Path(home_path))
+        backend = StatefulActionSkillsBackend(shell_action, workspace_root=os.path.join(home_path, 'workspace'), session_id='tmp1')
+        skill_loader.bind_backend(backend)
+        
+        try:
+            skills = await skill_loader.list_skills()
+            print("Skills:")
+            for s in skills:
+                print(s)
+        except Exception as e:
+            print("Failed to parse skills:", e)
+        
+        print(await skill_loader.build_skills_summary())
+        print(await skill_loader.load_skills_for_context(['weather']))
+
+    asyncio.run(main())

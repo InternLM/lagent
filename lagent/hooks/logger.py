@@ -29,4 +29,12 @@ class MessageLogger(Hook):
     def _process_message(self, message, session_id):
         sender = message.sender
         color = self.sender2color.setdefault(sender, random.choice(list(COLORS)))
-        self.logger.info(colored(f'session id: {session_id}, message sender: {sender}\n' f'{message.content}', color))
+        msg_str = f'session id: {session_id}, message sender: {sender}'
+        if getattr(message, 'reasoning_content', None):
+            msg_str += f'\nReasoning:{message.reasoning_content}'
+        if getattr(message, 'content', None):
+            msg_str += f'\nContent:{message.content}'
+        if getattr(message, 'tool_calls', None):
+            msg_str += f'\nTool Calls:{message.tool_calls}'
+            
+        self.logger.info(colored(msg_str, color))

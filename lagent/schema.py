@@ -93,6 +93,7 @@ class AgentMessage(BaseModel):
     role: Optional[str] = None
     formatted: Optional[Any] = None
     extra_info: Optional[Any] = None
+    env_info: Optional[Dict[str, Any]] = None
     type: Optional[str] = None
     receiver: Optional[str] = None
     stream_state: Union[ModelStatusCode, AgentStatusCode] = AgentStatusCode.END

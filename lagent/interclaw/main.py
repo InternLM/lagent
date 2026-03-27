@@ -32,11 +32,12 @@ def main():
     from lagent.actions.filesystem import ReadFileAction, WriteFileAction, EditFileAction
     from lagent.actions.shell import ShellAction
     from lagent.interclaw.internclaw_agent import InternClawAgent, AsyncPolicyAgent, AsyncEnvAgent, get_tool_prompt
+    from lagent.hooks.logger import MessageLogger
     model_name = "/mnt/shared-storage-user/puyudelivery/user/puyudilivery/ckpts/xtuner_saved_model/interns1_1_mini_official/interns1_1_mini_sft_based_cpt_bs512_epoch1_maxlr3e-5_minlr1e-6_max16k-hf/20260207101512/hf-4374"
     # model_name = "gpt-4o-2024-08-06"
     api_base = "http://10.102.218.28:23333/v1/"
     # api_base = f"http://35.220.164.252:3888/v1beta/models/{model_name}:generateContent"
-    api_key = "sk-blAvnaExZFrQfHVuyIF5VEB3I0GrQ7FNhdAobU3pKpfLvxLb"
+    api_key = ""
     extra_body = {'enable_thinking': True, 'spaces_between_special_tokens': False}
     proxies = None
 
@@ -53,7 +54,8 @@ def main():
     aggregator = ContextBuilder(Path(workspace), tools=get_tool_prompt(actions))
     policy = AsyncPolicyAgent(
                 llm=model,
-                aggregator=aggregator)
+                aggregator=aggregator,
+                hooks=[MessageLogger()])
     env = AsyncEnvAgent(actions=actions)
     agent = InternClawAgent(policy_agent=policy, env_agent=env)
 

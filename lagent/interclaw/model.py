@@ -38,7 +38,7 @@ class AsyncAPIClient(AsyncGPTAPI):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        http_client = httpx.AsyncClient(proxy=model.get('proxy'), timeout=timeout, trust_env=False)
+        http_client = httpx.AsyncClient(proxy=model.get('proxy'), timeout=timeout, trust_env=False) if model.get('proxy') else httpx.AsyncClient(timeout=timeout)
         self.clients = [
             AsyncOpenAI(api_key=model["api_key"], base_url=url, http_client=http_client)
             for url in (model['base_url'] if isinstance(model['base_url'], list) else [model['base_url']])
@@ -92,8 +92,11 @@ class AsyncAPIClient(AsyncGPTAPI):
                     "TimeoutError",
                     "litellm.BadRequestError",
                     "litellm.APIError: APIError",
+                    "Failed to parse fc related info to json format!"
                 ]:
                     if val in str(e):
+                        import traceback
+                        traceback.print_exc()
                         logger.error(f"LLM Call Error: {e}")
                         if attempt == self.max_retry - 1:
                             assistant_msg_dict = {"role": "assistant", "content": f"LLM Call Error: {e}"}
@@ -101,6 +104,8 @@ class AsyncAPIClient(AsyncGPTAPI):
                         await asyncio.sleep(self.sleep_interval)
                         break
                 else:
+                    import traceback
+                    traceback.print_exc()
                     assistant_msg_dict = {"role": "assistant", "content": f"LLM Call Error: {e}"}
                     return assistant_msg_dict
 
@@ -173,21 +178,24 @@ if __name__ == '__main__':
     messages = [
         {'role': 'user', 'content': 'Today is 2024-11-14, What\'s the temperature in San Francisco now? How about tomorrow?'}
     ]
+    messages = [
+        {'role': 'user', 'content': '上海温度'}
+    ]
+    model_name = "gemini-3.1-pro-preview-thinking"
+    api_base = "http://35.220.164.252:3888/v1"
+    api_key = ""
+    proxy = "http://100.100.72.89:8899"
+    extra_body = {}
+    # model_name = "/mnt/shared-storage-user/puyudelivery/user/puyudilivery/ckpts/xtuner_saved_model/interns1_1_mini_official/interns1_1_mini_sft_based_cpt_bs512_epoch1_maxlr3e-5_minlr1e-6_max16k-hf/20260207101512/hf-4374"
+    # api_base = "http://10.102.218.28:23333/v1"
+    # extra_body = {'enable_thinking': True, 'spaces_between_special_tokens': False}
+    # proxy = None
+    
 
-    model_name = "/mnt/shared-storage-user/puyudelivery/user/puyudilivery/ckpts/xtuner_saved_model/interns1_1_mini_official/interns1_1_mini_sft_based_cpt_bs512_epoch1_maxlr3e-5_minlr1e-6_max16k-hf/20260207101512/hf-4374"
-    # model_name = "gpt-4o-2024-08-06"
-    api_base = "http://10.102.218.28:23333/v1/"
-    # api_base = f"http://35.220.164.252:3888/v1beta/models/{model_name}:generateContent"
-    api_key = "sk-blAvnaExZFrQfHVuyIF5VEB3I0GrQ7FNhdAobU3pKpfLvxLb"
-    extra_body = {'enable_thinking': True, 'spaces_between_special_tokens': False}
-    proxies = dict(
-        # http='http://100.103.22.82:8888',
-        # https='http://100.103.22.82:8888',
-    )
 
     async def main():
         model = AsyncAPIClient(
-            model=ModelConfig(model=model_name, base_url=api_base, api_key=api_key),
+            model=ModelConfig(model=model_name, base_url=api_base, api_key=api_key, proxy=proxy),
             sample_params=SampleParameters(temperature=0.7, top_p=1.0, top_k=50),
             timeout=600,
             max_retry=5,

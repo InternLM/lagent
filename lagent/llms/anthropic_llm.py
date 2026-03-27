@@ -1,12 +1,17 @@
 import asyncio
 import json
 import os
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, TYPE_CHECKING
 
-import anthropic
+
 import httpcore
 import httpx
-from anthropic import NOT_GIVEN
+if TYPE_CHECKING:
+    from anthropic import NOT_GIVEN
+try:
+    from anthropic import NOT_GIVEN
+except ImportError:
+    NOT_GIVEN = object()
 from requests.exceptions import ProxyError
 
 from .base_api import AsyncBaseAPILLM, BaseAPILLM
@@ -47,7 +52,7 @@ class ClaudeAPI(BaseAPILLM):
             repetition_penalty=repetition_penalty,
             stop_words=stop_words,
         )
-
+        import anthropic
         key = os.getenv('Claude_API_KEY') if key == 'ENV' else key
 
         if isinstance(key, str):
