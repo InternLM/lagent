@@ -1,9 +1,10 @@
 from dataclasses import asdict, dataclass
 from enum import IntEnum
 from typing import Any, Dict, List, Optional, Union
+from uuid import uuid4
 
 from openai.types.chat import ChatCompletion
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 def enum_dict_factory(inputs):
@@ -100,6 +101,7 @@ class AgentMessage(BaseModel):
     receiver: Optional[str] = None
     stream_state: Union[ModelStatusCode, AgentStatusCode] = AgentStatusCode.END
     finish_reason: Optional[str] = None
+    uid: Union[int, str] = Field(default_factory=lambda: uuid4().hex, repr=False)
 
     @classmethod
     def from_model_response(cls, response: ChatCompletion, sender: str) -> "AgentMessage":

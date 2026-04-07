@@ -199,7 +199,7 @@ class Agent:
             return self.aggregator.aggregate(self.memory.get(session_id), self.name, self.output_format, self.template)
         raise ValueError(f'{self.name} has no aggregator to get messages')
 
-    def _scroll_buffer(self, message, session_id, hash_func=lambda m: m.content):
+    def _scroll_buffer(self, message, session_id, hash_func=lambda m: m.uid):
         memory = self.memory and self.memory.get(session_id)
         if not memory:
             return
@@ -213,7 +213,7 @@ class Agent:
         memory.delete(range(aborted_msg_idx + 1, len(mem)))
         enc = hash_func(message)
         for i in range(0, aborted_msg_idx):
-            if mem[i].sender == message.sender and hash_func(mem[i]) == enc:
+            if hash_func(mem[i]) == enc:
                 ret = mem[i + 1]
                 if i + 1 == aborted_msg_idx:
                     if ret.finish_reason == 'abort':
