@@ -72,7 +72,6 @@ class ClaudeAPI(BaseAPILLM):
     def chat(
         self,
         inputs: Union[List[dict], List[List[dict]]],
-        session_ids: Union[int, List[int]] = None,
         **gen_params,
     ) -> Union[str, List[str]]:
         """Generate responses given the contexts.
@@ -272,7 +271,6 @@ class AsyncClaudeAPI(AsyncBaseAPILLM):
     async def chat(
         self,
         inputs: Union[List[dict], List[List[dict]]],
-        session_ids: Union[int, List[int]] = None,
         **gen_params,
     ) -> Union[str, List[str]]:
         """Generate responses given the contexts.

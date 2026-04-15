@@ -234,7 +234,6 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
     This prevents connection leaks and 'ConnectTimeout' in high-concurrency RL environments.
     """
 
-    is_stateful = False
 
     def __init__(
         self,
@@ -280,8 +279,6 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
                 ],
                 'required': self.tool_info.inputSchema.get('required', []),
             }
-        if self.is_stateful:
-            description['parameters'].append({'name': 'session_id', 'type': 'STRING', 'description': 'session id'})
         # 2. 初始化父类 BaseAction
         super().__init__(
             description=description,
@@ -412,15 +409,16 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
 
 
 
-class AsyncMCPClientStatefulAction(AsyncMCPClient):
+class AsyncMCPClientSandbox(AsyncMCPClient):
     """
-    Stateful Lagent Action that wraps a SINGLE tool from an MCP Server.
-    
-    Maintains a persistent connection per session_id to support stateful tools
-    like a persistent shell.
+    Sandbox MCP Action that wraps a SINGLE tool from an MCP Server.
+
+    Maintains a persistent connection to a remote sandbox environment.
+    One instance = one persistent connection (no session pool).
+    Call ``connect()`` to establish the connection and ``close()`` to tear it down.
+    The connection is also lazily created on the first ``run()`` call.
     """
 
-    is_stateful = True
 
     def __init__(
         self,
@@ -440,60 +438,62 @@ class AsyncMCPClientStatefulAction(AsyncMCPClient):
             **server_params
         )
 
-        # 2. 初始化 Session 池
+        # 2. 单连接状态
         self.init_dir = init_dir
-        self._session_clients = {}
-        self._session_stacks = {}
+        self._session: object | None = None          # MCP ClientSession
+        self._request_queue: asyncio.Queue | None = None
+        self._worker_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
+        self._connected = False
 
-    async def get_or_create_client(self, session_id: str):
-        """获取或创建与 session_id 绑定的长连接"""
-        session_id = str(session_id)
+    # ------------------------------------------------------------------
+    # Connection lifecycle
+    # ------------------------------------------------------------------
+
+    async def connect(self):
+        """Establish the persistent MCP connection (idempotent)."""
         async with self._lock:
-            if session_id not in self._session_clients:
-                logger.info(f"Creating new MCP connection for session {session_id}")
+            if self._connected:
+                return self._session
 
-                # anyio 严格要求进入和退出 CancelScope 必须在同一个 Task 中。
-                # 为了解决这个问题，我们创建一个后台长期运行的 Task 来专门负责这个连接的生命周期。
-                # 通过 asyncio.Queue 来实现主 Task 和后台连接 Task 之间的通信。
+            logger.info(f"Creating persistent MCP connection for {self.name}")
 
-                request_queue = asyncio.Queue()
-                response_queue = asyncio.Queue()
+            # anyio 要求进入和退出 CancelScope 在同一个 Task，
+            # 所以用后台 worker Task 持有 AsyncExitStack 的生命周期。
+            request_queue = asyncio.Queue()
+            response_queue: asyncio.Queue = asyncio.Queue()
 
-                async def _connection_worker():
-                    try:
-                        async with AsyncExitStack() as stack:
-                            session = await self._connect(stack)
-                            # 告知主 Task 连接成功
-                            await response_queue.put(session)
+            async def _connection_worker():
+                try:
+                    async with AsyncExitStack() as stack:
+                        session = await self._connect(stack)
+                        await response_queue.put(session)
+                        # 等待关闭信号
+                        while True:
+                            msg = await request_queue.get()
+                            if msg == "close":
+                                break
+                except Exception as e:
+                    await response_queue.put(e)
 
-                            # 循环等待主 Task 发送关闭信号
-                            while True:
-                                msg = await request_queue.get()
-                                if msg == "close":
-                                    break
-                    except Exception as e:
-                        # 告知主 Task 连接失败
-                        await response_queue.put(e)
+            worker_task = asyncio.create_task(_connection_worker())
 
-                # 启动后台 Task
-                worker_task = asyncio.create_task(_connection_worker())
+            result = await response_queue.get()
+            if isinstance(result, Exception):
+                raise result
 
-                # 等待连接建立完成
-                result = await response_queue.get()
-                if isinstance(result, Exception):
-                    raise result
+            self._session = result
+            self._request_queue = request_queue
+            self._worker_task = worker_task
+            self._connected = True
 
-                self._session_clients[session_id] = result
-                self._session_stacks[session_id] = (request_queue, worker_task)
+            # 初始化远程工作目录
+            if self.init_dir:
+                await self._initialize_dir(self._session)
 
-                # 如果配置了 init_dir，则在连接建立后立即初始化
-                if self.init_dir:
-                    await self._initialize_session_dir(session_id, result)
+            return self._session
 
-            return self._session_clients[session_id]
-
-    async def _initialize_session_dir(self, session_id: str, session):
+    async def _initialize_dir(self, session):
         """将本地目录打包并同步到远程 Session"""
         import tarfile
         import io
@@ -504,70 +504,67 @@ class AsyncMCPClientStatefulAction(AsyncMCPClient):
             logger.warning(f"Init dir {self.init_dir} not found or not set, skipping initialization.")
             return
 
-        logger.info(f"Initializing session {session_id} with directory {self.init_dir}")
+        logger.info(f"Initializing MCP session with directory {self.init_dir}")
 
-        # 1. 在内存中打包目录
         buf = io.BytesIO()
         dir_name = os.path.basename(os.path.normpath(self.init_dir))
         with tarfile.open(fileobj=buf, mode='w:gz') as tar:
-            # 将目录内容添加到 tar，arcname 使用目录本身的名字，保留外层文件夹
             tar.add(self.init_dir, arcname=dir_name)
 
-        # 2. 转为 Base64 字符串
         encoded = base64.b64encode(buf.getvalue()).decode('utf-8')
-
-        # 3. 构造解压命令
-        # 注意：这里假设 tool_info.name 是 run_command 且接受 command 参数
         init_cmd = f"echo '{encoded}' | base64 -d | tar -xz"
 
         try:
-            # 直接调用 session 执行初始化命令
             await session.call_tool(self.tool_info.name, {"command": init_cmd})
-            logger.info(f"Session {session_id} initialized successfully.")
+            logger.info("MCP session initialized successfully.")
         except Exception as e:
-            logger.error(f"Failed to initialize session {session_id}: {e}")
+            logger.error(f"Failed to initialize MCP session: {e}")
 
-    async def close_session(self, session_id: str):
-        """关闭指定 session 的连接，释放服务端资源"""
-        session_id = str(session_id)
+    async def close(self):
+        """关闭连接，释放服务端资源"""
         async with self._lock:
-            if session_id in self._session_stacks:
-                logger.info(f"Closing MCP connection for session {session_id}")
-                request_queue, worker_task = self._session_stacks.pop(session_id)
-                self._session_clients.pop(session_id, None)
-                
-                # 发送关闭信号给后台 Task
-                await request_queue.put("close")
-                
-                # 等待后台 Task 优雅退出
-                try:
-                    await worker_task
-                except Exception as e:
-                    logger.warning(f"Error while closing MCP session {session_id}: {e}")
+            if not self._connected:
+                return
+            logger.info(f"Closing persistent MCP connection for {self.name}")
+            self._connected = False
+            session = self._session
+            self._session = None
 
-    async def run(self, session_id: Optional[str] = None, **kwargs) -> ActionReturn:
+            if self._request_queue is not None:
+                await self._request_queue.put("close")
+            if self._worker_task is not None:
+                try:
+                    await self._worker_task
+                except Exception as e:
+                    logger.warning(f"Error while closing MCP connection: {e}")
+            self._request_queue = None
+            self._worker_task = None
+
+    # backward compat
+    async def close_session(self, session_id: str | None = None):
+        """Deprecated — use ``close()`` instead."""
+        await self.close()
+
+    # ------------------------------------------------------------------
+    # run — no session_id
+    # ------------------------------------------------------------------
+
+    async def run(self, **kwargs) -> ActionReturn:
         """
         Standard Lagent Action Entrypoint for stateful execution.
         """
         fallback_args = kwargs.copy()
-        
-        # 兜底：如果外部没有传入 session_id，使用默认会话
-        if session_id is None:
-            session_id = "default_session"
 
         try:
-            # 1. 并发/速率控制
             async with self._sem:
                 if self.rate_limiter is not None:
                     await self.rate_limiter.acquire()
 
-                # 2. 从 Session 池中获取或创建当前 session 的长连接
-                session = await self.get_or_create_client(session_id)
+                # 懒连接
+                session = await self.connect()
 
-                # 调用 MCP 工具
                 outputs_obj = await session.call_tool(self.tool_info.name, kwargs)
 
-                # 提取文本结果
                 if outputs_obj.content and hasattr(outputs_obj.content[0], 'text'):
                     outputs = outputs_obj.content[0].text
                 else:
@@ -576,11 +573,10 @@ class AsyncMCPClientStatefulAction(AsyncMCPClient):
         except ParseError as exc:
             return ActionReturn(fallback_args, type=self.name, errmsg=exc.err_msg, state=ActionStatusCode.ARGS_ERROR)
         except Exception as exc:
-            # 记录详细堆栈以便调试 RL 过程中的错误
             logger.warning(f"MCP Action {self.name} failed: {exc}")
             return ActionReturn(fallback_args, type=self.name, errmsg=str(exc), state=ActionStatusCode.API_ERROR)
 
-        # 3. 结果封装
+        # 结果封装
         if isinstance(outputs, ActionReturn):
             action_return = outputs
             if not action_return.args:
@@ -598,48 +594,19 @@ class AsyncMCPClientStatefulAction(AsyncMCPClient):
         return action_return
 if __name__ == '__main__':
     import asyncio
-    from lagent.utils import create_object
-    def get_tool_prompt(actions: list, exclude_arguments: list = None) -> str:
-        from copy import deepcopy
-        exclude_arguments = exclude_arguments or ['session_id']
-
-        def _convert_tool_schema(action_description: dict, name_pattern: str = '{}') -> dict:
-            properties = {}
-            for param in action_description['parameters']:
-                param = deepcopy(param)
-                param_name, param_type = param.pop('name'), param.pop('type')
-                if param_name in exclude_arguments:
-                    continue
-                param_type = [t.lower() for t in param_type] if isinstance(param_type, list) else param_type.lower()
-                properties[param_name] = {'type': param_type, **param}
-            return {
-                'type': 'function',
-                'function': {
-                    'name': name_pattern.format(action_description['name']),
-                    'description': action_description['description'],
-                    'parameters': {'type': 'object', 'properties': properties, 'required': action_description['required']},
-                },
-            }
-
-        tools = []
-        for action in actions if isinstance(actions, list) else [actions]:
-            action = create_object(action)
-            action_desc = action.description
-            if action.is_toolkit:
-                for api in action_desc['api_list']:
-                    tools.append(_convert_tool_schema(api, f"{action.name}.{{}}"))
-            else:
-                tools.append(_convert_tool_schema(action_desc))
-        return tools
-
-    action = AsyncMCPClientStatefulAction("http", url='http://simple-shell.ailab.ailab.ai/mcp',  init_dir="/mnt/shared-storage-user/llmit/user/liukuikun/workspace/lagent/workspace/")
-    print(get_tool_prompt([action]))
-    import asyncio
     import json
+    from lagent.agents.internclaw_agent import get_tool_prompt
+
+    action = AsyncMCPClientSandbox("http", url='http://simple-shell.ailab.ailab.ai/mcp', init_dir="/mnt/shared-storage-user/llmit/user/liukuikun/workspace/lagent/workspace/")
+    print(get_tool_prompt([action]))
+
     async def test():
-        res = await action.run(command='ls -a') 
+        res = await action.run(command='ls -a')
         home_path = json.loads(res.result[0]['content'])['cwd']
         print(res)
-        res = await action.run(command=f"python - <<'PY'\nfrom pathlib import Path\nimport json\nroot = Path('{home_path}/workspace/skills')\nitems = []\nif root.exists():\n    for d in root.iterdir():\n        skill = d / 'SKILL.md'\n        if d.is_dir() and skill.exists():\n            items.append({{'name': d.name, 'path': str(skill), 'source': 'workspace'}})\nprint(json.dumps(items, ensure_ascii=False))\nPY")
+        res = await action.run(command='echo hello')
         print(res)
+        await action.close()
     asyncio.run(test())
+    action1 = AsyncMCPClientSandbox('http', url="http://hb-3d-scan-calc.ailab.ailab.ai")
+    

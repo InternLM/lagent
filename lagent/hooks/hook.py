@@ -10,7 +10,6 @@ class Hook:
         self,
         agent,
         message: Tuple[AgentMessage],
-        session_id: int,
     ):
         pass
 
@@ -18,7 +17,6 @@ class Hook:
         self,
         agent,
         message: AgentMessage,
-        session_id: int,
     ):
         pass
 
@@ -26,7 +24,6 @@ class Hook:
         self,
         executor,
         message: AgentMessage,
-        session_id: int,
     ):
         pass
 
@@ -34,7 +31,6 @@ class Hook:
         self,
         executor,
         message: AgentMessage,
-        session_id: int,
     ):
         pass
 

@@ -8,7 +8,7 @@ from typing import Any, AsyncGenerator, Callable, Dict, Generator, Iterable, Lis
 from lagent.agents.aggregator import DefaultAggregator
 from lagent.hooks import Hook, RemovableHandle
 from lagent.llms import BaseLLM
-from lagent.memory import Memory, MemoryManager
+from lagent.memory import Memory
 from lagent.prompts.parsers import StrParser
 from lagent.prompts.prompt_template import PromptTemplate
 from lagent.schema import AgentMessage, ModelStatusCode
@@ -48,7 +48,7 @@ class Agent:
     ):
         self.name = name or self.__class__.__name__
         self.llm: BaseLLM = create_object(llm)
-        self.memory: MemoryManager = MemoryManager(memory) if memory else None
+        self.memory: Memory = create_object(memory)
         self.output_format: StrParser = create_object(output_format)
         self.template = template
         self.description = description
@@ -59,34 +59,31 @@ class Agent:
                 hook = create_object(hook)
                 self.register_hook(hook)
 
-    def update_memory(self, message, session_id=0):
-        if self.memory:
-            self.memory.add(message, session_id=session_id)
 
-    def __call__(self, *message: AgentMessage, session_id=0, **kwargs) -> AgentMessage:
+    def __call__(self, *message: AgentMessage, **kwargs) -> AgentMessage:
         # message.receiver = self.name
         message = [AgentMessage(sender='user', content=m) if isinstance(m, str) else copy.deepcopy(m) for m in message]
         for hook in self._hooks.values():
-            result = hook.before_agent(self, message, session_id)
+            result = hook.before_agent(self, message)
             if result:
                 message = result
-        self.update_memory(message, session_id=session_id)
-        response_message = self.forward(*message, session_id=session_id, **kwargs)
+        self.memory.add(message)
+        response_message = self.forward(*message, **kwargs)
         if not isinstance(response_message, AgentMessage):
             response_message = AgentMessage(sender=self.name, content=response_message)
-        self.update_memory(response_message, session_id=session_id)
+        self.memory.add(response_message)
         response_message = copy.deepcopy(response_message)
         for hook in self._hooks.values():
-            result = hook.after_agent(self, response_message, session_id)
+            result = hook.after_agent(self, response_message)
             if result:
                 response_message = result
         return response_message
 
-    def forward(self, *message: AgentMessage, session_id=0, **kwargs) -> Union[AgentMessage, str]:
-        formatted_messages = self.aggregator.aggregate(
-            self.memory.get(session_id), self.name, self.output_format, self.template
+    def forward(self, *message: AgentMessage, **kwargs) -> Union[AgentMessage, str]:
+        formatted_messages, tools = self.aggregator.aggregate(
+            self.memory, self.name, self.output_format, self.template
         )
-        llm_response = self.llm.chat(formatted_messages, **kwargs)
+        llm_response = self.llm.chat(formatted_messages, tools=tools, **kwargs)
         if self.output_format:
             formatted_messages = self.output_format.parse_response(llm_response)
             return AgentMessage(sender=self.name, content=llm_response, formatted=formatted_messages)
@@ -99,21 +96,18 @@ class Agent:
             super().__setattr__('_agents', _agents)
         super().__setattr__(__name, __value)
 
-    def state_dict(self, session_id=None, prefix='', destination=None) -> Dict:
+    def state_dict(self, prefix='', destination=None) -> Dict:
         if destination is None:
             destination = {}
         if self.memory is not None:
-            if session_id not in self.memory.memory_map:
-                warnings.warn(f'No session id {session_id} in {prefix}memory')
-            memory = self.memory.get(session_id)
-            saved_memory = memory and memory.save() or []
+            saved_memory = self.memory and self.memory.save() or []
             destination.update({prefix + 'memory': saved_memory})
         for name, agent in getattr(self, '_agents', {}).items():
             if isinstance(agent, Agent):
-                agent.state_dict(destination=destination, prefix=prefix + name + ".", session_id=session_id)
+                agent.state_dict(destination=destination, prefix=prefix + name + ".")
         return destination
 
-    def load_state_dict(self, state_dict: Dict, session_id=0):
+    def load_state_dict(self, state_dict: Dict):
         _state_dict = self.state_dict()
         missing_keys = set(_state_dict) - set(state_dict)
         if missing_keys:
@@ -132,16 +126,14 @@ class Agent:
                 else:
                     obj = getattr(obj, attr)
             if obj.memory is not None:
-                if session_id not in obj.memory.memory_map:
-                    obj.memory.create_instance(session_id)
-                obj.memory.memory_map[session_id].load(state_dict[key] or [])
+                obj.memory.load(state_dict[key] or [])
 
     def register_hook(self, hook: Callable):
         handle = RemovableHandle(self._hooks)
         self._hooks[handle.id] = hook
         return handle
 
-    def reset(self, session_id=0, keypath: Optional[str] = None, recursive: bool = False):
+    def reset(self, keypath: Optional[str] = None, recursive: bool = False):
         assert not (keypath and recursive), 'keypath and recursive can\'t be used together'
         if keypath:
             keys, agent = keypath.split('.'), self
@@ -150,13 +142,13 @@ class Agent:
                 if key not in agents:
                     raise KeyError(f'No sub-agent named {key} in {agent}')
                 agent = agents[key]
-            agent.reset(session_id, recursive=False)
+            agent.reset(recursive=False)
         else:
             if self.memory:
-                self.memory.reset(session_id=session_id)
+                self.memory.reset()
             if recursive:
                 for agent in getattr(self, '_agents', {}).values():
-                    agent.reset(session_id, recursive=True)
+                    agent.reset(recursive=True)
 
     def __repr__(self):
 
@@ -177,29 +169,29 @@ class Agent:
 
 class AsyncAgentMixin:
 
-    async def __call__(self, *message: AgentMessage, session_id=0, **kwargs) -> AgentMessage:
+    async def __call__(self, *message: AgentMessage, **kwargs) -> AgentMessage:
         message = [AgentMessage(sender='user', content=m) if isinstance(m, str) else copy.deepcopy(m) for m in message]
         for hook in self._hooks.values():
-            result = hook.before_agent(self, message, session_id)
+            result = hook.before_agent(self, message)
             if result:
                 message = result
-        self.update_memory(message, session_id=session_id)
-        response_message = await self.forward(*message, session_id=session_id, **kwargs)
+        self.memory.add(message)
+        response_message = await self.forward(*message, **kwargs)
         if not isinstance(response_message, AgentMessage):
             response_message = AgentMessage(sender=self.name, content=response_message)
-        self.update_memory(response_message, session_id=session_id)
+        self.memory.add(response_message)
         response_message = copy.deepcopy(response_message)
         for hook in self._hooks.values():
-            result = hook.after_agent(self, response_message, session_id)
+            result = hook.after_agent(self, response_message)
             if result:
                 response_message = result
         return response_message
 
-    async def forward(self, *message: AgentMessage, session_id=0, **kwargs) -> Union[AgentMessage, str]:
-        formatted_messages = self.aggregator.aggregate(
-            self.memory.get(session_id), self.name, self.output_format, self.template
+    async def forward(self, *message: AgentMessage, **kwargs) -> Union[AgentMessage, str]:
+        formatted_messages, tools = self.aggregator.aggregate(
+            self.memory, self.name, self.output_format, self.template
         )
-        llm_response = await self.llm.chat(formatted_messages, session_id, **kwargs)
+        llm_response = await self.llm.chat(formatted_messages, tools=tools, **kwargs)
         if self.output_format:
             formatted_messages = self.output_format.parse_response(llm_response)
             return AgentMessage(sender=self.name, content=llm_response, formatted=formatted_messages)
@@ -215,34 +207,34 @@ class AsyncAgent(AsyncAgentMixin, Agent):
 class StreamingAgentMixin:
     """Component that makes agent calling output a streaming response."""
 
-    def __call__(self, *message: AgentMessage, session_id=0, **kwargs) -> Generator[AgentMessage, None, None]:
+    def __call__(self, *message: AgentMessage, **kwargs) -> Generator[AgentMessage, None, None]:
         message = [AgentMessage(sender='user', content=m) if isinstance(m, str) else copy.deepcopy(m) for m in message]
         for hook in self._hooks.values():
-            result = hook.before_agent(self, message, session_id)
+            result = hook.before_agent(self, message)
             if result:
                 message = result
-        self.update_memory(message, session_id=session_id)
+        self.memory.add(message)
         response_message = AgentMessage(sender=self.name, content="")
-        for response_message in self.forward(*message, session_id=session_id, **kwargs):
+        for response_message in self.forward(*message, **kwargs):
             if not isinstance(response_message, AgentMessage):
                 model_state, response = response_message
                 response_message = AgentMessage(sender=self.name, content=response, stream_state=model_state)
             yield response_message.model_copy()
-        self.update_memory(response_message, session_id=session_id)
+        self.memory.add(response_message)
         response_message = copy.deepcopy(response_message)
         for hook in self._hooks.values():
-            result = hook.after_agent(self, response_message, session_id)
+            result = hook.after_agent(self, response_message)
             if result:
                 response_message = result
         yield response_message
 
     def forward(
-        self, *message: AgentMessage, session_id=0, **kwargs
+        self, *message: AgentMessage, **kwargs
     ) -> Generator[Union[AgentMessage, Tuple[ModelStatusCode, str]], None, None]:
         formatted_messages = self.aggregator.aggregate(
-            self.memory.get(session_id), self.name, self.output_format, self.template
+            self.memory, self.name, self.output_format, self.template
         )
-        for model_state, response, *_ in self.llm.stream_chat(formatted_messages, session_id=session_id, **kwargs):
+        for model_state, response, *_ in self.llm.stream_chat(formatted_messages, **kwargs):
             yield (
                 AgentMessage(
                     sender=self.name,
@@ -258,35 +250,35 @@ class StreamingAgentMixin:
 class AsyncStreamingAgentMixin:
     """Component that makes asynchronous agent calling output a streaming response."""
 
-    async def __call__(self, *message: AgentMessage, session_id=0, **kwargs) -> AsyncGenerator[AgentMessage, None]:
+    async def __call__(self, *message: AgentMessage, **kwargs) -> AsyncGenerator[AgentMessage, None]:
         message = [AgentMessage(sender='user', content=m) if isinstance(m, str) else copy.deepcopy(m) for m in message]
         for hook in self._hooks.values():
-            result = hook.before_agent(self, message, session_id)
+            result = hook.before_agent(self, message)
             if result:
                 message = result
-        self.update_memory(message, session_id=session_id)
+        self.memory.add(message)
         response_message = AgentMessage(sender=self.name, content="")
-        async for response_message in self.forward(*message, session_id=session_id, **kwargs):
+        async for response_message in self.forward(*message, **kwargs):
             if not isinstance(response_message, AgentMessage):
                 model_state, response = response_message
                 response_message = AgentMessage(sender=self.name, content=response, stream_state=model_state)
             yield response_message.model_copy()
-        self.update_memory(response_message, session_id=session_id)
+        self.memory.add(response_message)
         response_message = copy.deepcopy(response_message)
         for hook in self._hooks.values():
-            result = hook.after_agent(self, response_message, session_id)
+            result = hook.after_agent(self, response_message)
             if result:
                 response_message = result
         yield response_message
 
     async def forward(
-        self, *message: AgentMessage, session_id=0, **kwargs
+        self, *message: AgentMessage, **kwargs
     ) -> AsyncGenerator[Union[AgentMessage, Tuple[ModelStatusCode, str]], None]:
         formatted_messages = self.aggregator.aggregate(
-            self.memory.get(session_id), self.name, self.output_format, self.template
+            self.memory, self.name, self.output_format, self.template
         )
         async for model_state, response, *_ in self.llm.stream_chat(
-            formatted_messages, session_id=session_id, **kwargs
+            formatted_messages, **kwargs
         ):
             yield (
                 AgentMessage(
@@ -336,7 +328,7 @@ class Sequential(Agent):
         assert isinstance(agent, Agent), f'{type(agent)} is not an Agent subclass'
         self._agents[str(name)] = agent
 
-    def forward(self, *message: AgentMessage, session_id=0, exit_at: Optional[int] = None, **kwargs) -> AgentMessage:
+    def forward(self, *message: AgentMessage, exit_at: Optional[int] = None, **kwargs) -> AgentMessage:
         assert exit_at is None or exit_at >= 0, 'exit_at should be greater than or equal to 0'
         if exit_at is None:
             exit_at = len(self) - 1
@@ -345,7 +337,7 @@ class Sequential(Agent):
             agent = next(iterator)
             if isinstance(message, AgentMessage):
                 message = (message,)
-            message = agent(*message, session_id=session_id, **kwargs)
+            message = agent(*message, **kwargs)
         return message
 
     def __getitem__(self, key):
@@ -361,7 +353,7 @@ class Sequential(Agent):
 class AsyncSequential(AsyncAgentMixin, Sequential):
 
     async def forward(
-        self, *message: AgentMessage, session_id=0, exit_at: Optional[int] = None, **kwargs
+        self, *message: AgentMessage, exit_at: Optional[int] = None, **kwargs
     ) -> AgentMessage:
         assert exit_at is None or exit_at >= 0, 'exit_at should be greater than or equal to 0'
         if exit_at is None:
@@ -371,14 +363,14 @@ class AsyncSequential(AsyncAgentMixin, Sequential):
             agent = next(iterator)
             if isinstance(message, AgentMessage):
                 message = (message,)
-            message = await agent(*message, session_id=session_id, **kwargs)
+            message = await agent(*message, **kwargs)
         return message
 
 
 class StreamingSequential(StreamingAgentMixin, Sequential):
     """Streaming variant of the Sequential class"""
 
-    def forward(self, *message: AgentMessage, session_id=0, exit_at: Optional[int] = None, **kwargs):
+    def forward(self, *message: AgentMessage, exit_at: Optional[int] = None, **kwargs):
         assert exit_at is None or exit_at >= 0, 'exit_at should be greater than or equal to 0'
         if exit_at is None:
             exit_at = len(self) - 1
@@ -387,14 +379,14 @@ class StreamingSequential(StreamingAgentMixin, Sequential):
             agent = next(iterator)
             if isinstance(message, AgentMessage):
                 message = (message,)
-            for message in agent(*message, session_id=session_id, **kwargs):
+            for message in agent(*message, **kwargs):
                 yield message
 
 
 class AsyncStreamingSequential(AsyncStreamingAgentMixin, Sequential):
     """Streaming variant of the AsyncSequential class"""
 
-    async def forward(self, *message: AgentMessage, session_id=0, exit_at: Optional[int] = None, **kwargs):
+    async def forward(self, *message: AgentMessage, exit_at: Optional[int] = None, **kwargs):
         assert exit_at is None or exit_at >= 0, 'exit_at should be greater than or equal to 0'
         if exit_at is None:
             exit_at = len(self) - 1
@@ -403,7 +395,7 @@ class AsyncStreamingSequential(AsyncStreamingAgentMixin, Sequential):
             agent = next(iterator)
             if isinstance(message, AgentMessage):
                 message = (message,)
-            async for message in agent(*message, session_id=session_id, **kwargs):
+            async for message in agent(*message, **kwargs):
                 yield message
 
 

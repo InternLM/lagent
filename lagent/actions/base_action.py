@@ -152,7 +152,10 @@ def tool_api(
             if doc.kind is DocstringSectionKind.parameters:
                 for d in doc.value:
                     d = d.as_dict()
-                    d['type'] = _detect_type(d.pop('annotation').lower())
+                    if not d['annotation']:
+                        d.pop('annotation')
+                    else:
+                        d['type'] = _detect_type(d.pop('annotation').lower())
                     args_doc[d['name']] = d
             if doc.kind is DocstringSectionKind.returns:
                 for d in doc.value:

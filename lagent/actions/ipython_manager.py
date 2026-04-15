@@ -132,8 +132,7 @@ class IPythonInteractiveManager(BaseAction):
         self.out_queue = Queue()
 
     def __call__(self,
-                 commands: Union[str, List[str]],
-                 session_ids: Union[int, List[int]] = None):
+                 commands: Union[str, List[str]]):
         if isinstance(commands, list):
             batch_size = len(commands)
             is_batch = True
@@ -141,14 +140,10 @@ class IPythonInteractiveManager(BaseAction):
             batch_size = 1
             commands = [commands]
             is_batch = False
-        if session_ids is None:
-            session_ids = range(batch_size)
-        elif isinstance(session_ids, int):
-            session_ids = [session_ids]
-        if len(session_ids) != batch_size or len(session_ids) != len(
-                set(session_ids)):
-            raise ValueError(
-                'the size of `session_ids` must equal that of `commands`')
+        
+        # We just generate some dummy ids for the batch processing internally
+        session_ids = range(batch_size)
+
         try:
             exec_results = self.run_code_blocks([
                 (session_id, command)

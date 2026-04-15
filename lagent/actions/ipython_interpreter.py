@@ -167,8 +167,6 @@ class IPythonInterpreter(BaseAction):
             action's inputs and outputs. Defaults to :class:`JsonParser`.
     """
 
-    _KERNEL_CLIENTS = {}
-
     def __init__(
         self,
         timeout: int = 20,
@@ -205,20 +203,29 @@ class IPythonInterpreter(BaseAction):
     def initialize(self):
         if self._initialized:
             return
-        pid = os.getpid()
-        if pid not in self._KERNEL_CLIENTS:
-            self._KERNEL_CLIENTS[pid] = self.start_kernel()
-        self.kernel_manager, self.kernel_client = self._KERNEL_CLIENTS[pid]
+        
+        if getattr(self, 'kernel_manager', None) is None or getattr(self, 'kernel_client', None) is None:
+            self.kernel_manager, self.kernel_client = self.start_kernel()
+            
         self._initialized = True
         self._call(START_CODE.format(self.user_data_dir), None)
 
     def reset(self):
         if not self._initialized:
-            self.initialize()
+            return
         else:
             code = "get_ipython().run_line_magic('reset', '-f')\n" + \
                 START_CODE.format(self.user_data_dir)
             self._call(code, None)
+            
+    def close(self):
+        if hasattr(self, 'kernel_client') and self.kernel_client:
+            self.kernel_client.stop_channels()
+        if hasattr(self, 'kernel_manager') and self.kernel_manager:
+            self.kernel_manager.shutdown_kernel()
+        self._initialized = False
+        self.kernel_client = None
+        self.kernel_manager = None
 
     def _call(self,
               command: str,
@@ -366,114 +373,89 @@ class AsyncIPythonInterpreter(AsyncActionMixin, IPythonInterpreter):
             Defaults to `ENV`.
         work_dir (str, optional): Specify which directory to save output images to.
             Defaults to ``'./work_dir/tmp_dir'``.
+        connection_dir (str, optional): Connection directory for the kernel manager.
+        kernel_backend (AsyncMultiKernelManager, optional): A shared backend to spawn kernels from. 
+            If not provided, a default one will be created.
         description (dict): The description of the action. Defaults to ``None``.
         parser (Type[BaseParser]): The parser class to process the
             action's inputs and outputs. Defaults to :class:`JsonParser`.
     """
-
-    _UNBOUND_KERNEL_CLIENTS = asyncio.Queue()
 
     def __init__(
         self,
         timeout: int = 20,
         user_data_dir: str = 'ENV',
         work_dir=os.path.join(tempfile.gettempdir(), 'tmp_dir'),
-        max_kernels: Optional[int] = None,
-        reuse_kernel: bool = True,
-        startup_rate: bool = 32,
         connection_dir: str = tempfile.gettempdir(),
+        kernel_backend: Optional[AsyncMultiKernelManager] = None,
         description: Optional[dict] = None,
         parser: Type[BaseParser] = JsonParser,
     ):
         super().__init__(timeout, user_data_dir, work_dir, description, parser)
-        from traitlets.config import Config
-
-        c = Config()
-        c.KernelManager.transport = 'ipc'
-        self._amkm = AsyncMultiKernelManager(
-            config=c, connection_dir=connection_dir)
-        self._max_kernels = max_kernels
-        self._reuse_kernel = reuse_kernel
-        self._sem = asyncio.Semaphore(startup_rate)
+        
+        if kernel_backend is None:
+            from traitlets.config import Config
+            c = Config()
+            c.KernelManager.transport = 'ipc'
+            self._amkm = AsyncMultiKernelManager(config=c, connection_dir=connection_dir)
+        else:
+            self._amkm = kernel_backend
+            
         self._lock = asyncio.Lock()
+        self._kernel_id = None
+        self._kernel = None
+        self._client = None
 
-    async def initialize(self, session_id: str):
-        session_id = str(session_id)
-        while True:
-            if session_id in self._KERNEL_CLIENTS:
-                return self._KERNEL_CLIENTS[session_id]
-            if self._reuse_kernel and not self._UNBOUND_KERNEL_CLIENTS.empty():
-                self._KERNEL_CLIENTS[
-                    session_id] = await self._UNBOUND_KERNEL_CLIENTS.get()
-                return self._KERNEL_CLIENTS[session_id]
-            async with self._sem:
-                if self._max_kernels is None or len(
-                        self._KERNEL_CLIENTS
-                ) + self._UNBOUND_KERNEL_CLIENTS.qsize() < self._max_kernels:
-                    kernel_id = None
-                    try:
-                        kernel_id = await self._amkm.start_kernel()
-                        kernel = self._amkm.get_kernel(kernel_id)
-                        client = kernel.client()
-                        _, error_stacktrace, stream_text = await async_run_code(
-                            kernel,
-                            START_CODE.format(self.user_data_dir),
-                            shutdown_kernel=False)
-                        # check if the output of START_CODE meets expectations
-                        if not (error_stacktrace is None
-                                and stream_text == ''):
-                            raise RuntimeError
-                    except Exception as e:
-                        print(f'Starting kernel error: {e}')
-                        if kernel_id:
-                            await self._amkm.shutdown_kernel(kernel_id)
-                            self._amkm.remove_kernel(kernel_id)
-                        await asyncio.sleep(1)
-                        continue
-                    if self._max_kernels is None:
-                        self._KERNEL_CLIENTS[session_id] = (kernel_id, kernel,
-                                                            client)
-                        return kernel_id, kernel, client
-                    async with self._lock:
-                        if len(self._KERNEL_CLIENTS
-                               ) + self._UNBOUND_KERNEL_CLIENTS.qsize(
-                               ) < self._max_kernels:
-                            self._KERNEL_CLIENTS[session_id] = (kernel_id,
-                                                                kernel, client)
-                            return kernel_id, kernel, client
-                    await self._amkm.shutdown_kernel(kernel_id)
-                    self._amkm.remove_kernel(kernel_id)
-            await asyncio.sleep(1)
+    async def initialize(self):
+        if self._kernel_id is not None:
+            return self._kernel, self._client
+            
+        async with self._lock:
+            if self._kernel_id is None:
+                try:
+                    self._kernel_id = await self._amkm.start_kernel()
+                    self._kernel = self._amkm.get_kernel(self._kernel_id)
+                    self._client = self._kernel.client()
+                    _, error_stacktrace, stream_text = await async_run_code(
+                        self._kernel,
+                        START_CODE.format(self.user_data_dir),
+                        shutdown_kernel=False)
+                    # check if the output of START_CODE meets expectations
+                    if not (error_stacktrace is None
+                            and stream_text == ''):
+                        raise RuntimeError("Failed to initialize kernel with START_CODE")
+                except Exception as e:
+                    print(f'Starting kernel error: {e}')
+                    if self._kernel_id:
+                        await self._amkm.shutdown_kernel(self._kernel_id)
+                        self._amkm.remove_kernel(self._kernel_id)
+                        self._kernel_id = None
+                        self._kernel = None
+                        self._client = None
+                    raise e
+        return self._kernel, self._client
 
-    async def reset(self, session_id: str):
-        session_id = str(session_id)
-        if session_id not in self._KERNEL_CLIENTS:
+    async def reset(self):
+        if self._kernel_id is None:
             return
-        _, kernel, _ = self._KERNEL_CLIENTS[session_id]
         code = "get_ipython().run_line_magic('reset', '-f')\n" + \
             START_CODE.format(self.user_data_dir)
-        await async_run_code(kernel, code, shutdown_kernel=False)
+        await async_run_code(self._kernel, code, shutdown_kernel=False)
 
-    async def shutdown(self, session_id: str):
-        session_id = str(session_id)
-        if session_id in self._KERNEL_CLIENTS:
-            kernel_id, _, _ = self._KERNEL_CLIENTS.get(session_id)
-            await self._amkm.shutdown_kernel(kernel_id)
-            self._amkm.remove_kernel(kernel_id)
-            del self._KERNEL_CLIENTS[session_id]
+    async def shutdown(self):
+        if self._kernel_id is not None:
+            await self._amkm.shutdown_kernel(self._kernel_id)
+            self._amkm.remove_kernel(self._kernel_id)
+            self._kernel_id = None
+            self._kernel = None
+            self._client = None
 
-    async def close_session(self, session_id: str):
-        session_id = str(session_id)
-        if self._reuse_kernel:
-            if session_id in self._KERNEL_CLIENTS:
-                await self.reset(session_id)
-                await self._UNBOUND_KERNEL_CLIENTS.put(
-                    self._KERNEL_CLIENTS.pop(session_id))
-        else:
-            await self.shutdown(session_id)
+    async def close_session(self):
+        # Kept for backward compatibility, but now it just shuts down the single kernel
+        await self.shutdown()
 
-    async def _call(self, command, timeout=None, session_id=None):
-        _, kernel, _ = await self.initialize(str(session_id))
+    async def _call(self, command, timeout=None):
+        kernel, _ = await self.initialize()
         result = await async_run_code(
             kernel,
             extract_code(command),
@@ -494,8 +476,7 @@ class AsyncIPythonInterpreter(AsyncActionMixin, IPythonInterpreter):
     @tool_api
     async def run(self,
                   command: str,
-                  timeout: Optional[int] = None,
-                  session_id: Optional[str] = None) -> ActionReturn:
+                  timeout: Optional[int] = None) -> ActionReturn:
         r"""When you send a message containing Python code to python, it will be executed in a stateful Jupyter notebook environment. python will respond with the output of the execution or time out after 60.0 seconds. The drive at '/mnt/data' can be used to save and persist user files. Internet access for this session is disabled. Do not make external web requests or API calls as they will fail.
 
         Args:
@@ -504,7 +485,7 @@ class AsyncIPythonInterpreter(AsyncActionMixin, IPythonInterpreter):
         """
         tool_return = ActionReturn(url=None, args=None, type=self.name)
         tool_return.args = dict(text=command)
-        succeed, result = await self._call(command, timeout, session_id)
+        succeed, result = await self._call(command, timeout)
         if succeed:
             text = result['text']
             image = result.get('image', [])
@@ -512,8 +493,6 @@ class AsyncIPythonInterpreter(AsyncActionMixin, IPythonInterpreter):
             if image:
                 resp.extend([dict(type='image', content=im) for im in image])
             tool_return.result = resp
-            # tool_return.result = dict(
-            #     text=result['text'], image=result.get('image', [])[0])
             tool_return.state = ActionStatusCode.SUCCESS
         else:
             tool_return.errmsg = result.get('text', '') if isinstance(
@@ -579,6 +558,97 @@ def get_multiline_input(hint):
 
 
 if __name__ == '__main__':
+    # ========================================================
+    # Test 1: Synchronous IPython Interpreter (Single Kernel)
+    # ========================================================
+    print("--- Testing Synchronous IPythonInterpreter ---")
     code_interpreter = IPythonInterpreter()
-    while True:
-        print(code_interpreter(get_multiline_input('Enter python code:')))
+    
+    # Test simple execution
+    res1 = code_interpreter(inputs=json.dumps({"command": "print('Hello from Sync Interpreter!')"}))
+    print(f"Result 1: {res1.result[0]['content']}\n")
+    
+    # Test statefulness (variable persistence)
+    code_interpreter(inputs=json.dumps({"command": "x = 42"}))
+    res2 = code_interpreter(inputs=json.dumps({"command": "print(f'x is {x}')"}))
+    print(f"Result 2: {res2.result[0]['content']}\n")
+    
+    # Cleanup
+    code_interpreter.close()
+
+
+    # ========================================================
+    # Test 2: Asynchronous IPython Interpreter (Single Kernel)
+    # ========================================================
+    async def test_async_interpreter():
+        print("--- Testing AsyncIPythonInterpreter ---")
+        async_interpreter = AsyncIPythonInterpreter()
+        
+        # Test simple execution
+        res1 = await async_interpreter(inputs=json.dumps({"command": "print('Hello from Async Interpreter!')"}))
+        print(f"Result 1: {res1.result[0]['content']}\n")
+        
+        # Test statefulness
+        await async_interpreter(inputs=json.dumps({"command": "y = 100"}))
+        res2 = await async_interpreter(inputs=json.dumps({"command": "print(f'y is {y}')"}))
+        print(f"Result 2: {res2.result[0]['content']}\n")
+        
+        # Cleanup
+        await async_interpreter.close_session()
+
+    asyncio.run(test_async_interpreter())
+
+
+    # ========================================================
+    # Test 3: Shared vs Non-Shared Backend Performance
+    # ========================================================
+    async def test_shared_backend_performance():
+        print("--- Testing Shared vs Non-Shared Backend Performance ---")
+        import time
+        from traitlets.config import Config
+        
+        num_kernels = 10
+        
+        # Test 1: Non-Shared Backend (Each instance creates its own AsyncMultiKernelManager)
+        print(f"\nStarting {num_kernels} Non-Shared kernels...")
+        start_time = time.time()
+        non_shared_agents = []
+        for _ in range(num_kernels):
+            agent = AsyncIPythonInterpreter()
+            # Force initialization
+            await agent.initialize()
+            non_shared_agents.append(agent)
+            
+        non_shared_duration = time.time() - start_time
+        print(f"Non-Shared initialization took {non_shared_duration:.2f} seconds")
+        
+        # Cleanup
+        for agent in non_shared_agents:
+            await agent.close_session()
+
+        # Test 2: Shared Backend (All instances share one AsyncMultiKernelManager)
+        print(f"\nStarting {num_kernels} Shared kernels...")
+        start_time = time.time()
+        
+        c = Config()
+        c.KernelManager.transport = 'ipc'
+        shared_backend = AsyncMultiKernelManager(config=c, connection_dir=tempfile.gettempdir())
+        
+        shared_agents = []
+        for _ in range(num_kernels):
+            agent = AsyncIPythonInterpreter(kernel_backend=shared_backend)
+            # Force initialization
+            await agent.initialize()
+            shared_agents.append(agent)
+            
+        shared_duration = time.time() - start_time
+        print(f"Shared initialization took {shared_duration:.2f} seconds")
+        
+        # Cleanup
+        for agent in shared_agents:
+            await agent.close_session()
+        await shared_backend.shutdown_all()
+        
+        print(f"\nPerformance Improvement: {(non_shared_duration/shared_duration - 1)*100:.1f}% faster with Shared Backend")
+
+    asyncio.run(test_shared_backend_performance())

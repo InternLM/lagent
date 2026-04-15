@@ -1,0 +1,519 @@
+{
+  "_source": "openclaw built-in tools extracted from dist/tool-catalog-BjSY4C4F.js",
+  "_version": "2026.3.23-2",
+  "sections": [
+    {
+      "id": "fs",
+      "label": "Files",
+      "tools": [
+        {
+          "id": "read",
+          "label": "read",
+          "description": "Read file contents",
+          "profiles": [
+            "coding"
+          ]
+        },
+        {
+          "id": "write",
+          "label": "write",
+          "description": "Create or overwrite files",
+          "profiles": [
+            "coding"
+          ]
+        },
+        {
+          "id": "edit",
+          "label": "edit",
+          "description": "Make precise edits",
+          "profiles": [
+            "coding"
+          ]
+        },
+        {
+          "id": "apply_patch",
+          "label": "apply_patch",
+          "description": "Patch files (OpenAI)",
+          "profiles": [
+            "coding"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "runtime",
+      "label": "Runtime",
+      "tools": [
+        {
+          "id": "exec",
+          "label": "exec",
+          "description": "Run shell commands",
+          "profiles": [
+            "coding"
+          ]
+        },
+        {
+          "id": "process",
+          "label": "process",
+          "description": "Manage background processes",
+          "profiles": [
+            "coding"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "web",
+      "label": "Web",
+      "tools": [
+        {
+          "id": "web_search",
+          "label": "web_search",
+          "description": "Search the web",
+          "profiles": [
+            "coding"
+          ]
+        },
+        {
+          "id": "web_fetch",
+          "label": "web_fetch",
+          "description": "Fetch web content",
+          "profiles": [
+            "coding"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "memory",
+      "label": "Memory",
+      "tools": [
+        {
+          "id": "memory_search",
+          "label": "memory_search",
+          "description": "Semantic search",
+          "profiles": [
+            "coding"
+          ]
+        },
+        {
+          "id": "memory_get",
+          "label": "memory_get",
+          "description": "Read memory files",
+          "profiles": [
+            "coding"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sessions",
+      "label": "Sessions",
+      "tools": [
+        {
+          "id": "sessions_list",
+          "label": "sessions_list",
+          "description": "List sessions",
+          "profiles": [
+            "coding",
+            "messaging"
+          ]
+        },
+        {
+          "id": "sessions_history",
+          "label": "sessions_history",
+          "description": "Session history",
+          "profiles": [
+            "coding",
+            "messaging"
+          ]
+        },
+        {
+          "id": "sessions_send",
+          "label": "sessions_send",
+          "description": "Send to session",
+          "profiles": [
+            "coding",
+            "messaging"
+          ]
+        },
+        {
+          "id": "sessions_spawn",
+          "label": "sessions_spawn",
+          "description": "Spawn sub-agent",
+          "profiles": [
+            "coding"
+          ]
+        },
+        {
+          "id": "sessions_yield",
+          "label": "sessions_yield",
+          "description": "End turn to receive sub-agent results",
+          "profiles": [
+            "coding"
+          ]
+        },
+        {
+          "id": "subagents",
+          "label": "subagents",
+          "description": "Manage sub-agents",
+          "profiles": [
+            "coding"
+          ]
+        },
+        {
+          "id": "session_status",
+          "label": "session_status",
+          "description": "Session status",
+          "profiles": [
+            "minimal",
+            "coding",
+            "messaging"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui",
+      "label": "UI",
+      "tools": [
+        {
+          "id": "browser",
+          "label": "browser",
+          "description": "Control web browser",
+          "profiles": []
+        },
+        {
+          "id": "canvas",
+          "label": "canvas",
+          "description": "Control canvases",
+          "profiles": []
+        }
+      ]
+    },
+    {
+      "id": "messaging",
+      "label": "Messaging",
+      "tools": [
+        {
+          "id": "message",
+          "label": "message",
+          "description": "Send messages",
+          "profiles": [
+            "messaging"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "automation",
+      "label": "Automation",
+      "tools": [
+        {
+          "id": "cron",
+          "label": "cron",
+          "description": "Schedule tasks",
+          "profiles": [
+            "coding"
+          ]
+        },
+        {
+          "id": "gateway",
+          "label": "gateway",
+          "description": "Gateway control",
+          "profiles": []
+        }
+      ]
+    },
+    {
+      "id": "nodes",
+      "label": "Nodes",
+      "tools": [
+        {
+          "id": "nodes",
+          "label": "nodes",
+          "description": "Nodes + devices",
+          "profiles": []
+        }
+      ]
+    },
+    {
+      "id": "agents",
+      "label": "Agents",
+      "tools": [
+        {
+          "id": "agents_list",
+          "label": "agents_list",
+          "description": "List agents",
+          "profiles": []
+        }
+      ]
+    },
+    {
+      "id": "media",
+      "label": "Media",
+      "tools": [
+        {
+          "id": "image",
+          "label": "image",
+          "description": "Image understanding",
+          "profiles": [
+            "coding"
+          ]
+        },
+        {
+          "id": "image_generate",
+          "label": "image_generate",
+          "description": "Image generation",
+          "profiles": [
+            "coding"
+          ]
+        },
+        {
+          "id": "tts",
+          "label": "tts",
+          "description": "Text-to-speech conversion",
+          "profiles": []
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "id": "read",
+      "label": "read",
+      "description": "Read file contents",
+      "section": "fs",
+      "profiles": [
+        "coding"
+      ]
+    },
+    {
+      "id": "write",
+      "label": "write",
+      "description": "Create or overwrite files",
+      "section": "fs",
+      "profiles": [
+        "coding"
+      ]
+    },
+    {
+      "id": "edit",
+      "label": "edit",
+      "description": "Make precise edits",
+      "section": "fs",
+      "profiles": [
+        "coding"
+      ]
+    },
+    {
+      "id": "apply_patch",
+      "label": "apply_patch",
+      "description": "Patch files (OpenAI)",
+      "section": "fs",
+      "profiles": [
+        "coding"
+      ]
+    },
+    {
+      "id": "exec",
+      "label": "exec",
+      "description": "Run shell commands",
+      "section": "runtime",
+      "profiles": [
+        "coding"
+      ]
+    },
+    {
+      "id": "process",
+      "label": "process",
+      "description": "Manage background processes",
+      "section": "runtime",
+      "profiles": [
+        "coding"
+      ]
+    },
+    {
+      "id": "web_search",
+      "label": "web_search",
+      "description": "Search the web",
+      "section": "web",
+      "profiles": [
+        "coding"
+      ]
+    },
+    {
+      "id": "web_fetch",
+      "label": "web_fetch",
+      "description": "Fetch web content",
+      "section": "web",
+      "profiles": [
+        "coding"
+      ]
+    },
+    {
+      "id": "memory_search",
+      "label": "memory_search",
+      "description": "Semantic search",
+      "section": "memory",
+      "profiles": [
+        "coding"
+      ]
+    },
+    {
+      "id": "memory_get",
+      "label": "memory_get",
+      "description": "Read memory files",
+      "section": "memory",
+      "profiles": [
+        "coding"
+      ]
+    },
+    {
+      "id": "sessions_list",
+      "label": "sessions_list",
+      "description": "List sessions",
+      "section": "sessions",
+      "profiles": [
+        "coding",
+        "messaging"
+      ]
+    },
+    {
+      "id": "sessions_history",
+      "label": "sessions_history",
+      "description": "Session history",
+      "section": "sessions",
+      "profiles": [
+        "coding",
+        "messaging"
+      ]
+    },
+    {
+      "id": "sessions_send",
+      "label": "sessions_send",
+      "description": "Send to session",
+      "section": "sessions",
+      "profiles": [
+        "coding",
+        "messaging"
+      ]
+    },
+    {
+      "id": "sessions_spawn",
+      "label": "sessions_spawn",
+      "description": "Spawn sub-agent",
+      "section": "sessions",
+      "profiles": [
+        "coding"
+      ]
+    },
+    {
+      "id": "sessions_yield",
+      "label": "sessions_yield",
+      "description": "End turn to receive sub-agent results",
+      "section": "sessions",
+      "profiles": [
+        "coding"
+      ]
+    },
+    {
+      "id": "subagents",
+      "label": "subagents",
+      "description": "Manage sub-agents",
+      "section": "sessions",
+      "profiles": [
+        "coding"
+      ]
+    },
+    {
+      "id": "session_status",
+      "label": "session_status",
+      "description": "Session status",
+      "section": "sessions",
+      "profiles": [
+        "minimal",
+        "coding",
+        "messaging"
+      ]
+    },
+    {
+      "id": "browser",
+      "label": "browser",
+      "description": "Control web browser",
+      "section": "ui",
+      "profiles": []
+    },
+    {
+      "id": "canvas",
+      "label": "canvas",
+      "description": "Control canvases",
+      "section": "ui",
+      "profiles": []
+    },
+    {
+      "id": "message",
+      "label": "message",
+      "description": "Send messages",
+      "section": "messaging",
+      "profiles": [
+        "messaging"
+      ]
+    },
+    {
+      "id": "cron",
+      "label": "cron",
+      "description": "Schedule tasks",
+      "section": "automation",
+      "profiles": [
+        "coding"
+      ]
+    },
+    {
+      "id": "gateway",
+      "label": "gateway",
+      "description": "Gateway control",
+      "section": "automation",
+      "profiles": []
+    },
+    {
+      "id": "nodes",
+      "label": "nodes",
+      "description": "Nodes + devices",
+      "section": "nodes",
+      "profiles": []
+    },
+    {
+      "id": "agents_list",
+      "label": "agents_list",
+      "description": "List agents",
+      "section": "agents",
+      "profiles": []
+    },
+    {
+      "id": "image",
+      "label": "image",
+      "description": "Image understanding",
+      "section": "media",
+      "profiles": [
+        "coding"
+      ]
+    },
+    {
+      "id": "image_generate",
+      "label": "image_generate",
+      "description": "Image generation",
+      "section": "media",
+      "profiles": [
+        "coding"
+      ]
+    },
+    {
+      "id": "tts",
+      "label": "tts",
+      "description": "Text-to-speech conversion",
+      "section": "media",
+      "profiles": []
+    }
+  ]
+}

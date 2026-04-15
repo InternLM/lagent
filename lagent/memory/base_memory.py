@@ -4,26 +4,33 @@ from lagent.schema import AgentMessage
 
 
 class Memory:
+    """Session message buffer.  The only memory primitive in lagent.
+
+    A simple append-only list of AgentMessage.  No windowing, no
+    boundary tracking — those concerns belong to ContextBuilder
+    (which reads compact state from env_info).
+    """
 
     _item_cls = AgentMessage
 
-    def __init__(self, recent_n=None) -> None:
+    def __init__(self) -> None:
         self.memory: List[AgentMessage] = []
-        self.recent_n = recent_n
+
+    def reset(self) -> None:
+        """Clear all messages."""
+        self.memory = []
 
     def get_memory(
         self,
-        recent_n: Optional[int] = None,
-        filter_func: Optional[Callable[[int, dict], bool]] = None,
+        filter_func: Optional[Callable[[int, AgentMessage], bool]] = None,
     ) -> list:
-        recent_n = recent_n or self.recent_n
-        if recent_n is not None:
-            memory = self.memory[-recent_n:]
-        else:
-            memory = self.memory
+        memory = self.memory
         if filter_func is not None:
             memory = [m for i, m in enumerate(memory) if filter_func(i, m)]
         return memory
+
+    # Alias for backward compatibility
+    get = get_memory
 
     def add(self, memories: Union[List[Dict], Dict, None]) -> None:
         for memory in memories if isinstance(memories, (list, tuple)) else [memories]:
@@ -38,7 +45,7 @@ class Memory:
         if isinstance(index, int):
             del self.memory[index]
         else:
-            for i in index:
+            for i in sorted(index, reverse=True):
                 del self.memory[i]
 
     def load(
@@ -57,7 +64,4 @@ class Memory:
             raise TypeError(f'{type(memories)} is not supported')
 
     def save(self) -> List[dict]:
-        memory = []
-        for m in self.memory:
-            memory.append(m.model_dump())
-        return memory
+        return [m.model_dump() for m in self.memory]

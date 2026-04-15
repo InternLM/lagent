@@ -96,11 +96,10 @@ class ActionExecutor:
 
     def __call__(self,
                  message: AgentMessage,
-                 session_id=0,
                  **kwargs) -> AgentMessage:
         # message.receiver = self.name
         for hook in self._hooks.values():
-            result = hook.before_action(self, message, session_id)
+            result = hook.before_action(self, message)
             if result:
                 message = result
 
@@ -123,7 +122,7 @@ class ActionExecutor:
             )
 
         for hook in self._hooks.values():
-            result = hook.after_action(self, response_message, session_id)
+            result = hook.after_action(self, response_message)
             if result:
                 response_message = result
         return response_message
@@ -158,14 +157,13 @@ class AsyncActionExecutor(ActionExecutor):
 
     async def __call__(self,
                        message: AgentMessage,
-                       session_id=0,
                        **kwargs) -> AgentMessage:
         # message.receiver = self.name
         for hook in self._hooks.values():
             if inspect.iscoroutinefunction(hook.before_action):
-                result = await hook.before_action(self, message, session_id)
+                result = await hook.before_action(self, message)
             else:
-                result = hook.before_action(self, message, session_id)
+                result = hook.before_action(self, message)
             if result:
                 message = result
 
@@ -189,10 +187,9 @@ class AsyncActionExecutor(ActionExecutor):
 
         for hook in self._hooks.values():
             if inspect.iscoroutinefunction(hook.after_action):
-                result = await hook.after_action(self, response_message,
-                                                 session_id)
+                result = await hook.after_action(self, response_message)
             else:
-                result = hook.after_action(self, response_message, session_id)
+                result = hook.after_action(self, response_message)
             if result:
                 response_message = result
         return response_message
