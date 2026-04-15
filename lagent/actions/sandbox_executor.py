@@ -1,17 +1,17 @@
 """SandboxActionExecutor — drop-in replacement for ``AsyncActionExecutor``
-that routes action calls to an :class:`~lagent.actions.action_daemon.ActionDaemon`
+that routes action calls to an :class:`~lagent.serving.sandbox.daemon.ActionDaemon`
 running inside a remote sandbox.
 
 Communication goes through the sandbox's bash execution channel::
 
     SandboxActionExecutor.forward("shell", {"command": "ls"})
-      → sandbox_client.execute('python -m lagent.actions.action_daemon call ...')
+      → sandbox_client.execute('python -m lagent.serving.sandbox.daemon call ...')
       → daemon inside sandbox executes ShellAction locally
       → JSON result flows back through stdout
 
 Usage::
 
-    from lagent.actions.sandbox_executor import SandboxActionExecutor
+    from lagent.serving.sandbox.executor import SandboxActionExecutor
 
     executor = SandboxActionExecutor(
         sandbox_client=sandbox_client,  # your SandboxClient instance
@@ -146,7 +146,7 @@ class SandboxActionExecutor:
         actions_config: List[Dict],
         sock_path: str = "/tmp/lagent_action.sock",
         cwd: str = "/root",
-        daemon_module: str = "lagent.actions.action_daemon",
+        daemon_module: str = "lagent.serving.sandbox.daemon",
         invalid_action=dict(type=InvalidAction),
         no_action=dict(type=NoAction),
         finish_action=dict(type=FinishAction),
@@ -212,14 +212,18 @@ class SandboxActionExecutor:
                 f"echo '{escaped_config}' > /tmp/lagent_actions_config.json"
             )
 
-            # 2. Start daemon if not already running
-            await self._exec(
-                f"pgrep -f '{self.daemon_module}.*start' > /dev/null 2>&1 || "
-                f"nohup python -m {self.daemon_module} start "
-                f"--sock {self.sock_path} "
-                f"--actions-config /tmp/lagent_actions_config.json "
-                f"> /tmp/lagent_daemon.log 2>&1 &"
+            # 2. Check if daemon already running, start if not
+            check = await self._exec(
+                f"pgrep -f '[l]agent.serving.sandbox.daemon.*--sock {self.sock_path}'"
+                f" > /dev/null 2>&1 && echo 'running' || echo 'stopped'"
             )
+            if "stopped" in check:
+                await self._exec(
+                    f"nohup python -m {self.daemon_module} start "
+                    f"--sock {self.sock_path} "
+                    f"--actions-config /tmp/lagent_actions_config.json "
+                    f"> /tmp/lagent_daemon.log 2>&1 &"
+                )
 
             # 3. Wait for socket to be ready
             for _ in range(30):

@@ -23,7 +23,7 @@ import time
 import pytest
 import requests
 
-from lagent.actions.action_daemon import ActionDaemon, async_lagent_call, lagent_call
+from lagent.serving.sandbox.daemon import ActionDaemon, async_lagent_call, lagent_call
 from lagent.actions.hybrid_executor import HybridActionExecutor
 from lagent.actions.sandbox_executor import (
     SandboxActionExecutor,
@@ -58,7 +58,7 @@ def daemon_process():
 
     proc = subprocess.Popen(
         [
-            "python", "-m", "lagent.actions.action_daemon", "start",
+            "python", "-m", "lagent.serving.sandbox.daemon", "start",
             "--sock", SOCK_PATH,
             "--actions-config", CONFIG_PATH,
         ],
@@ -128,7 +128,8 @@ class TestActionDaemon:
 
     def test_ping(self, daemon_process):
         result = json.loads(lagent_call(SOCK_PATH, '{"cmd":"ping"}'))
-        assert result == {"status": "ok"}
+        assert result["status"] == "ok"
+        assert result["type"] == "action"
 
     def test_list_tools(self, daemon_process):
         result = json.loads(lagent_call(SOCK_PATH, '{"cmd":"list_tools"}'))
@@ -170,7 +171,8 @@ class TestActionDaemon:
     @pytest.mark.asyncio
     async def test_async_call(self, daemon_process):
         result = await async_lagent_call(SOCK_PATH, '{"cmd":"ping"}')
-        assert json.loads(result) == {"status": "ok"}
+        parsed = json.loads(result)
+        assert parsed["status"] == "ok"
 
 
 # ---------------------------------------------------------------------------
@@ -512,7 +514,7 @@ def sandbox_env():
     config_json = json.dumps(E2E_ACTIONS_CONFIG)
     _exec(f"echo '{config_json}' > /tmp/lagent_actions_config.json")
     _exec(
-        "PYTHONPATH=/tmp:$PYTHONPATH nohup python -m lagent.actions.action_daemon start "
+        "PYTHONPATH=/tmp:$PYTHONPATH nohup python -m lagent.serving.sandbox.daemon start "
         "--sock /tmp/lagent_action.sock "
         "--actions-config /tmp/lagent_actions_config.json "
         "> /tmp/lagent_daemon.log 2>&1 &"
@@ -738,7 +740,7 @@ if __name__ == "__main__":
             config_json = json.dumps(E2E_ACTIONS_CONFIG)
             _exec(f"echo '{config_json}' > /tmp/lagent_actions_config.json")
             _exec(
-                "PYTHONPATH=/tmp:$PYTHONPATH nohup python -m lagent.actions.action_daemon start "
+                "PYTHONPATH=/tmp:$PYTHONPATH nohup python -m lagent.serving.sandbox.daemon start "
                 "--sock /tmp/lagent_action.sock "
                 "--actions-config /tmp/lagent_actions_config.json "
                 "> /tmp/lagent_daemon.log 2>&1 &"
