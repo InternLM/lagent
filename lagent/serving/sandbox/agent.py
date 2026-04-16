@@ -96,7 +96,7 @@ class SandboxAgent:
         request_json = json.dumps(request, ensure_ascii=False)
         escaped = request_json.replace("'", "'\\''")
         output = await self._exec(
-            f"python -m {self.daemon_module} call "
+            f"/mnt/llm-ai-infra/miniconda3/envs/train/bin/python -m {self.daemon_module} call "
             f"--sock {self.sock_path} "
             f"'{escaped}'",
             timeout_sec=timeout_sec,
