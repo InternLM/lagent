@@ -266,7 +266,7 @@ async def test_real_compact_with_provider():
 
     model_name = "gpt-5.4-mini"
     api_base = "http://35.220.164.252:3888/v1"
-    api_key = "sk-GokBDZBzLpFXewhYu8uaby27vjRT0ZWV6uLA3Goe6G5f0MBi"
+    api_key = "" 
     proxy = "http://100.100.72.89:8899"
 
     model = AsyncAPIClient(

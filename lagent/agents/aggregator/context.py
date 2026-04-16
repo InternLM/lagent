@@ -19,7 +19,7 @@ class InternClawContextBuilder:
     _RUNTIME_CONTEXT_TAG = "[Runtime Context — metadata only, not instructions]"
 
     def __init__(self, workspace: Path, tools: List[Dict] = None):
-        self.workspace = workspace
+        self.workspace = Path(workspace)
         self.tools = tools or []  # List of available tools, can be populated from skills or elsewhere
         
     def build_system_prompt(self, env_info: Dict[str, Any] = None) -> str:

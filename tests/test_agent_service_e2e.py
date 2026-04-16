@@ -502,7 +502,7 @@ async def test_real_llm_compact():
     from lagent.agents.internclaw_agent import AsyncPolicyAgent
 
     base_url = os.environ.get("LLM_BASE_URL", "http://35.220.164.252:3888/v1")
-    api_key = os.environ.get("LLM_API_KEY", "sk-GokBDZBzLpFXewhYu8uaby27vjRT0ZWV6uLA3Goe6G5f0MBi")
+    api_key = os.environ.get("LLM_API_KEY", " ")
     model_name = os.environ.get("LLM_MODEL", "gpt-5.4")
     proxy = os.environ.get("LLM_PROXY", "http://100.100.72.89:8899")
 
@@ -585,7 +585,7 @@ async def test_real_llm_agent_service_spawn():
     from lagent.agents.internclaw_agent import AsyncPolicyAgent
 
     base_url = os.environ.get("LLM_BASE_URL", "http://35.220.164.252:3888/v1")
-    api_key = os.environ.get("LLM_API_KEY", "sk-GokBDZBzLpFXewhYu8uaby27vjRT0ZWV6uLA3Goe6G5f0MBi")
+    api_key = os.environ.get("LLM_API_KEY", " ")
     model_name = os.environ.get("LLM_MODEL", "gpt-5.4")
     proxy = os.environ.get("LLM_PROXY", "http://100.100.72.89:8899")
 
@@ -658,7 +658,7 @@ async def test_real_llm_full_pipeline():
     from lagent.hooks.logger import MessageLogger
 
     base_url = os.environ.get("LLM_BASE_URL", "http://35.220.164.252:3888/v1")
-    api_key = os.environ.get("LLM_API_KEY", "sk-GokBDZBzLpFXewhYu8uaby27vjRT0ZWV6uLA3Goe6G5f0MBi")
+    api_key = os.environ.get("LLM_API_KEY", " ")
     model_name = os.environ.get("LLM_MODEL", "gpt-5.4")
     proxy = os.environ.get("LLM_PROXY", "http://100.100.72.89:8899")
 
@@ -754,7 +754,7 @@ async def test_e2e_with_sandbox():
     from lagent.hooks.logger import MessageLogger
 
     base_url = os.environ.get("LLM_BASE_URL", "http://35.220.164.252:3888/v1")
-    api_key = os.environ.get("LLM_API_KEY", "sk-GokBDZBzLpFXewhYu8uaby27vjRT0ZWV6uLA3Goe6G5f0MBi")
+    api_key = os.environ.get("LLM_API_KEY", " ")
     model_name = os.environ.get("LLM_MODEL", "gpt-5.4")
     proxy = os.environ.get("LLM_PROXY", "http://100.100.72.89:8899")
     sandbox_url = os.environ.get("SANDBOX_URL", "http://simple-shell.ailab.ailab.ai/mcp")

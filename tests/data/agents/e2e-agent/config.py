@@ -23,7 +23,7 @@ llm = dict(
     model=dict(
         model="gpt-5.4",
         base_url="http://35.220.164.252:3888/v1",
-        api_key="sk-GokBDZBzLpFXewhYu8uaby27vjRT0ZWV6uLA3Goe6G5f0MBi",
+        api_key=" ",
         proxy="http://100.100.72.89:8899",
     ),
     sample_params=dict(temperature=0.1),

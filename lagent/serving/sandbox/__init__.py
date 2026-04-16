@@ -2,21 +2,23 @@
 
 Server side (runs inside sandbox):
     - :class:`BaseDaemon` — socket server + protocol
-    - :class:`ActionDaemon` — Level 1: action execution
-    - :class:`AgentDaemon` — Level 2: full agent
+    - :class:`ActionDaemon` — action execution
+    - :class:`SkillsDaemon` — skills loading
+    - :class:`AgentDaemon` — full agent
 
 Client side:
-    - :class:`SandboxAgent` — drop-in for AsyncAgent (runs outside sandbox)
+    - :class:`SandboxAgent` — drop-in for AsyncAgent
     - ``SandboxActionExecutor`` — see ``lagent.actions.sandbox_executor``
-    - ``HybridActionExecutor`` — see ``lagent.actions.hybrid_executor``
+    - ``SandboxSkillsLoader`` — see ``lagent.skills.sandbox_skills``
 """
 
 from .agent import SandboxAgent
-from .daemon import ActionDaemon, AgentDaemon, BaseDaemon, async_lagent_call, lagent_call
+from .daemon import ActionDaemon, AgentDaemon, BaseDaemon, SkillsDaemon, async_lagent_call, lagent_call
 
 __all__ = [
     "BaseDaemon",
     "ActionDaemon",
+    "SkillsDaemon",
     "AgentDaemon",
     "SandboxAgent",
     "lagent_call",

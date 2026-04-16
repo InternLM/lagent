@@ -25,7 +25,7 @@ from lagent.schema import AgentMessage
 
 NVM_DIR = '/mnt/shared-storage-user/liukuikun/.nvm'
 HTTP_PROXY = 'http://100.100.72.89:8899'
-API_KEY = 'sk-GokBDZBzLpFXewhYu8uaby27vjRT0ZWV6uLA3Goe6G5f0MBi'
+API_KEY = ' '
 REAL_BASE_URL = 'http://35.220.164.252:3888/v1'
 OPENCLAW_HOME = pathlib.Path.home() / '.openclaw'
 

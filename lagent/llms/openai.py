@@ -12,9 +12,9 @@ from typing import AsyncGenerator, Dict, List, Optional, Union
 import aiohttp
 import requests
 
-from ..schema import ModelStatusCode
-from ..utils import filter_suffix
-from .base_api import AsyncBaseAPILLM, BaseAPILLM
+from lagent.schema import ModelStatusCode
+from lagent.utils import filter_suffix
+from lagent.llms.base_api import AsyncBaseAPILLM, BaseAPILLM
 
 warnings.simplefilter('default')
 

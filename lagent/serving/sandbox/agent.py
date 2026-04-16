@@ -84,17 +84,25 @@ class SandboxAgent:
         else:
             result = await asyncio.to_thread(execute_fn, command, **kwargs)
         if isinstance(result, dict):
-            return result.get("stdout", "")
+            stdout = result.get("stdout", "")
+            # If stdout is empty but stderr has content, raise so caller can debug
+            if not stdout.strip() and result.get("stderr", "").strip():
+                raise RuntimeError(f"Command stderr: {result['stderr'][:500]}")
+            return stdout
         return result
 
-    async def _daemon_call(self, request: dict) -> dict:
+    async def _daemon_call(self, request: dict, timeout_sec: int = 600) -> dict:
+        """Send a request to daemon. Uses longer timeout for chat commands."""
         request_json = json.dumps(request, ensure_ascii=False)
         escaped = request_json.replace("'", "'\\''")
         output = await self._exec(
             f"python -m {self.daemon_module} call "
             f"--sock {self.sock_path} "
-            f"'{escaped}'"
+            f"'{escaped}'",
+            timeout_sec=timeout_sec,
         )
+        if not output.strip():
+            raise RuntimeError("Daemon returned empty response (may have crashed or timed out)")
         return json.loads(output.strip())
 
     # -- lifecycle --

@@ -182,17 +182,17 @@ if __name__ == '__main__':
     messages = [
         {'role': 'user', 'content': '上海温度'}
     ]
-    model_name = "claude-opus-4-6"
-    api_base = "http://35.220.164.252:3888/v1"
-    api_key = "sk-blAvnaExZFrQfHVuyIF5VEB3I0GrQ7FNhdAobU3pKpfLvxLb"
-    proxy = "http://100.100.72.89:8899"
-    extra_body = {}
-    # model_name = "/mnt/shared-storage-user/puyudelivery/user/puyudilivery/ckpts/xtuner_saved_model/interns1_1_mini_official/interns1_1_mini_sft_based_cpt_bs512_epoch1_maxlr3e-5_minlr1e-6_max16k-hf/20260207101512/hf-4374"
-    # api_base = "http://10.102.218.28:23333/v1"
-    # extra_body = {'enable_thinking': True, 'spaces_between_special_tokens': False}
-    # proxy = None
-    
+    # model_name = "claude-opus-4-6"
+    # api_base = "http://35.220.164.252:3888/v1"
+    # api_key = ""
+    # proxy = "http://100.100.72.89:8899"
+    # extra_body = {}
 
+    extra_body = {'enable_thinking': True, 'spaces_between_special_tokens': False}
+    model_name = "/mnt/shared-storage-user/llmit1/user/liujiangning/exp/s2_preview/agent_rl/s2-preview-thinker_sft_0228b_rl0312rc1_fix_klmismatch/20260331212858/hf-15"
+    api_base = "http://10.102.252.171:23333/v1"
+    api_key = "sk-admin"
+    proxy = None
 
     async def main():
         model = AsyncAPIClient(

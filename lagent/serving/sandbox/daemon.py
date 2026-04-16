@@ -214,6 +214,62 @@ class ActionDaemon(BaseDaemon):
 
 
 # ---------------------------------------------------------------------------
+# SkillsDaemon — skills loading
+# ---------------------------------------------------------------------------
+
+
+class SkillsDaemon(BaseDaemon):
+    """Serves a ``SkillsLoader`` over Unix socket.
+
+    Usage::
+
+        daemon = SkillsDaemon(
+            skills_loader=SkillsLoader(workspace),
+        )
+        await daemon.start()
+
+    Parameters
+    ----------
+    skills_loader : SkillsLoader
+        Skills loader for the sandbox workspace.
+    sock_path : str
+        Unix socket path.
+    """
+
+    daemon_type = "skills"
+
+    def __init__(self, skills_loader, sock_path: str = "/tmp/lagent_skills.sock"):
+        super().__init__(sock_path=sock_path)
+        self.skills = skills_loader
+
+    async def _dispatch(self, request: dict) -> dict:
+        cmd = request.get("cmd")
+
+        if cmd in ("ping", "shutdown"):
+            return await super()._dispatch(request)
+
+        if cmd == "list_skills":
+            filter_unavailable = request.get("filter_unavailable", True)
+            return {"skills": await self.skills.list_skills(filter_unavailable=filter_unavailable)}
+
+        if cmd == "skills_summary":
+            return {"summary": await self.skills.build_skills_summary()}
+
+        if cmd == "load_skill":
+            content = await self.skills.load_skill(request.get("name", ""))
+            return {"content": content}
+
+        if cmd == "load_skills_for_context":
+            content = await self.skills.load_skills_for_context(request.get("names", []))
+            return {"content": content}
+
+        if cmd == "get_always_skills":
+            return {"skills": await self.skills.get_always_skills()}
+
+        return {"error": f"Unknown command: {cmd}"}
+
+
+# ---------------------------------------------------------------------------
 # AgentDaemon — Level 2: full agent
 # ---------------------------------------------------------------------------
 

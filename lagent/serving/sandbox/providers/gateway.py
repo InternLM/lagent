@@ -13,7 +13,7 @@ from typing import Tuple
 
 import requests
 
-from .base import SandboxClient
+from lagent.serving.sandbox.providers.base import SandboxClient
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,15 @@ class GatewayProvider:
         url = ret["env"]["url"]
         env_id = ret["env"]["env_id"]
         logger.info("Created sandbox: url=%s, env_id=%s", url, env_id)
-        return SandboxClient(url), env_id
+        client =  SandboxClient(url)
+        for _ in range(300):
+            health_json = client.health_check()
+            if health_json['ok']:
+                return client, env_id
+            import time 
+            time.sleep(2)
+        raise Exception
+        
 
     def delete(self, env_id: str) -> None:
         """Delete a sandbox environment."""

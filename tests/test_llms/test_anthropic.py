@@ -1,6 +1,6 @@
 import anthropic
 
-client = anthropic.Anthropic(api_key="sk-GokBDZBzLpFXewhYu8uaby27vjRT0ZWV6uLA3Goe6G5f0MBi", base_url='http://100.100.72.89:3888')
+client = anthropic.Anthropic(api_key=" ", base_url='http://100.100.72.89:3888')
 model_name = "claude-sonnet-4-20250514-thinking"
 
 # 第一轮请求：开启 Extended Thinking

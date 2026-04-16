@@ -88,8 +88,8 @@ class AsyncEnvAgent(AsyncAgent):
             self.actions = actions
         else:
             self.actions = AsyncActionExecutor(actions)
-        self.skills = skills
-        self.long_term_memory = long_term_memory
+        self.skills = create_object(skills)
+        self.long_term_memory = create_object(long_term_memory)
 
     async def get_env_info(self) -> Dict[str, Any]:
         env_info: Dict[str, Any] = {
@@ -302,7 +302,7 @@ if __name__ == "__main__":
     # ── Model config ──
     model_name = "Pro/moonshotai/Kimi-K2.5"
     api_base = "http://35.220.164.252:3888/v1"
-    api_key = "sk-GokBDZBzLpFXewhYu8uaby27vjRT0ZWV6uLA3Goe6G5f0MBi"
+    api_key = "" 
     proxy = "http://100.100.72.89:8899"
     
     model_name = "/mnt/shared-storage-user/llmit1/user/liujiangning/exp/s2_preview/agent_rl/s2-preview-thinker_sft_0228b_rl0312rc1_fix_klmismatch/20260331212858/hf-15"

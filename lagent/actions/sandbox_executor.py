@@ -194,7 +194,10 @@ class SandboxActionExecutor:
 
         # Normalise: dict with "stdout" → str
         if isinstance(result, dict):
-            return result.get("stdout", "")
+            stdout = result.get("stdout", "")
+            if not stdout.strip() and result.get("stderr", "").strip():
+                raise RuntimeError(f"Command stderr: {result['stderr'][:500]}")
+            return stdout
         return result
 
     # -- connection lifecycle --
@@ -267,15 +270,18 @@ class SandboxActionExecutor:
 
     # -- daemon communication --
 
-    async def _daemon_call(self, request: dict) -> dict:
+    async def _daemon_call(self, request: dict, timeout_sec: int = 300) -> dict:
         """Send a JSON request to the daemon via bash and parse response."""
         request_json = json.dumps(request, ensure_ascii=False)
         escaped = request_json.replace("'", "'\\''")
         output = await self._exec(
             f"python -m {self.daemon_module} call "
             f"--sock {self.sock_path} "
-            f"'{escaped}'"
+            f"'{escaped}'",
+            timeout_sec=timeout_sec,
         )
+        if not output.strip():
+            raise RuntimeError("Daemon returned empty response (may have crashed or timed out)")
         return json.loads(output.strip())
 
     # -- AsyncActionExecutor-compatible interface --

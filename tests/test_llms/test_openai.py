@@ -1,6 +1,6 @@
 from openai import OpenAI
 
-client = OpenAI(api_key="sk-GokBDZBzLpFXewhYu8uaby27vjRT0ZWV6uLA3Goe6G5f0MBi", base_url='http://100.100.72.89:3888/v1')
+client = OpenAI(api_key=" ", base_url='http://100.100.72.89:3888/v1')
 model_name = "o3-mini"
 
 print("=== 第一轮请求 (OpenAI o3-mini) ===")

@@ -2,7 +2,7 @@ from google import genai
 from google.genai import types
 from google.genai.types import HttpOptions
 
-client = genai.Client(api_key="sk-GokBDZBzLpFXewhYu8uaby27vjRT0ZWV6uLA3Goe6G5f0MBi", base_url='http://100.100.72.89:3888')
+client = genai.Client(api_key=" ", base_url='http://100.100.72.89:3888')
 model_name = "gemini-2.0-flash-thinking-exp-01-21" # 确保使用支持思考的模型
 
 print("=== 第一轮请求 (Gemini) ===")

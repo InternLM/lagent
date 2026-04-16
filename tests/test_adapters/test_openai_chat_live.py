@@ -11,7 +11,7 @@ import sys
 from lagent.adapters.openai_chat import OpenAIChatAdapter
 from lagent.adapters.proxy import LLMProxyRecorder
 
-API_KEY = 'sk-GokBDZBzLpFXewhYu8uaby27vjRT0ZWV6uLA3Goe6G5f0MBi'
+API_KEY = ' '
 BASE_URL = 'http://35.220.164.252:3888/v1'
 HTTP_PROXY = 'http://100.100.72.89:8899'
 

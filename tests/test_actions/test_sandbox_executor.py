@@ -867,3 +867,157 @@ if __name__ == "__main__":
         assert needle in haystack, f"{needle!r} not in {haystack!r}"
 
     asyncio.run(main())
+
+
+# =====================================================================
+# Part 3: AgentDaemon E2E tests
+#
+# Tests the full InternClawAgent running inside a sandbox via AgentDaemon.
+# Requires: RUN_AGENT_E2E=1 + LLM server accessible from sandbox.
+#
+# Run with:
+#   RUN_AGENT_E2E=1 python tests/test_actions/test_sandbox_executor.py --agent-e2e
+#   or
+#   RUN_AGENT_E2E=1 pytest tests/test_actions/test_sandbox_executor.py -v -k "AgentDaemon"
+# =====================================================================
+
+agent_e2e = pytest.mark.skipif(
+    not os.environ.get("RUN_AGENT_E2E"),
+    reason="Set RUN_AGENT_E2E=1 to run AgentDaemon E2E tests",
+)
+
+# ClusterX config (shared storage, deps pre-installed)
+CLUSTERX_PARTITION = "llmit_proxy"
+CLUSTERX_CONDA_ENV = "xtuner_dev"
+CLUSTERX_CONDA_ACTIVATE = "/mnt/shared-storage-user/liukuikun/miniconda3/bin/activate"
+LAGENT_PATH = "/mnt/shared-storage-user/llmit/user/liukuikun/workspace/lagent"
+
+
+@pytest.fixture(scope="module")
+def agent_sandbox_env():
+    """Create a ClusterX sandbox with SandboxServer for AgentDaemon tests.
+
+    Uses ClusterX because the shared storage already has lagent + deps.
+    """
+    import sys
+    sys.path.insert(0, LAGENT_PATH)
+
+    try:
+        from lagent.serving.sandbox.providers.clusterx import ClusterXProvider
+    except ImportError:
+        pytest.skip("clusterx not available")
+
+    provider = ClusterXProvider(
+        partition=CLUSTERX_PARTITION,
+        conda_env=CLUSTERX_CONDA_ENV,
+        conda_activate_path=CLUSTERX_CONDA_ACTIVATE,
+        python_path=LAGENT_PATH,
+        port=19876,
+        extra_run_kwargs={
+            "cpus_per_task": 4,
+            "memory_per_task": 10,
+            "no_env": True,
+        },
+    )
+
+    client, job_id = provider.create(timeout=300)
+
+    yield client, job_id, provider
+
+    try:
+        provider.delete(job_id)
+    except Exception:
+        pass
+
+
+@pytest.fixture()
+def agent_daemon_client(agent_sandbox_env):
+    """Start AgentDaemon in the sandbox and return a connected SandboxAgent."""
+    import json as _json
+    from lagent.serving.sandbox.agent import SandboxAgent
+
+    client, job_id, provider = agent_sandbox_env
+
+    # Patch client for PYTHONPATH + conda
+    original_exec = client.execute
+    prefix = (
+        f"source {CLUSTERX_CONDA_ACTIVATE} {CLUSTERX_CONDA_ENV} && "
+        f"PYTHONPATH={LAGENT_PATH}:$PYTHONPATH "
+    )
+
+    def patched_execute(command, **kw):
+        return original_exec(f"{prefix}{command}", **kw)
+
+    client.execute = patched_execute
+
+    # Write agent config
+    from workspace.agents.default_agent.config import agent_config
+    config_json = _json.dumps(agent_config, ensure_ascii=False)
+    escaped = config_json.replace("'", "'\\''")
+    client.execute(f"echo '{escaped}' > /tmp/agent_config.json")
+    client.execute("mkdir -p /root/workspace/memory /root/workspace/skills")
+
+    # Start daemon
+    sock_path = "/tmp/lagent_agent_e2e.sock"
+    client.execute(
+        f"nohup python -m lagent.serving.sandbox.daemon start "
+        f"--mode agent --config /tmp/agent_config.json "
+        f"--sock {sock_path} "
+        f"> /tmp/lagent_agent_e2e.log 2>&1 &"
+    )
+
+    import time
+    time.sleep(8)
+
+    r = client.execute(f"test -S {sock_path} && echo 'ready' || echo 'not ready'")
+    if "ready" not in r.get("stdout", ""):
+        r = client.execute(f"tail -30 /tmp/lagent_agent_e2e.log")
+        pytest.fail(f"AgentDaemon failed to start:\n{r.get('stdout', '')}")
+
+    agent = SandboxAgent(
+        sandbox_client=client,
+        agent_config=agent_config,
+        sock_path=sock_path,
+    )
+    agent._connected = True
+    return agent
+
+
+@agent_e2e
+class TestAgentDaemonE2E:
+    """Full InternClawAgent running inside a sandbox via AgentDaemon."""
+
+    @pytest.mark.asyncio
+    async def test_ping(self, agent_daemon_client):
+        r = await agent_daemon_client._daemon_call({"cmd": "ping"})
+        assert r["status"] == "ok"
+        assert r["type"] == "agent"
+
+    @pytest.mark.asyncio
+    async def test_list_tools(self, agent_daemon_client):
+        r = await agent_daemon_client._daemon_call({"cmd": "list_tools"})
+        tools = r.get("tools", [])
+        tool_names = [t["name"] for t in tools]
+        assert len(tools) > 0
+        # Should have at least shell and file actions
+        assert any("Shell" in n or "shell" in n for n in tool_names)
+
+    @pytest.mark.asyncio
+    async def test_chat(self, agent_daemon_client):
+        response = await agent_daemon_client("请执行 echo hello world 并告诉我结果")
+        assert response.content is not None
+        assert len(str(response.content)) > 0
+
+    @pytest.mark.asyncio
+    async def test_state_dict(self, agent_daemon_client):
+        # Chat first to have some state
+        await agent_daemon_client("执行 echo test")
+        state = await agent_daemon_client.get_state_dict()
+        assert isinstance(state, dict)
+
+    @pytest.mark.asyncio
+    async def test_reset(self, agent_daemon_client):
+        await agent_daemon_client.reset()
+        # After reset, should still be able to chat
+        r = await agent_daemon_client._daemon_call({"cmd": "ping"})
+        assert r["status"] == "ok"

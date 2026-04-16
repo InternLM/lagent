@@ -181,9 +181,9 @@ class SkillsLoader:
     """
 
     def __init__(self, workspace: Path, builtin_skills_dir: Path | None = None):
-        self.workspace = workspace
-        self.workspace_skills = workspace / "skills"
-        self.builtin_skills = builtin_skills_dir or BUILTIN_SKILLS_DIR
+        self.workspace = Path(workspace)
+        self.workspace_skills = self.workspace / "skills"
+        self.builtin_skills = Path(builtin_skills_dir) if builtin_skills_dir else BUILTIN_SKILLS_DIR
         self.backend: BaseSkillsBackend = FilesystemSkillsBackend(self.workspace_skills, self.builtin_skills)
 
     def bind_backend(self, backend: BaseSkillsBackend) -> None:
