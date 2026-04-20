@@ -42,9 +42,6 @@ def _get_event_loop():
     return event_loop
 
 
-logger = logging.getLogger(__file__)
-
-
 class TokenBucket:
     def __init__(self, rate_limit: float):
         self.rate_limit = rate_limit  # tokens per second
@@ -404,7 +401,8 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
             # 否则直接作为字符串返回
             try:
                 result = self._parser.parse_outputs(outputs)
-            except:
+            except Exception as exc:
+                logger.warning(f"Failed to parse MCP Action {self.name} output: {exc}")
                 result = str(outputs)
 
             action_return = ActionReturn(fallback_args, type=self.name, result=result)

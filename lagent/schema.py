@@ -96,7 +96,7 @@ class AgentMessage(BaseModel):
     tool_calls: Optional[List[dict]] = None
     tool_calls_ids: Optional[List[str]] = None
     formatted: Optional[Any] = None
-    extra_info: dict = {}
+    extra_info: dict = Field(default_factory=dict)
     type: Optional[str] = None
     receiver: Optional[str] = None
     stream_state: Union[ModelStatusCode, AgentStatusCode] = AgentStatusCode.END

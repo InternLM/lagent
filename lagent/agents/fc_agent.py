@@ -78,10 +78,8 @@ class FunctionCallAgent(AsyncAgent):
     async def forward(self, env_message: AgentMessage, session_id: str | int, **kwargs):
         selection_message: AgentMessage = None
         current_turn = 0
-        while (
-            self.finish_condition is None
-            or not self.finish_condition(selection_message, env_message)
-            and (self.max_turn is None or current_turn < self.max_turn)
+        while (self.finish_condition is None or not self.finish_condition(selection_message, env_message)) and (
+            self.max_turn is None or current_turn < self.max_turn
         ):
             selection_message = await self.select_agent(env_message, session_id=session_id, **kwargs)
             if selection_message.stream_state == AgentStatusCode.SERVER_ERR:
@@ -90,13 +88,15 @@ class FunctionCallAgent(AsyncAgent):
                 for _ in range(2):  # remove the last two messages
                     self.select_agent.memory.get(session_id).delete(-1)
                 return AgentMessage(
-                    role='env', content='Exceeded context length limit', finish_reason=selection_message.finish_reason
+                    sender=self.name,
+                    content='Exceeded context length limit',
+                    finish_reason=selection_message.finish_reason,
                 )
             if selection_message.finish_reason == 'abort':
-                return AgentMessage(role='env', content='Aborted request', finish_reason='abort')
+                return AgentMessage(sender=self.name, content='Aborted request', finish_reason='abort')
             env_message = await self.env_agent(selection_message, session_id=session_id)
             current_turn += 1
-        return AgentMessage(role="env", content="Finished", finish_reason='stop')
+        return AgentMessage(sender=self.name, content="Finished", finish_reason='stop')
 
 
 class EnvAgent(AsyncAgent):
