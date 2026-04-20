@@ -2,6 +2,8 @@ from .action_executor import ActionExecutor, AsyncActionExecutor
 from .arxiv_search import ArxivSearch, AsyncArxivSearch
 from .base_action import AsyncActionMixin, BaseAction, tool_api
 from .bing_map import AsyncBINGMap, BINGMap
+from .browser_session import BrowserSession, BrowserSessionManager, BrowserTarget
+from .browser_snapshot import AiSnapshotSerializer, BrowserSnapshot, SnapshotStats
 from .builtin_actions import FinishAction, InvalidAction, NoAction
 from .google_scholar_search import AsyncGoogleScholar, GoogleScholar
 from .google_search import AsyncGoogleSearch, GoogleSearch
@@ -24,6 +26,12 @@ __all__ = [
     'AsyncBINGMap',
     'ArxivSearch',
     'AsyncArxivSearch',
+    'BrowserSession',
+    'BrowserSessionManager',
+    'BrowserSnapshot',
+    'BrowserTarget',
+    'AiSnapshotSerializer',
+    'SnapshotStats',
     'GoogleSearch',
     'AsyncGoogleSearch',
     'GoogleScholar',
