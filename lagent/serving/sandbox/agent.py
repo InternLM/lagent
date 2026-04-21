@@ -65,12 +65,14 @@ class SandboxAgent:
         sock_path: str = "/tmp/lagent_action.sock",
         cwd: str = "/root",
         daemon_module: str = "lagent.serving.sandbox.daemon",
+        python_bin: str = "/mnt/llm-ai-infra/miniconda3/envs/train/bin/python",
     ):
         self.sandbox_client = sandbox_client
         self.agent_config = agent_config
         self.sock_path = sock_path
         self.cwd = cwd
         self.daemon_module = daemon_module
+        self.python_bin = python_bin
         self._connected = False
         self._lock = asyncio.Lock()
 
@@ -96,7 +98,7 @@ class SandboxAgent:
         request_json = json.dumps(request, ensure_ascii=False)
         escaped = request_json.replace("'", "'\\''")
         output = await self._exec(
-            f"/mnt/llm-ai-infra/miniconda3/envs/train/bin/python -m {self.daemon_module} call "
+            f"{self.python_bin} -m {self.daemon_module} call "
             f"--sock {self.sock_path} "
             f"'{escaped}'",
             timeout_sec=timeout_sec,
@@ -127,7 +129,7 @@ class SandboxAgent:
             )
             if "stopped" in check:
                 await self._exec(
-                    f"nohup python -m {self.daemon_module} start "
+                    f"nohup {self.python_bin} -m {self.daemon_module} start "
                     f"--sock {self.sock_path} "
                     f"--agent-config /tmp/lagent_agent_config.json "
                     f"> /tmp/lagent_daemon.log 2>&1 &"

@@ -189,6 +189,24 @@ async def test_agent(client, sock_path="/tmp/lagent_agent.sock"):
     )
     agent._connected = True
 
+    # Track log position for incremental tailing
+    log_state = {"offset": 0}
+
+    def show_daemon_logs(since_last=True):
+        """Download and display daemon log (full or since last check)."""
+        try:
+            data = client.download_file("/tmp/lagent_agent.log")
+            full_log = data.decode()
+            if since_last:
+                new_content = full_log[log_state["offset"]:]
+                log_state["offset"] = len(full_log)
+                if new_content.strip():
+                    print(f"\n--- Daemon log (new) ---\n{new_content.rstrip()}")
+            else:
+                print(f"\n--- Daemon log (full) ---\n{full_log.rstrip()}")
+        except Exception as e:
+            print(f"   (failed to read log: {e})")
+
     # Ping
     print("\n--- Ping ---")
     r = await agent._daemon_call({"cmd": "ping"})
@@ -206,6 +224,7 @@ async def test_agent(client, sock_path="/tmp/lagent_agent.sock"):
     response = await agent("请执行 echo hello world 并告诉我结果")
     print(f"   Response type: {type(response).__name__}")
     print(f"   Content: {str(response.content)[:500]}")
+    show_daemon_logs()
 
     # State dict
     print("\n--- State dict ---")
@@ -218,7 +237,8 @@ async def test_agent(client, sock_path="/tmp/lagent_agent.sock"):
             print(f"   {k}: {type(v).__name__}")
 
     # Interactive mode
-    print("\n--- Interactive mode (type 'quit' to exit) ---")
+    print("\n--- Interactive mode ---")
+    print("   Commands: quit | state | reset | tools | logs | fulllog")
     while True:
         try:
             user_input = input("\n[You] > ").strip()
@@ -232,15 +252,27 @@ async def test_agent(client, sock_path="/tmp/lagent_agent.sock"):
             continue
         if user_input == "reset":
             await agent.reset()
+            log_state["offset"] = 0  # reset log tracking too
             print("Reset done.")
             continue
         if user_input == "tools":
             r = await agent._daemon_call({"cmd": "list_tools"})
             print(json.dumps([t["name"] for t in r.get("tools", [])], indent=2))
             continue
+        if user_input == "logs":
+            show_daemon_logs(since_last=True)
+            continue
+        if user_input == "fulllog":
+            show_daemon_logs(since_last=False)
+            continue
 
-        response = await agent(user_input)
-        print(f"\n[Agent] {str(response.content)[:1000]}")
+        try:
+            response = await agent(user_input)
+            print(f"\n[Agent] {str(response.content)[:1000]}")
+        except Exception as e:
+            print(f"\n[Error] {e}")
+        # Show new daemon logs after every chat
+        show_daemon_logs(since_last=True)
 
 
 def main():
