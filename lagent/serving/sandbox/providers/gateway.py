@@ -9,13 +9,24 @@ The Gateway already provides sandboxes with an HTTP API (``/exec``,
 from __future__ import annotations
 
 import logging
+import os
 from typing import Tuple
 
 import requests
+from requests.adapters import HTTPAdapter
 
 from lagent.serving.sandbox.providers.base import SandboxClient
 
 logger = logging.getLogger(__name__)
+
+
+# Default urllib3 ``HTTPAdapter`` caps a host's connection pool at 10.
+# At concurrency > 10 against the same gateway host, it logs
+# ``Connection pool is full, discarding connection`` and creates a fresh
+# TCP+TLS for each overflow.  Size the pool to match your expected
+# concurrent gateway ops (create / delete); override with
+# ``LAGENT_GATEWAY_POOL_SIZE`` env.
+_GATEWAY_POOL_SIZE = int(os.environ.get("LAGENT_GATEWAY_POOL_SIZE", "1024"))
 
 
 class GatewayProvider:
@@ -33,12 +44,28 @@ class GatewayProvider:
     ----------
     gateway_url : str
         Base URL of the EnvGateway service.
+    pool_size : int, optional
+        Max concurrent connections to the gateway host.  Defaults to
+        ``LAGENT_GATEWAY_POOL_SIZE`` env or ``1024``.
     """
 
-    def __init__(self, gateway_url: str):
+    def __init__(self, gateway_url: str, pool_size: int | None = None):
         self.gateway_url = gateway_url.rstrip("/")
         self.session = requests.Session()
         self.session.headers.update({"Content-Type": "application/json"})
+
+        # Only customize pool size — without this, 10 slots get saturated
+        # and urllib3 spams "Connection pool is full".  No Retry here:
+        # retrying at this layer opens new sockets on every failure and
+        # burns ephemeral ports under high concurrency.  Let the caller
+        # handle transient failures at task granularity instead.
+        adapter = HTTPAdapter(
+            pool_connections=pool_size or _GATEWAY_POOL_SIZE,
+            pool_maxsize=pool_size or _GATEWAY_POOL_SIZE,
+            pool_block=False,
+        )
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
 
     def create(
         self,
@@ -47,6 +74,12 @@ class GatewayProvider:
         **kwargs,
     ) -> Tuple[SandboxClient, str]:
         """Create a new sandbox environment.
+
+        Returns as soon as the gateway has allocated a URL + env_id.
+        Readiness (``/health`` polling) is the *caller's* responsibility —
+        ``runner._acquire_ready_sandbox`` does it in an async-friendly way
+        so the executor thread doesn't sit blocked in a ``time.sleep`` loop
+        and the gateway-side semaphore releases promptly.
 
         Parameters
         ----------
