@@ -248,7 +248,7 @@ class LMDeployPipeline(BaseLLM):
                 '`do_sample` parameter is not supported by lmdeploy until '
                 f'v0.6.0, but currently using lmdeloy {self.str_version}')
         super().__init__(path=path, **kwargs)
-        backend_config = copy.deepcopy(pipeline_cfg)
+        backend_config = dict(copy.deepcopy(pipeline_cfg))
         backend_config.update(tp=tp)
         backend_config = {
             k: v
