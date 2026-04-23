@@ -1,6 +1,7 @@
 from typing import Callable, Dict, List, Optional, Union
 
 from lagent.schema import AgentMessage
+from lagent.utils import load_class_from_string
 
 
 class Memory:
@@ -35,33 +36,40 @@ class Memory:
     def add(self, memories: Union[List[Dict], Dict, None]) -> None:
         for memory in memories if isinstance(memories, (list, tuple)) else [memories]:
             if isinstance(memory, str):
-                memory = self._item_cls(sender='user', content=memory)
+                memory = AgentMessage(sender='user', content=memory)
             if isinstance(memory, AgentMessage):
-                if not isinstance(memory, self._item_cls):
-                    memory = self._item_cls.model_validate(memory, from_attributes=True)
                 self.memory.append(memory)
 
-    def delete(self, index: Union[List, int]) -> None:
+    def delete(self, index: Union[List[int], int]) -> None:
         if isinstance(index, int):
             del self.memory[index]
         else:
             for i in sorted(index, reverse=True):
                 del self.memory[i]
 
-    def load(
-        self,
-        memories: Union[str, Dict, List],
-        overwrite: bool = True,
-    ) -> None:
+    def load(self, memories: Union[dict, List], overwrite: bool = True) -> None:
         if overwrite:
             self.memory = []
         if isinstance(memories, dict):
-            self.memory.append(self._item_cls.model_validate(memories))
+            memories = memories.copy()
+            _cls = (
+                load_class_from_string(memories.pop('__model_spec__'))
+                if '__model_spec__' in memories
+                else AgentMessage
+            )
+            self.memory.append(_cls.model_validate(memories))
         elif isinstance(memories, list):
             for m in memories:
-                self.memory.append(self._item_cls.model_validate(m))
+                m = m.copy()
+                _cls = load_class_from_string(m.pop('__model_spec__')) if '__model_spec__' in m else AgentMessage
+                self.memory.append(_cls.model_validate(m))
         else:
             raise TypeError(f'{type(memories)} is not supported')
 
     def save(self) -> List[dict]:
-        return [m.model_dump() for m in self.memory]
+        memory = []
+        for m in self.memory:
+            m_dumped = m.model_dump()
+            m_dumped['__model_spec__'] = f'{m.__module__}.{m.__class__.__name__}'
+            memory.append(m_dumped)
+        return memory

@@ -4,11 +4,12 @@ import inspect
 import logging
 import os
 import os.path as osp
+import re
 import sys
 import time
 from functools import partial
 from logging.handlers import RotatingFileHandler
-from typing import Any, Dict, Generator, Iterable, List, Optional, Union
+from typing import Any, Dict, Generator, Iterable, List, Optional, Union, cast
 
 
 def load_class_from_string(class_path: str, path=None):
@@ -33,6 +34,8 @@ def create_object(config: Union[Dict, Any] = None):
     preserved key to indicate the class (path). When accepting non-dictionary
     input, the function degenerates to an identity.
     """
+    from ray.actor import ActorClass
+
     if config is None or not isinstance(config, dict):
         return config
     assert isinstance(config, dict) and 'type' in config
@@ -41,7 +44,9 @@ def create_object(config: Union[Dict, Any] = None):
     obj_type = config.pop('type')
     if isinstance(obj_type, str):
         obj_type = load_class_from_string(obj_type)
-    if inspect.isclass(obj_type):
+    if isinstance(obj_type, ActorClass):
+        obj = cast(ActorClass, obj_type).remote(**config)
+    elif inspect.isclass(obj_type):
         obj = obj_type(**config)
     else:
         assert callable(obj_type)
@@ -121,6 +126,79 @@ def get_logger(
         logger.addHandler(file_handler)
 
     return logger
+
+
+def truncate_text(text, max_num=4000, side='middle'):
+    """
+    中英文混合场景下，根据 side 参数截断文本。总共保留 approx max_num 个“词/字”。
+
+    定义“单位”逻辑：
+    1. 连续的英文/数字被视为 1 个单位 (如 "Python", "123")
+    2. 单个汉字或标点被视为 1 个单位 (如 "中", "。", ",")
+
+    Args:
+        text (str): 原始文本
+        max_num (int): 截取的单位数量
+        side (str): 截断模式，可选 'left', 'right', 'middle'
+            'left': 保留尾部（截断头部）
+            'right': 保留头部（截断尾部）
+            'middle': 保留头尾（截断中间）
+    """
+    if not text or max_num <= 0:
+        return ""
+
+    # --- 核心正则 ---
+    # 逻辑：匹配 (英文/数字/下划线/连字符 组成的词) 或 (非空白的单字符)
+    # 注意：英文的正则必须放在前面，表示优先匹配完整单词
+    pattern = re.compile(r"[a-zA-Z0-9_'-]+|[^\s]")
+
+    # 获取所有匹配对象（包含位置信息）
+    matches = list(pattern.finditer(text))
+    total_units = len(matches)
+
+    # 如果总数不够，返回全文
+    if total_units <= max_num:
+        return text
+
+    parts = []
+
+    if side == 'left':
+        # 保留尾部 max_num 个单位（截断头部）
+        # matches[-max_num] 是保留部分的第一个词
+        start_idx = total_units - max_num
+        start_pos = matches[start_idx].start()
+        parts.append("(truncated)...")
+        parts.append(text[start_pos:])
+
+    elif side == 'right':
+        # 保留头部 max_num 个单位（截断尾部）
+        # matches[max_num - 1] 是保留部分的最后一个词
+        end_pos = matches[max_num - 1].end()
+        parts.append(text[:end_pos])
+        parts.append("...(truncated)")
+
+    else:  # middle
+        # --- 智能截取 (保留头尾) ---
+        head_count = max_num // 2
+        tail_count = max_num - head_count
+
+        # 1. 提取头部
+        if head_count > 0:
+            # matches[head_count - 1] 是头部想要保留的最后一个词
+            head_span_end = matches[head_count - 1].end()
+            parts.append(text[:head_span_end])
+
+        # 2. 插入截断提示
+        parts.append("...(truncated)...")
+
+        # 3. 提取尾部
+        if tail_count > 0:
+            # matches[-tail_count] 是尾部想要保留的第一个词
+            tail_idx = total_units - tail_count
+            tail_span_start = matches[tail_idx].start()
+            parts.append(text[tail_span_start:])
+
+    return "".join(parts)
 
 
 class GeneratorWithReturn:

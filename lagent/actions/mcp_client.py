@@ -42,9 +42,6 @@ def _get_event_loop():
     return event_loop
 
 
-logger = logging.getLogger(__file__)
-
-
 class TokenBucket:
     def __init__(self, rate_limit: float):
         self.rate_limit = rate_limit  # tokens per second
@@ -242,11 +239,13 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
         max_concurrency: int = None,
         # 注意：这里的 name 主要用于 Lagent 注册，但工具的实际元数据来自 MCP Server
         name: Optional[str] = None,
+        extra_args: Optional[dict] = None,
         **server_params,
     ):
         self._is_toolkit = False
         self.server_type = server_type
         self.server_params = server_params
+        self.extra_args = extra_args or {}
 
         # 并发控制组件
         self.rate_limiter = FairAsyncTokenBucket(rate_limit) if rate_limit is not None else None
@@ -270,18 +269,19 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
 
         self.tool_info = tools[0]
         tool_name = self.tool_info.name
-        description = {
+
+        # 2. 初始化父类 BaseAction
+        super().__init__(
+            description={
                 'name': tool_name,
                 'description': self.tool_info.description,
                 'parameters': [
                     {'name': k, 'type': v['type'].upper(), 'description': v.get('description', '')}
                     for k, v in self.tool_info.inputSchema['properties'].items()
+                    if k not in self.extra_args
                 ],
                 'required': self.tool_info.inputSchema.get('required', []),
-            }
-        # 2. 初始化父类 BaseAction
-        super().__init__(
-            description=description,
+            },
             parser=JsonParser,
         )
         self._is_toolkit = False
@@ -373,7 +373,7 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
 
                     # 调用 MCP 工具
                     # 注意：Lagent 传入的是 kwargs 字典，MCP call_tool 正好接受字典
-                    outputs_obj = await session.call_tool(self.tool_info.name, kwargs)
+                    outputs_obj = await session.call_tool(self.tool_info.name, {**kwargs, **self.extra_args})
 
                     # 提取文本结果
                     if outputs_obj.content and hasattr(outputs_obj.content[0], 'text'):
@@ -400,213 +400,10 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
             # 否则直接作为字符串返回
             try:
                 result = self._parser.parse_outputs(outputs)
-            except:
+            except Exception as exc:
+                logger.warning(f"Failed to parse MCP Action {self.name} output: {exc}")
                 result = str(outputs)
 
             action_return = ActionReturn(fallback_args, type=self.name, result=result)
 
         return action_return
-
-
-
-class AsyncMCPClientSandbox(AsyncMCPClient):
-    """
-    Sandbox MCP Action that wraps a SINGLE tool from an MCP Server.
-
-    Maintains a persistent connection to a remote sandbox environment.
-    One instance = one persistent connection (no session pool).
-    Call ``connect()`` to establish the connection and ``close()`` to tear it down.
-    The connection is also lazily created on the first ``run()`` call.
-    """
-
-
-    def __init__(
-        self,
-        server_type: ServerType,
-        rate_limit: float = None,
-        max_concurrency: int = None,
-        name: Optional[str] = None,
-        init_dir: Optional[str] = None,
-        **server_params,
-    ):
-        # 1. 初始化父类（会自动获取 metadata 并初始化 BaseAction）
-        super().__init__(
-            server_type=server_type,
-            rate_limit=rate_limit,
-            max_concurrency=max_concurrency,
-            name=name,
-            **server_params
-        )
-
-        # 2. 单连接状态
-        self.init_dir = init_dir
-        self._session: object | None = None          # MCP ClientSession
-        self._request_queue: asyncio.Queue | None = None
-        self._worker_task: asyncio.Task | None = None
-        self._lock = asyncio.Lock()
-        self._connected = False
-
-    # ------------------------------------------------------------------
-    # Connection lifecycle
-    # ------------------------------------------------------------------
-
-    async def connect(self):
-        """Establish the persistent MCP connection (idempotent)."""
-        async with self._lock:
-            if self._connected:
-                return self._session
-
-            logger.info(f"Creating persistent MCP connection for {self.name}")
-
-            # anyio 要求进入和退出 CancelScope 在同一个 Task，
-            # 所以用后台 worker Task 持有 AsyncExitStack 的生命周期。
-            request_queue = asyncio.Queue()
-            response_queue: asyncio.Queue = asyncio.Queue()
-
-            async def _connection_worker():
-                try:
-                    async with AsyncExitStack() as stack:
-                        session = await self._connect(stack)
-                        await response_queue.put(session)
-                        # 等待关闭信号
-                        while True:
-                            msg = await request_queue.get()
-                            if msg == "close":
-                                break
-                except Exception as e:
-                    await response_queue.put(e)
-
-            worker_task = asyncio.create_task(_connection_worker())
-
-            result = await response_queue.get()
-            if isinstance(result, Exception):
-                raise result
-
-            self._session = result
-            self._request_queue = request_queue
-            self._worker_task = worker_task
-            self._connected = True
-
-            # 初始化远程工作目录
-            if self.init_dir:
-                await self._initialize_dir(self._session)
-
-            return self._session
-
-    async def _initialize_dir(self, session):
-        """将本地目录打包并同步到远程 Session"""
-        import tarfile
-        import io
-        import base64
-        import os
-
-        if not self.init_dir or not os.path.exists(self.init_dir):
-            logger.warning(f"Init dir {self.init_dir} not found or not set, skipping initialization.")
-            return
-
-        logger.info(f"Initializing MCP session with directory {self.init_dir}")
-
-        buf = io.BytesIO()
-        dir_name = os.path.basename(os.path.normpath(self.init_dir))
-        with tarfile.open(fileobj=buf, mode='w:gz') as tar:
-            tar.add(self.init_dir, arcname=dir_name)
-
-        encoded = base64.b64encode(buf.getvalue()).decode('utf-8')
-        init_cmd = f"echo '{encoded}' | base64 -d | tar -xz"
-
-        try:
-            await session.call_tool(self.tool_info.name, {"command": init_cmd})
-            logger.info("MCP session initialized successfully.")
-        except Exception as e:
-            logger.error(f"Failed to initialize MCP session: {e}")
-
-    async def close(self):
-        """关闭连接，释放服务端资源"""
-        async with self._lock:
-            if not self._connected:
-                return
-            logger.info(f"Closing persistent MCP connection for {self.name}")
-            self._connected = False
-            session = self._session
-            self._session = None
-
-            if self._request_queue is not None:
-                await self._request_queue.put("close")
-            if self._worker_task is not None:
-                try:
-                    await self._worker_task
-                except Exception as e:
-                    logger.warning(f"Error while closing MCP connection: {e}")
-            self._request_queue = None
-            self._worker_task = None
-
-    # backward compat
-    async def close_session(self, session_id: str | None = None):
-        """Deprecated — use ``close()`` instead."""
-        await self.close()
-
-    # ------------------------------------------------------------------
-    # run — no session_id
-    # ------------------------------------------------------------------
-
-    async def run(self, **kwargs) -> ActionReturn:
-        """
-        Standard Lagent Action Entrypoint for stateful execution.
-        """
-        fallback_args = kwargs.copy()
-
-        try:
-            async with self._sem:
-                if self.rate_limiter is not None:
-                    await self.rate_limiter.acquire()
-
-                # 懒连接
-                session = await self.connect()
-
-                outputs_obj = await session.call_tool(self.tool_info.name, kwargs)
-
-                if outputs_obj.content and hasattr(outputs_obj.content[0], 'text'):
-                    outputs = outputs_obj.content[0].text
-                else:
-                    outputs = str(outputs_obj)
-
-        except ParseError as exc:
-            return ActionReturn(fallback_args, type=self.name, errmsg=exc.err_msg, state=ActionStatusCode.ARGS_ERROR)
-        except Exception as exc:
-            logger.warning(f"MCP Action {self.name} failed: {exc}")
-            return ActionReturn(fallback_args, type=self.name, errmsg=str(exc), state=ActionStatusCode.API_ERROR)
-
-        # 结果封装
-        if isinstance(outputs, ActionReturn):
-            action_return = outputs
-            if not action_return.args:
-                action_return.args = kwargs
-            if not action_return.type:
-                action_return.type = self.name
-        else:
-            try:
-                result = self._parser.parse_outputs(outputs)
-            except:
-                result = str(outputs)
-
-            action_return = ActionReturn(fallback_args, type=self.name, result=result)
-
-        return action_return
-if __name__ == '__main__':
-    import asyncio
-    import json
-    from lagent.agents.internclaw_agent import get_tool_prompt
-
-    action = AsyncMCPClientSandbox("http", url='http://simple-shell.ailab.ailab.ai/mcp', init_dir="/mnt/shared-storage-user/llmit/user/liukuikun/workspace/lagent/workspace/")
-    print(get_tool_prompt([action]))
-
-    async def test():
-        res = await action.run(command='ls -a')
-        home_path = json.loads(res.result[0]['content'])['cwd']
-        print(res)
-        res = await action.run(command='echo hello')
-        print(res)
-        await action.close()
-    asyncio.run(test())
-    action1 = AsyncMCPClientSandbox('http', url="http://hb-3d-scan-calc.ailab.ailab.ai")
-    
