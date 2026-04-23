@@ -58,7 +58,7 @@ class Agent:
             for hook in hooks:
                 hook = create_object(hook)
                 self.register_hook(hook)
-        self._scroll_mode = False
+        self._scroll_mode: bool = False
 
     def __call__(self, *message: AgentMessage, **kwargs) -> AgentMessage:
         # message.receiver = self.name
@@ -199,14 +199,14 @@ class Agent:
         if not self._scroll_mode:
             self._enable_scroll_mode(recursive=True)
         aborted_msg_idx = finish_reasons.index('abort') if 'abort' in finish_reasons else len(mem) - 1
-        memory.delete(range(aborted_msg_idx + 1, len(mem)))
+        self.memory.delete(range(aborted_msg_idx + 1, len(mem)))
         enc = hash_func(message)
         for i in range(0, aborted_msg_idx):
             if hash_func(mem[i]) == enc:
                 ret = mem[i + 1]
                 if i + 1 == aborted_msg_idx:
                     if ret.finish_reason == 'abort':
-                        memory.delete(aborted_msg_idx)
+                        self.memory.delete(aborted_msg_idx)
                     self._disable_scroll_mode()
                 return ret
         self._disable_scroll_mode(recursive=True)
@@ -322,9 +322,7 @@ class StreamingAgentMixin:
     def forward(
         self, *message: AgentMessage, **kwargs
     ) -> Generator[Union[AgentMessage, Tuple[ModelStatusCode, str]], None, None]:
-        formatted_messages = self.aggregator.aggregate(
-            self.memory, self.name, self.output_format, self.template
-        )
+        formatted_messages = self.aggregator.aggregate(self.memory, self.name, self.output_format, self.template)
         for model_state, response, *_ in self.llm.stream_chat(formatted_messages, **kwargs):
             yield (
                 AgentMessage(
@@ -365,12 +363,8 @@ class AsyncStreamingAgentMixin:
     async def forward(
         self, *message: AgentMessage, **kwargs
     ) -> AsyncGenerator[Union[AgentMessage, Tuple[ModelStatusCode, str]], None]:
-        formatted_messages = self.aggregator.aggregate(
-            self.memory, self.name, self.output_format, self.template
-        )
-        async for model_state, response, *_ in self.llm.stream_chat(
-            formatted_messages, **kwargs
-        ):
+        formatted_messages = self.aggregator.aggregate(self.memory, self.name, self.output_format, self.template)
+        async for model_state, response, *_ in self.llm.stream_chat(formatted_messages, **kwargs):
             yield (
                 AgentMessage(
                     sender=self.name,
@@ -443,9 +437,7 @@ class Sequential(Agent):
 
 class AsyncSequential(AsyncAgentMixin, Sequential):
 
-    async def forward(
-        self, *message: AgentMessage, exit_at: Optional[int] = None, **kwargs
-    ) -> AgentMessage:
+    async def forward(self, *message: AgentMessage, exit_at: Optional[int] = None, **kwargs) -> AgentMessage:
         assert exit_at is None or exit_at >= 0, 'exit_at should be greater than or equal to 0'
         if exit_at is None:
             exit_at = len(self) - 1
