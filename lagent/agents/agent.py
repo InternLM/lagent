@@ -89,7 +89,7 @@ class Agent:
                 response_message = AgentMessage(sender=self.name, content=response_message)
             else:
                 response_message = AgentMessage.from_model_response(response_message, self.name)
-        self.memory and self.memory.add(message)
+        self.memory and self.memory.add(response_message)
         response_message = copy.deepcopy(response_message)
         for hook in self._hooks.values():
             result = hook.after_agent(self, response_message)
@@ -270,7 +270,7 @@ class AsyncAgentMixin:
                 response_message = AgentMessage(sender=self.name, content=response_message)
             else:
                 response_message = AgentMessage.from_model_response(response_message, self.name)
-        self.memory and self.memory.add(message)
+        self.memory and self.memory.add(response_message)
         response_message = copy.deepcopy(response_message)
         for hook in self._hooks.values():
             result = hook.after_agent(self, response_message)
