@@ -12,16 +12,10 @@ from typing import Any, Dict, Optional
 
 from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
 
-from lagent.actions import AsyncActionExecutor, BaseAction, ActionExecutor
+from lagent.actions import ActionExecutor, AsyncActionExecutor, BaseAction
 from lagent.agents.agent import Agent, AsyncAgent
+from lagent.schema import ActionReturn, ActionStatusCode, ActionValidCode, AgentMessage, AgentStatusCode
 from lagent.skills.skills import BaseSkillsBackend, SkillsLoader
-from lagent.schema import (
-    ActionReturn,
-    ActionStatusCode,
-    ActionValidCode,
-    AgentMessage,
-    AgentStatusCode,
-)
 from lagent.utils import create_object
 
 
@@ -61,6 +55,7 @@ def get_tool_prompt(actions: list, exclude_arguments: list = None) -> str:
             tools.append(_convert_tool_schema(action_desc))
     return tools
 
+
 class AsyncPolicyAgent(AsyncAgent):
 
     async def forward(self, *message, **kwargs):
@@ -68,21 +63,18 @@ class AsyncPolicyAgent(AsyncAgent):
             self.memory, self.name, self.output_format, self.template
         )
         llm_response = await self.llm.chat(formatted_messages, tools=tools, **kwargs)
-        message = AgentMessage(
-            sender=self.name,
-            content=llm_response.get('content') or '',
-            tool_calls=llm_response.get('tool_calls') or [],
-            reasoning_content=llm_response.get('reasoning_content'),
-        )
-        return message
+        # message = AgentMessage(
+        #     sender=self.name,
+        #     content=llm_response.get('content') or '',
+        #     tool_calls=llm_response.get('tool_calls') or [],
+        #     reasoning_content=llm_response.get('reasoning_content'),
+        # )
+        # return message
+        return llm_response
 
 
 class AsyncEnvAgent(AsyncAgent):
-    def __init__(self,
-                 actions,
-                 skills: SkillsLoader=None,
-                 long_term_memory=None,
-                 **kwargs):
+    def __init__(self, actions, skills: SkillsLoader = None, long_term_memory=None, **kwargs):
         super().__init__(**kwargs)
         if isinstance(actions, ActionExecutor) or hasattr(actions, 'forward'):
             self.actions = actions
@@ -92,13 +84,7 @@ class AsyncEnvAgent(AsyncAgent):
         self.long_term_memory = create_object(long_term_memory)
 
     async def get_env_info(self) -> Dict[str, Any]:
-        env_info: Dict[str, Any] = {
-            'skills': '',
-            'active_skills': '',
-            'memory': '',
-            'tools': [],
-            'runtime': {}
-        }
+        env_info: Dict[str, Any] = {'skills': '', 'active_skills': '', 'memory': '', 'tools': [], 'runtime': {}}
 
         if self.skills is not None:
             env_info['skills'] = await self.skills.build_skills_summary()
@@ -144,7 +130,9 @@ class AsyncEnvAgent(AsyncAgent):
             tool_call = deepcopy(tool_call)
             try:
                 if tool_call['function']['name'].split('.', 1)[0] not in self.actions:
-                    return ActionReturn(valid=ActionValidCode.INVALID, errmsg=f"Tool {tool_call['function']['name']} Not Found")
+                    return ActionReturn(
+                        valid=ActionValidCode.INVALID, errmsg=f"Tool {tool_call['function']['name']} Not Found"
+                    )
                 if isinstance(tool_call['function']['arguments'], str):
                     tool_call['function']['arguments'] = json.loads(tool_call['function']['arguments'])
             except Exception as e:
@@ -152,7 +140,10 @@ class AsyncEnvAgent(AsyncAgent):
             tool_response: ActionReturn = (
                 await self.actions(
                     AgentMessage(
-                        sender='assistant', content=dict(name=tool_call['function']['name'], parameters=tool_call['function']['arguments'])
+                        sender='assistant',
+                        content=dict(
+                            name=tool_call['function']['name'], parameters=tool_call['function']['arguments']
+                        ),
                     ),
                 )
             ).content
@@ -191,14 +182,16 @@ class AsyncEnvAgent(AsyncAgent):
 
 
 class InternClawAgent(AsyncAgent):
-    def __init__(self,
-                 policy_agent: Dict,
-                 env_agent: Dict,
-                 compact_agent: Dict = None,
-                 consolidate_agent: Dict = None,
-                 max_turn: int = 500,
-                 finish_condition: Optional[callable] = lambda m, _: m and not m.tool_calls,
-                 **kwargs):
+    def __init__(
+        self,
+        policy_agent: Dict,
+        env_agent: Dict,
+        compact_agent: Dict = None,
+        consolidate_agent: Dict = None,
+        max_turn: int = 500,
+        finish_condition: Optional[callable] = lambda m, _: m and not m.tool_calls,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.policy_agent = create_object(policy_agent)
         self.env_agent = create_object(env_agent)
@@ -212,10 +205,9 @@ class InternClawAgent(AsyncAgent):
         current_turn = 0
         env_message = await self.env_agent(env_message, **kwargs)
 
-        while not (
-            self.finish_condition is not None
-            and self.finish_condition(selection_message, env_message)
-        ) and (self.max_turn is None or current_turn < self.max_turn):
+        while not (self.finish_condition is not None and self.finish_condition(selection_message, env_message)) and (
+            self.max_turn is None or current_turn < self.max_turn
+        ):
             selection_message = await self.policy_agent(env_message, **kwargs)
 
             # ── Orchestrator manages memory ──
@@ -228,7 +220,9 @@ class InternClawAgent(AsyncAgent):
         return AgentMessage(sender=self.name, content="Finished", finish_reason='stop')
 
     async def _maybe_manage_memory(
-        self, policy_message: AgentMessage, env_message: AgentMessage,
+        self,
+        policy_message: AgentMessage,
+        env_message: AgentMessage,
     ) -> None:
         """Orchestrate compact and consolidate.
 
@@ -244,11 +238,14 @@ class InternClawAgent(AsyncAgent):
 
         # Get formatted context from policy's aggregator
         formatted_messages, tools = self.policy_agent.aggregator.aggregate(
-            self.policy_agent.memory, self.policy_agent.name,
-            self.policy_agent.output_format, self.policy_agent.template,
+            self.policy_agent.memory,
+            self.policy_agent.name,
+            self.policy_agent.output_format,
+            self.policy_agent.template,
         )
 
         from lagent.agents.compact_agent import estimate_token_count
+
         compact_input = AgentMessage(
             sender=self.name,
             content=formatted_messages,
@@ -259,6 +256,7 @@ class InternClawAgent(AsyncAgent):
             return
 
         import logging
+
         _logger = logging.getLogger("lagent.agents.internclaw")
 
         # 1. Consolidate first (preserve info before compacting)
@@ -278,33 +276,33 @@ class InternClawAgent(AsyncAgent):
                 if env_message.env_info is None:
                     env_message.env_info = {}
                 env_message.env_info['conversation_summary'] = summary_msg.content
-                env_message.env_info['compact_boundary'] = len(
-                    self.policy_agent.memory.memory
-                )
+                env_message.env_info['compact_boundary'] = len(self.policy_agent.memory.memory)
                 _logger.info("Compact summary injected (%d chars)", len(summary_msg.content))
         except Exception:
             _logger.exception("Compact failed")
+
 
 if __name__ == "__main__":
     import asyncio
     import os
     from pathlib import Path
 
+    from lagent.actions.filesystem import EditFileAction, ReadFileAction, WriteFileAction
+    from lagent.actions.save_memory import AsyncSaveMemoryAction
+    from lagent.actions.shell import ShellAction
+    from lagent.agents.aggregator.compact_aggregator import CompactAggregator
     from lagent.agents.aggregator.context import InternClawContextBuilder
     from lagent.agents.compact_agent import AsyncCompactAgent
-    from lagent.actions.filesystem import ReadFileAction, WriteFileAction, EditFileAction
-    from lagent.actions.shell import ShellAction
-    from lagent.actions.save_memory import AsyncSaveMemoryAction
-    from lagent.memory.openclaw_provider import OpenClawMemoryProvider
     from lagent.hooks.logger import MessageLogger
     from lagent.llms.model import AsyncAPIClient, ModelConfig, SampleParameters
-    from lagent.agents.aggregator.compact_aggregator import CompactAggregator
+    from lagent.memory.openclaw_provider import OpenClawMemoryProvider
+
     # ── Model config ──
     model_name = "Pro/moonshotai/Kimi-K2.5"
     api_base = "http://35.220.164.252:3888/v1"
-    api_key = "" 
+    api_key = ""
     proxy = "http://100.100.72.89:8899"
-    
+
     model_name = "/mnt/shared-storage-user/llmit1/user/liujiangning/exp/s2_preview/agent_rl/s2-preview-thinker_sft_0228b_rl0312rc1_fix_klmismatch/20260331212858/hf-15"
     api_base = "http://10.102.252.171:23333/v1"
     api_key = "sk-admin"
@@ -315,7 +313,7 @@ if __name__ == "__main__":
         timeout=600,
         max_retry=500,
         sleep_interval=5,
-        extra_body=dict(spaces_between_special_tokens=False)
+        extra_body=dict(spaces_between_special_tokens=False),
     )
 
     workspace = Path("/mnt/shared-storage-user/llmit/user/liukuikun/workspace/lagent/workspace")
@@ -373,7 +371,7 @@ if __name__ == "__main__":
             llm=model,
             template=CONSOLIDATION_PROMPT,
             hooks=[logger_hook],
-            aggregator=CompactAggregator()
+            aggregator=CompactAggregator(),
         )
         consolidate_env = AsyncEnvAgent(
             actions=[AsyncSaveMemoryAction(workspace)],
@@ -433,9 +431,13 @@ if __name__ == "__main__":
                 continue
             if user_input.lower() in ('compact', 'consolidate'):
                 from lagent.agents.compact_agent import estimate_token_count
+
                 # Get formatted context from policy
                 formatted_messages, tools = policy.aggregator.aggregate(
-                    policy.memory, policy.name, policy.output_format, policy.template,
+                    policy.memory,
+                    policy.name,
+                    policy.output_format,
+                    policy.template,
                 )
                 token_count = estimate_token_count(formatted_messages, tools)
                 print(f"\n  Session: {len(policy.memory.memory)} messages, ~{token_count} tokens")
