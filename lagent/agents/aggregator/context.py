@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from lagent.agents.aggregator import DefaultAggregator
-
 from lagent.schema import ActionReturn
+
 
 class InternClawContextBuilder:
     """Builds the context (system prompt + messages) for the agent."""
@@ -21,7 +21,7 @@ class InternClawContextBuilder:
     def __init__(self, workspace: Path, tools: List[Dict] = None):
         self.workspace = Path(workspace)
         self.tools = tools or []  # List of available tools, can be populated from skills or elsewhere
-        
+
     def build_system_prompt(self, env_info: Dict[str, Any] = None) -> str:
         """Build the system prompt from identity, bootstrap files, memory, and skills."""
         parts = [self._get_identity(env_info)]
@@ -32,7 +32,12 @@ class InternClawContextBuilder:
 
         if env_info:
             memory_info = env_info.get("memory")
-            if memory_info and isinstance(memory_info, dict) and memory_info.get("available") and memory_info.get("long_term"):
+            if (
+                memory_info
+                and isinstance(memory_info, dict)
+                and memory_info.get("available")
+                and memory_info.get("long_term")
+            ):
                 parts.append(f"# Memory\n\n{memory_info['long_term']}")
 
             active_skills = env_info.get("active_skills")
@@ -41,12 +46,14 @@ class InternClawContextBuilder:
 
             skills_summary = env_info.get("skills")
             if skills_summary:
-                parts.append(f"""# Skills
+                parts.append(
+                    f"""# Skills
 
 The following skills extend your capabilities. To use a skill, read its SKILL.md file using the read_file tool.
 Skills with available="false" need dependencies installed first - you can try installing them with apt/brew.
 
-{skills_summary}""")
+{skills_summary}"""
+                )
 
         parts.append(self._build_runtime_context(None, None))
 
@@ -107,16 +114,12 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
 
         return "\n\n".join(parts) if parts else ""
 
-    def aggregate(self,
-                  messages,
-                  name: str,
-                  parser = None,
-                  system_instruction: str = None,
-                  tools: List[Dict]= None
-                  ) -> List[Dict[str, str]]:
+    def aggregate(
+        self, messages, name: str, parser=None, system_instruction: str = None, tools: List[Dict] = None
+    ) -> List[Dict[str, str]]:
         """Aggregate messages into a format suitable for the agent."""
         messages_list = messages.get_memory()
-        
+
         # Find the latest env_info
         latest_env_info = None
         for message in messages_list:
@@ -135,14 +138,16 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
             compact_boundary = latest_env_info.get("compact_boundary")
 
         if compact_summary and compact_boundary is not None:
-            _message.append(dict(
-                role='user',
-                content=(
-                    f"[Conversation Summary — the following is a summary "
-                    f"of the conversation up to this point]\n\n"
-                    f"{compact_summary}"
-                ),
-            ))
+            _message.append(
+                dict(
+                    role='user',
+                    content=(
+                        f"[Conversation Summary — the following is a summary "
+                        f"of the conversation up to this point]\n\n"
+                        f"{compact_summary}"
+                    ),
+                )
+            )
             # Only process messages AFTER the boundary index
             messages_to_process = messages_list[compact_boundary:]
         else:
@@ -150,14 +155,15 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
 
         for message in messages_to_process:
             if message.sender == name:
-                msg = {'role': 'assistant', 'content': message.content or ''}
+                # msg = {'role': 'assistant', 'content': message.content or ''}
+                msg = message.to_model_request()
                 if message.tool_calls:
-                    msg['tool_calls'] = message.tool_calls
+                    # msg['tool_calls'] = message.tool_calls
                     # When tool_calls are present, content should be None or empty for some APIs
                     if not message.content:
                         msg['content'] = None
-                if message.reasoning_content:
-                    msg['reasoning_content'] = message.reasoning_content
+                # if message.reasoning_content:
+                # msg['reasoning_content'] = message.reasoning_content
                 _message.append(msg)
             else:
                 user_message = message.content
@@ -179,11 +185,11 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
                         _message[-1]['content'] += user_message
                     else:
                         _message.append(dict(role='user', content=user_message))
-        
+
         tools_to_use = tools or self.tools
         if latest_env_info and latest_env_info.get("tools"):
             tools_to_use = latest_env_info.get("tools")
-            
+
         return _message, tools_to_use
 
 
@@ -191,11 +197,14 @@ if __name__ == "__main__":
     # Example usage
     from lagent.memory import Memory
     from lagent.schema import AgentMessage
-    builder = InternClawContextBuilder(Path("/mnt/shared-storage-user/llmit/user/liukuikun/workspace/lagent/workspace"))
+
+    builder = InternClawContextBuilder(
+        Path("/mnt/shared-storage-user/llmit/user/liukuikun/workspace/lagent/workspace")
+    )
     env_info = {
         "skills": "<skills><skill><name>weather</name></skill></skills>",
         "active_skills": "weather skill content",
-        "memory": {"available": True, "long_term": "It's always sunny in Philadelphia."}
+        "memory": {"available": True, "long_term": "It's always sunny in Philadelphia."},
     }
     system_prompt = builder.build_system_prompt(env_info=env_info)
     print(system_prompt)
