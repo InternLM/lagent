@@ -168,26 +168,27 @@ class Agent:
                 for agent in getattr(self, '_agents', {}).values():
                     agent.reset(recursive=True)
 
-    def get_messages(self, keypath: Optional[str] = None) -> List[dict]:
-        """Get OpenAI format messages from memory.
+    def get_messages(self, prefix='', destination=None) -> Dict[str, List[dict]]:
+        """Get OpenAI format messages from all agents recursively, similar to state_dict.
 
         Args:
-            keypath (Optional[str]): The keypath of the sub-agent to get messages from. Default is None.
+            prefix (str): The prefix to prepend to the key. Default is ''.
+            destination (Optional[Dict]): The destination dict to store the messages. Default is None.
 
         Returns:
-            List[dict]: The messages from the memory including the sub-agent's system prompt.
+            Dict[str, List[dict]]: A dict mapping agent keypaths to their OpenAI format message lists.
         """
-        if keypath:
-            keys, agent = keypath.split('.'), self
-            for key in keys:
-                agents = getattr(agent, '_agents', {})
-                if key not in agents:
-                    raise KeyError(f'No sub-agent named {key} in {agent}')
-                agent = agents[key]
-            return agent.get_messages()
+        if destination is None:
+            destination = {}
         if self.aggregator:
-            return self.aggregator.aggregate(self.memory, self.name, self.output_format, self.template)
-        raise ValueError(f'{self.name} has no aggregator to get messages')
+            messages = self.aggregator.aggregate(self.memory, self.name, self.output_format, self.template)
+            if isinstance(messages, tuple):
+                messages, _ = messages
+            destination[prefix + 'messages'] = messages
+        for name, agent in getattr(self, '_agents', {}).items():
+            if isinstance(agent, Agent):
+                agent.get_messages(destination=destination, prefix=prefix + name + '.')
+        return destination
 
     def _scroll_buffer(self, message, hash_func=lambda m: m.uid):
         if not self.memory:

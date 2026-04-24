@@ -28,7 +28,6 @@ Usage::
 """
 
 from __future__ import annotations
-
 import argparse
 import asyncio
 import inspect
@@ -96,9 +95,7 @@ class BaseDaemon:
         """Start listening. Removes stale socket file if present."""
         if os.path.exists(self.sock_path):
             os.unlink(self.sock_path)
-        self._server = await asyncio.start_unix_server(
-            self._handle_client, path=self.sock_path
-        )
+        self._server = await asyncio.start_unix_server(self._handle_client, path=self.sock_path)
         os.chmod(self.sock_path, 0o777)
         logger.info("%s listening on %s", self.__class__.__name__, self.sock_path)
         await self._server.serve_forever()
@@ -139,10 +136,12 @@ class BaseDaemon:
         if cmd == "ping":
             return {"status": "ok", "type": self.daemon_type}
         if cmd == "shutdown":
+
             async def _delayed_close():
                 await asyncio.sleep(0.1)
                 if self._server:
                     self._server.close()
+
             asyncio.create_task(_delayed_close())
             return {"status": "shutting_down"}
         return {"error": f"Unknown command: {cmd}"}
@@ -197,18 +196,22 @@ class ActionDaemon(BaseDaemon):
         name = request.get("name")
         parameters = request.get("parameters", {})
         if not name:
-            return dataclass2dict(ActionReturn(
-                errmsg="Missing 'name' in request",
-                state=ActionStatusCode.ARGS_ERROR,
-            ))
+            return dataclass2dict(
+                ActionReturn(
+                    errmsg="Missing 'name' in request",
+                    state=ActionStatusCode.ARGS_ERROR,
+                )
+            )
 
         try:
             action_return = await self.executor.forward(name, parameters)
         except Exception as e:
             logger.exception("Action %s failed", name)
             action_return = ActionReturn(
-                args=parameters, type=name,
-                errmsg=str(e), state=ActionStatusCode.API_ERROR,
+                args=parameters,
+                type=name,
+                errmsg=str(e),
+                state=ActionStatusCode.API_ERROR,
             )
         return dataclass2dict(action_return)
 
@@ -349,6 +352,12 @@ class AgentDaemon(BaseDaemon):
             except Exception as e:
                 return {"error": str(e)}
 
+        if cmd == 'get_messages':
+            try:
+                return self.agent.get_messages()
+            except Exception as e:
+                return {"error": str(e)}
+
         return {"error": f"Unknown command: {cmd}"}
 
     @staticmethod
@@ -404,11 +413,14 @@ def main():
     # -- start --
     p_start = sub.add_parser("start", help="Start the daemon")
     p_start.add_argument(
-        "--sock", default="/tmp/lagent_action.sock",
+        "--sock",
+        default="/tmp/lagent_action.sock",
         help="Unix socket path",
     )
     p_start.add_argument(
-        "--mode", choices=["actions", "agent"], default="actions",
+        "--mode",
+        choices=["actions", "agent"],
+        default="actions",
         help="'actions' for Level 1 (ActionDaemon), 'agent' for Level 2 (AgentDaemon)",
     )
     p_start.add_argument(
