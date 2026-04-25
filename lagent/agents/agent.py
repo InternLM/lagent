@@ -183,8 +183,9 @@ class Agent:
         if self.aggregator:
             messages = self.aggregator.aggregate(self.memory, self.name, self.output_format, self.template)
             if isinstance(messages, tuple):
-                messages, _ = messages
+                messages, tools = messages
             destination[prefix + 'messages'] = messages
+            destination[prefix + 'tools'] = tools
         for name, agent in getattr(self, '_agents', {}).items():
             if isinstance(agent, Agent):
                 agent.get_messages(destination=destination, prefix=prefix + name + '.')

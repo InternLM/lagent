@@ -128,15 +128,24 @@ class AsyncEnvAgent(AsyncAgent):
         )
         async def _inner_func(tool_call):
             tool_call = deepcopy(tool_call)
+            tool_name = tool_call['function'].get('name')
             try:
-                if tool_call['function']['name'].split('.', 1)[0] not in self.actions:
+                if tool_name.split('.', 1)[0] not in self.actions:
                     return ActionReturn(
-                        valid=ActionValidCode.INVALID, errmsg=f"Tool {tool_call['function']['name']} Not Found"
+                        type=tool_name,
+                        args=tool_call['function'].get('arguments'),
+                        valid=ActionValidCode.INVALID,
+                        errmsg=f"Tool {tool_name} Not Found",
                     )
                 if isinstance(tool_call['function']['arguments'], str):
                     tool_call['function']['arguments'] = json.loads(tool_call['function']['arguments'])
             except Exception as e:
-                return ActionReturn(valid=ActionValidCode.INVALID, errmsg=str(e))
+                return ActionReturn(
+                    type=tool_name,
+                    args=tool_call['function'].get('arguments'),
+                    valid=ActionValidCode.INVALID,
+                    errmsg=str(e),
+                )
             tool_response: ActionReturn = (
                 await self.actions(
                     AgentMessage(
@@ -151,30 +160,29 @@ class AsyncEnvAgent(AsyncAgent):
 
         tasks = [_inner_func(tool_call) for tool_call in message.tool_calls]
         responses = await asyncio.gather(*tasks)
-        for i, resp in enumerate(responses):
-            if resp.valid != ActionValidCode.OPEN:
-                return AgentMessage(
-                    sender=self.name,
-                    content=f'Tool Call Error: {resp.errmsg} in tool call '
-                    f'{json.dumps(message.tool_calls[i], ensure_ascii=False)}',
-                )
-            if resp.state != ActionStatusCode.SUCCESS:
-                return AgentMessage(
-                    sender=self.name,
-                    content=f'Tool Call Error: {resp.errmsg} in tool call '
-                    f'{json.dumps(message.tool_calls[i], ensure_ascii=False)}',
-                    reward=-1 if resp.state == ActionStatusCode.ARGS_ERROR else 0,
-                )
         # Pair each ActionReturn with its tool_call_id for proper LLM API formatting
         tool_results = []
-        for tc, r in zip(message.tool_calls, responses):
-            result_dict = asdict(r)
+        reward = 0.0
+        for tc, resp in zip(message.tool_calls, responses):
+            result_dict = asdict(resp)
             result_dict['tool_call_id'] = tc.get('id', '')
+            if resp.valid != ActionValidCode.OPEN:
+                result_dict['errmsg'] = (
+                    f'Tool Call Error: {resp.errmsg} in tool call '
+                    f'{json.dumps(tc, ensure_ascii=False)}'
+                )
+            elif resp.state != ActionStatusCode.SUCCESS:
+                result_dict['errmsg'] = (
+                    f'Tool Call Error: {resp.errmsg} in tool call '
+                    f'{json.dumps(tc, ensure_ascii=False)}'
+                )
+                if resp.state == ActionStatusCode.ARGS_ERROR:
+                    reward = -1
             tool_results.append(result_dict)
         return_message = AgentMessage(
             sender=self.name,
             content=tool_results,
-            reward=0.0,
+            reward=reward,
             env_info=await self.get_env_info(),
         )
 

@@ -9,7 +9,7 @@ import sys
 import time
 from functools import partial
 from logging.handlers import RotatingFileHandler
-from typing import Any, Dict, Generator, Iterable, List, Optional, Union, cast
+from typing import Any, Dict, Generator, Iterable, List, Optional, Union
 
 
 def load_class_from_string(class_path: str, path=None):
@@ -29,29 +29,34 @@ def load_class_from_string(class_path: str, path=None):
             sys.path.remove(path)
 
 
+def _is_ray_actor_class(obj_type) -> bool:
+    try:
+        from ray.actor import ActorClass
+    except ImportError:
+        return False
+    return isinstance(obj_type, ActorClass)
+
+
 def create_object(config: Union[Dict, Any] = None):
     """Create an instance based on the configuration where 'type' is a
     preserved key to indicate the class (path). When accepting non-dictionary
     input, the function degenerates to an identity.
     """
-    from ray.actor import ActorClass
-
     if config is None or not isinstance(config, dict):
         return config
-    assert isinstance(config, dict) and 'type' in config
+    assert 'type' in config
 
     config = config.copy()
     obj_type = config.pop('type')
     if isinstance(obj_type, str):
         obj_type = load_class_from_string(obj_type)
-    if isinstance(obj_type, ActorClass):
-        obj = cast(ActorClass, obj_type).remote(**config)
-    elif inspect.isclass(obj_type):
-        obj = obj_type(**config)
-    else:
-        assert callable(obj_type)
-        obj = partial(obj_type, **config)
-    return obj
+
+    if _is_ray_actor_class(obj_type):
+        return obj_type.remote(**config)
+    if inspect.isclass(obj_type):
+        return obj_type(**config)
+    assert callable(obj_type)
+    return partial(obj_type, **config)
 
 
 async def async_as_completed(futures: Iterable[asyncio.Future]):
