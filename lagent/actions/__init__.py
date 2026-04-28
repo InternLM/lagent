@@ -19,6 +19,7 @@ from .send_message import SendMessageAction, AsyncSendMessageAction
 from .external_agent import ExternalAgentAction
 from .sandbox_executor import SandboxActionExecutor
 from .hybrid_executor import HybridActionExecutor
+from .tmux_action import TerminalExecute, TmuxSession
 __all__ = [
     'BaseAction',
     'ActionExecutor',
@@ -60,4 +61,6 @@ __all__ = [
     'ExternalAgentAction',
     'SandboxActionExecutor',
     'HybridActionExecutor',
+    'TmuxSession',
+    'TerminalExecute'
 ]
