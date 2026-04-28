@@ -16,17 +16,14 @@ inside the lagent-daemon sandbox where tmux is already installed.
 """
 
 from __future__ import annotations
-
 import asyncio
 import re
 import shlex
 import subprocess
 import time
 
-
 from lagent.actions.base_action import AsyncActionMixin, BaseAction, tool_api
 from lagent.schema import ActionReturn, ActionStatusCode
-
 
 _ENTER_KEYS = {"Enter", "C-m", "KPEnter", "C-j", "^M", "^J"}
 _ENDS_WITH_NEWLINE_PATTERN = r"[\r\n]$"
@@ -38,9 +35,7 @@ _TMUX_SEND_KEYS_MAX_COMMAND_LENGTH = 16_000
 
 _OUTPUT_BYTE_LIMIT = 10_000
 _DEFAULT_DURATION_CAP_SEC = 60.0
-_TIMEOUT_TEMPLATE = (
-    "Command '{command}' timed out after {timeout_sec}s.\n\n{terminal_state}"
-)
+_TIMEOUT_TEMPLATE = "Command '{command}' timed out after {timeout_sec}s.\n\n{terminal_state}"
 
 
 class TmuxSession:
@@ -78,9 +73,7 @@ class TmuxSession:
         self._start()
 
     def _start(self) -> None:
-        env_opts = "".join(
-            f"-e {shlex.quote(f'{k}={v}')} " for k, v in self._extra_env.items()
-        )
+        env_opts = "".join(f"-e {shlex.quote(f'{k}={v}')} " for k, v in self._extra_env.items())
         start_cmd = (
             f"export TERM=xterm-256color && export SHELL=/bin/bash && "
             f"tmux new-session {env_opts}-x {self._pane_width} "
@@ -88,14 +81,18 @@ class TmuxSession:
             f"-s {shlex.quote(self._session_name)} 'bash --login'"
         )
         result = subprocess.run(
-            start_cmd, shell=True, cwd=self._working_dir,
-            capture_output=True, text=True,
+            start_cmd,
+            shell=True,
+            cwd=self._working_dir,
+            capture_output=True,
+            text=True,
         )
-        if result.returncode != 0:
+        if result.returncode != 0 and result.stderr != 'duplicate session: terminus2\n':
             raise RuntimeError(f"Failed to start tmux session: {result.stderr!r}")
         subprocess.run(
             f"tmux set-option -g history-limit {self._history_limit}",
-            shell=True, capture_output=True,
+            shell=True,
+            capture_output=True,
         )
 
     async def is_session_alive(self) -> bool:
@@ -169,9 +166,7 @@ class TmuxSession:
             stderr_b.decode("utf-8", errors="replace"),
         )
 
-    def _prepare_keys(
-        self, keys: str | list[str], block: bool
-    ) -> tuple[list[str], bool]:
+    def _prepare_keys(self, keys: str | list[str], block: bool) -> tuple[list[str], bool]:
         if isinstance(keys, str):
             keys = [keys]
         if not block or not keys or not self._is_executing_command(keys[-1]):
@@ -307,10 +302,7 @@ def _limit_output(text: str, max_bytes: int = _OUTPUT_BYTE_LIMIT) -> str:
     head = data[:half].decode("utf-8", errors="ignore")
     tail = data[-half:].decode("utf-8", errors="ignore")
     omitted = len(data) - len(head.encode("utf-8")) - len(tail.encode("utf-8"))
-    return (
-        f"{head}\n[... output limited to {max_bytes} bytes; "
-        f"{omitted} interior bytes omitted ...]\n{tail}"
-    )
+    return f"{head}\n[... output limited to {max_bytes} bytes; " f"{omitted} interior bytes omitted ...]\n{tail}"
 
 
 class TerminalExecute(AsyncActionMixin, BaseAction):
@@ -395,20 +387,24 @@ class TerminalExecute(AsyncActionMixin, BaseAction):
 
             try:
                 await self._session.send_keys(
-                    keystrokes, block=False, min_timeout_sec=duration,
+                    keystrokes,
+                    block=False,
+                    min_timeout_sec=duration,
                 )
             except TimeoutError:
                 terminal_state = _limit_output(await self._session.get_incremental_output())
                 return ActionReturn(
                     type=self.name,
-                    result=[{
-                        "type": "text",
-                        "content": _TIMEOUT_TEMPLATE.format(
-                            command=keystrokes,
-                            timeout_sec=duration,
-                            terminal_state=terminal_state,
-                        ),
-                    }],
+                    result=[
+                        {
+                            "type": "text",
+                            "content": _TIMEOUT_TEMPLATE.format(
+                                command=keystrokes,
+                                timeout_sec=duration,
+                                terminal_state=terminal_state,
+                            ),
+                        }
+                    ],
                     state=ActionStatusCode.SUCCESS,
                 )
 
