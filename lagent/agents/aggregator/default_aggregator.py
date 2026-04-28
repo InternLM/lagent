@@ -7,13 +7,14 @@ from lagent.schema import ActionReturn
 
 class DefaultAggregator:
 
-    def aggregate(self,
-                  messages: Memory,
-                  name: str,
-                  parser: StrParser = None,
-                  system_instruction: str = None,
-                  tools: List[Dict] = None,
-                  ) -> Tuple[List[Dict[str, str]], Optional[List[Dict]]]:
+    def aggregate(
+        self,
+        messages: Memory,
+        name: str,
+        parser: StrParser = None,
+        system_instruction: str = None,
+        tools: List[Dict] = None,
+    ) -> Tuple[List[Dict[str, str]], Optional[List[Dict]]]:
         _message = []
         messages = messages.get_memory()
         if system_instruction:
@@ -38,12 +39,17 @@ class DefaultAggregator:
                             )
                         )
                 else:
-                    if len(_message) > 0 and _message[-1]['role'] == 'user':
+                    if (
+                        len(_message) > 0
+                        and _message[-1]['role'] == 'user'
+                        and isinstance(_message[-1]['content'], str)
+                        and isinstance(user_message, str)
+                    ):
                         _message[-1]['content'] += user_message
                         _message[-1]['extra_info'] = extra_info
                     else:
                         _message.append(dict(role='user', content=user_message, extra_info=extra_info))
-                        
+
         latest_env_info = None
         for message in messages:
             if getattr(message, 'env_info', None) is not None:
@@ -52,7 +58,7 @@ class DefaultAggregator:
         tools_to_use = tools
         if latest_env_info and latest_env_info.get("tools"):
             tools_to_use = latest_env_info.get("tools")
-            
+
         return _message, tools_to_use
 
     @staticmethod
