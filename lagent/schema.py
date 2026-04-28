@@ -91,15 +91,15 @@ class AgentStatusCode(IntEnum):
 
 class AgentMessage(BaseModel):
     content: Any
+    sender: str = 'user'
     thinking: Optional[str] = None
     content_ids: Optional[List[int]] = Field(default=None, repr=False)
     content_logprobs: Optional[List[float]] = Field(default=None, repr=False)
     thinking_ids: Optional[List[int]] = Field(default=None, repr=False)
     thinking_logprobs: Optional[List[float]] = Field(default=None, repr=False)
-    raw_content: Optional[str] = None
+    raw_content: Optional[str] = Field(default=None, repr=False)
     raw_content_ids: Optional[List[int]] = Field(default=None, repr=False)
     raw_content_logprobs: Optional[List[float]] = Field(default=None, repr=False)
-    sender: str = 'user'
     tool_calls: Optional[List[dict]] = None
     tool_calls_ids: Optional[List[str]] = None
     formatted: Optional[Any] = None
@@ -115,71 +115,37 @@ class AgentMessage(BaseModel):
     @classmethod
     def from_model_response(cls, response: Union[ChatCompletion, dict], sender: str) -> "AgentMessage":
         """Convert model response (ChatCompletion object or model_dump dict) to AgentMessage."""
-        if isinstance(response, dict):
-            choice = response['choices'][0]
-            msg = choice['message']
-            finish_reason = choice.get('finish_reason')
-            # tool_calls_raw = msg.get('tool_calls')  # list of dicts or None
-            return cls(
-                sender=sender,
-                content=msg.get('content') or "",
-                thinking=msg.get('reasoning_content'),
-                raw_content=msg.get('raw_content'),
-                content_ids=msg.get('content_ids'),
-                content_logprobs=msg.get('content_logprobs'),
-                thinking_ids=msg.get('reasoning_content_ids'),
-                thinking_logprobs=msg.get('reasoning_content_logprobs'),
-                raw_content_ids=msg.get('raw_content_ids'),
-                raw_content_logprobs=msg.get('raw_content_logprobs'),
-                extra_info=msg.get('extra_info') or {},
-                tool_calls=msg.get('tool_calls'),
-                # tool_calls=[tc['function'] for tc in tool_calls_raw] if tool_calls_raw else None,
-                # tool_calls_ids=[tc['id'] for tc in tool_calls_raw] if tool_calls_raw else None,
-                stream_state=(
-                    ModelStatusCode.SESSION_OUT_OF_LIMIT if finish_reason == 'length' else ModelStatusCode.END
-                ),
-                finish_reason=finish_reason,
-            )
-        # ChatCompletion object (or subclass)
-        chat_message = response.choices[0].message
-        tool_calls = chat_message.tool_calls and [tool_call.model_dump() for tool_call in chat_message.tool_calls]
+        if not isinstance(response, dict):
+            response = response.model_dump()
+
+        choice = response['choices'][0]
+        msg = choice['message']
+        finish_reason = choice.get('finish_reason')
         return cls(
             sender=sender,
-            content=chat_message.content or "",
-            thinking=getattr(chat_message, 'reasoning_content', None),
-            raw_content=getattr(chat_message, 'raw_content', None),
-            content_ids=getattr(chat_message, 'content_ids', None),
-            content_logprobs=getattr(chat_message, 'content_logprobs', None),
-            thinking_ids=getattr(chat_message, 'reasoning_content_ids', None),
-            thinking_logprobs=getattr(chat_message, 'reasoning_content_logprobs', None),
-            raw_content_ids=getattr(chat_message, 'raw_content_ids', None),
-            raw_content_logprobs=getattr(chat_message, 'raw_content_logprobs', None),
-            extra_info=getattr(chat_message, 'extra_info', {}) or {},
-            tool_calls=tool_calls,
-            # tool_calls=[tool_call['function'] for tool_call in tool_calls] if tool_calls else None,
-            # tool_calls_ids=[tool_call['id'] for tool_call in tool_calls] if tool_calls else None,
-            stream_state=(
-                ModelStatusCode.SESSION_OUT_OF_LIMIT
-                if response.choices[0].finish_reason == 'length'
-                else ModelStatusCode.END
-            ),
-            finish_reason=response.choices[0].finish_reason,
+            content=msg.get('content') or "",
+            thinking=msg.get('reasoning_content'),
+            raw_content=msg.get('raw_content'),
+            content_ids=msg.get('content_ids'),
+            content_logprobs=msg.get('content_logprobs'),
+            thinking_ids=msg.get('reasoning_content_ids'),
+            thinking_logprobs=msg.get('reasoning_content_logprobs'),
+            raw_content_ids=msg.get('raw_content_ids'),
+            raw_content_logprobs=msg.get('raw_content_logprobs'),
+            extra_info=msg.get('extra_info') or {},
+            tool_calls=msg.get('tool_calls'),
+            stream_state=(ModelStatusCode.SESSION_OUT_OF_LIMIT if finish_reason == 'length' else ModelStatusCode.END),
+            finish_reason=finish_reason,
         )
 
     def to_model_request(self, role: str = 'assistant') -> dict:
         """Convert AgentMessage to model request dict."""
         msg = {'role': role, 'content': self.content}
-        # tool_calls = [
-        #     {'id': tool_call_id, 'function': tool_call, 'type': 'function'}
-        #     for tool_call, tool_call_id in zip(self.tool_calls or [], self.tool_calls_ids or [])
-        # ]
-        # if tool_calls:
-        #     msg['tool_calls'] = tool_calls
         for key in [
             'tool_calls',
-            'raw_content',
             'content_ids',
             'content_logprobs',
+            'raw_content',
             'raw_content_ids',
             'raw_content_logprobs',
             'extra_info',

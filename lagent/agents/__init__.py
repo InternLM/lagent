@@ -11,11 +11,7 @@ from .agent import (
     StreamingSequential,
 )
 from .compact_agent import AsyncCompactAgent, estimate_token_count
-from .internclaw_agent import (
-    AsyncEnvAgent,
-    AsyncPolicyAgent,
-    InternClawAgent,
-)
+from .internclaw_agent import AsyncEnvAgent, InternClawAgent
 
 __all__ = [
     'Agent',
@@ -31,6 +27,5 @@ __all__ = [
     'AsyncCompactAgent',
     'estimate_token_count',
     'AsyncEnvAgent',
-    'AsyncPolicyAgent',
     'InternClawAgent',
 ]

@@ -4,10 +4,11 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-from lagent.agents.internclaw_agent import AsyncEnvAgent, AsyncPolicyAgent, InternClawAgent
+from lagent.agents import AsyncAgent
 from lagent.agents.compact_agent import AsyncCompactAgent
-from lagent.memory.openclaw_provider import OpenClawMemoryProvider
+from lagent.agents.internclaw_agent import AsyncEnvAgent, InternClawAgent
 from lagent.memory.claude_code_provider import ClaudeCodeMemoryProvider
+from lagent.memory.openclaw_provider import OpenClawMemoryProvider
 
 
 class MockLLM:
@@ -18,7 +19,7 @@ class MockLLM:
 async def test_internclaw_with_compact():
     llm = MockLLM()
     agent = InternClawAgent(
-        policy_agent=AsyncPolicyAgent(llm=llm),
+        policy_agent=AsyncAgent(llm=llm),
         env_agent=AsyncEnvAgent(actions=[]),
         compact_agent=AsyncCompactAgent(llm=llm),
         consolidate_agent=None,
@@ -32,7 +33,7 @@ async def test_internclaw_without_compact():
     """Claude Code style — no compact, no consolidate."""
     llm = MockLLM()
     agent = InternClawAgent(
-        policy_agent=AsyncPolicyAgent(llm=llm),
+        policy_agent=AsyncAgent(llm=llm),
         env_agent=AsyncEnvAgent(actions=[]),
         max_turn=10,
     )

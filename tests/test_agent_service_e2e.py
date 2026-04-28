@@ -29,36 +29,26 @@ Usage::
 """
 
 from __future__ import annotations
-
 import argparse
 import asyncio
 import json
 import logging
-import sys
 import os
-from pathlib import Path
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 # Ensure lagent is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from lagent.agents.agent import AsyncAgent
-from lagent.services.agent_loader import AgentSpec
-from lagent.services.agent import (
-    AgentEntry,
-    AgentService,
-    AgentStatus,
-)
+from lagent.actions.compact import COMPACT_PROMPT, AsyncCompactAction, CompactAction, estimate_token_count
 from lagent.actions.subagent import AgentAction, AsyncAgentAction
-from lagent.actions.compact import (
-    AsyncCompactAction,
-    CompactAction,
-    estimate_token_count,
-    COMPACT_PROMPT,
-)
+from lagent.agents.agent import AsyncAgent
 from lagent.memory.memory import BaseMemoryStore, ClaudeCodeMemory
 from lagent.schema import ActionReturn, ActionStatusCode, AgentMessage
+from lagent.services.agent import AgentEntry, AgentService, AgentStatus
+from lagent.services.agent_loader import AgentSpec
 
 logging.basicConfig(
     level=logging.INFO,
@@ -70,6 +60,7 @@ logger = logging.getLogger("test_e2e")
 # =====================================================================
 # Helpers / Mocks
 # =====================================================================
+
 
 class MockLLM:
     """A mock LLM that returns canned responses."""
@@ -124,9 +115,7 @@ class SimpleTestAgent(AsyncAgent):
         )
 
     async def forward(self, *messages, **kwargs):
-        formatted, tools = self.aggregator.aggregate(
-            self.memory, self.name, self.output_format, self.template
-        )
+        formatted, tools = self.aggregator.aggregate(self.memory, self.name, self.output_format, self.template)
         resp = await self.llm.chat(formatted, tools=tools, **kwargs)
         return AgentMessage(
             sender=self.name,
@@ -138,6 +127,7 @@ class SimpleTestAgent(AsyncAgent):
 # =====================================================================
 # Level 1: Unit Tests (no network)
 # =====================================================================
+
 
 async def test_agent_service_basic():
     """AgentService: register, spawn (with mock agent), list, query."""
@@ -158,11 +148,13 @@ async def test_agent_service_basic():
             type=f"{SimpleTestAgent.__module__}.{SimpleTestAgent.__qualname__}",
             llm=dict(
                 type=f"{MockLLM.__module__}.{MockLLM.__qualname__}",
-                responses=[{
-                    "role": "assistant",
-                    "content": "Echo: placeholder",
-                    "tool_calls": [],
-                }],
+                responses=[
+                    {
+                        "role": "assistant",
+                        "content": "Echo: placeholder",
+                        "tool_calls": [],
+                    }
+                ],
             ),
             name="echo-agent",
         ),
@@ -211,11 +203,13 @@ async def test_agent_action_wiring():
             type=f"{SimpleTestAgent.__module__}.{SimpleTestAgent.__qualname__}",
             llm=dict(
                 type=f"{MockLLM.__module__}.{MockLLM.__qualname__}",
-                responses=[{
-                    "role": "assistant",
-                    "content": "Done: something",
-                    "tool_calls": [],
-                }],
+                responses=[
+                    {
+                        "role": "assistant",
+                        "content": "Done: something",
+                        "tool_calls": [],
+                    }
+                ],
             ),
             name="helper",
         ),
@@ -256,11 +250,15 @@ async def test_compact_action_unit():
 
     # Create a policy agent with mock LLM that returns a summary
     policy = SimpleTestAgent(
-        llm=MockLLM([{
-            "role": "assistant",
-            "content": "## Summary\nUser asked to test compact.\n## Pending\nNothing.",
-            "tool_calls": [],
-        }]),
+        llm=MockLLM(
+            [
+                {
+                    "role": "assistant",
+                    "content": "## Summary\nUser asked to test compact.\n## Pending\nNothing.",
+                    "tool_calls": [],
+                }
+            ]
+        ),
         name="policy",
     )
     # Feed some history into policy's memory
@@ -303,11 +301,15 @@ async def test_claude_code_memory_unit():
 
     svc = AgentService()
     policy = SimpleTestAgent(
-        llm=MockLLM([{
-            "role": "assistant",
-            "content": "Compacted summary here.",
-            "tool_calls": [],
-        }]),
+        llm=MockLLM(
+            [
+                {
+                    "role": "assistant",
+                    "content": "Compacted summary here.",
+                    "tool_calls": [],
+                }
+            ]
+        ),
         name="policy",
     )
     policy.memory.add(AgentMessage(sender="user", content="test"))
@@ -358,11 +360,13 @@ async def test_spawn_with_state():
             type=f"{SimpleTestAgent.__module__}.{SimpleTestAgent.__qualname__}",
             llm=dict(
                 type=f"{MockLLM.__module__}.{MockLLM.__qualname__}",
-                responses=[{
-                    "role": "assistant",
-                    "content": "Worker done",
-                    "tool_calls": [],
-                }],
+                responses=[
+                    {
+                        "role": "assistant",
+                        "content": "Worker done",
+                        "tool_calls": [],
+                    }
+                ],
             ),
             name="worker",
         ),
@@ -398,11 +402,13 @@ async def test_agent_spec_create():
             type=f"{SimpleTestAgent.__module__}.{SimpleTestAgent.__qualname__}",
             llm=dict(
                 type=f"{MockLLM.__module__}.{MockLLM.__qualname__}",
-                responses=[{
-                    "role": "assistant",
-                    "content": "PyConfig agent works!",
-                    "tool_calls": [],
-                }],
+                responses=[
+                    {
+                        "role": "assistant",
+                        "content": "PyConfig agent works!",
+                        "tool_calls": [],
+                    }
+                ],
             ),
             name="pyconfig-test",
         ),
@@ -484,6 +490,7 @@ async def test_agent_service_persistence():
 # Level 2: Integration Tests (real LLM)
 # =====================================================================
 
+
 async def test_real_llm_compact():
     """Integration: CompactAction with a real LLM endpoint.
 
@@ -497,9 +504,9 @@ async def test_real_llm_compact():
     print("TEST: Real LLM compact (integration)")
     print("=" * 60)
 
-    from lagent.llms.model import AsyncAPIClient, ModelConfig, SampleParameters
+    from lagent.agents import AsyncAgent
     from lagent.agents.aggregator.context import InternClawContextBuilder
-    from lagent.agents.internclaw_agent import AsyncPolicyAgent
+    from lagent.llms.model import AsyncAPIClient, ModelConfig, SampleParameters
 
     base_url = os.environ.get("LLM_BASE_URL", "http://35.220.164.252:3888/v1")
     api_key = os.environ.get("LLM_API_KEY", " ")
@@ -520,26 +527,32 @@ async def test_real_llm_compact():
     aggregator = InternClawContextBuilder(workspace, tools=None)
 
     # Build policy agent
-    policy = AsyncPolicyAgent(
+    policy = AsyncAgent(
         llm=model,
         aggregator=aggregator,
         name="policy",
     )
 
     # Simulate a conversation
-    policy.memory.add(AgentMessage(
-        sender="user",
-        content="Please help me write a Python function that calculates fibonacci numbers.",
-    ))
-    policy.memory.add(AgentMessage(
-        sender="policy",
-        content="Sure! Here's a recursive fibonacci function:\n\n```python\ndef fib(n):\n    if n <= 1: return n\n    return fib(n-1) + fib(n-2)\n```",
-        tool_calls=[],
-    ))
-    policy.memory.add(AgentMessage(
-        sender="user",
-        content="Can you make it iterative and add memoization?",
-    ))
+    policy.memory.add(
+        AgentMessage(
+            sender="user",
+            content="Please help me write a Python function that calculates fibonacci numbers.",
+        )
+    )
+    policy.memory.add(
+        AgentMessage(
+            sender="policy",
+            content="Sure! Here's a recursive fibonacci function:\n\n```python\ndef fib(n):\n    if n <= 1: return n\n    return fib(n-1) + fib(n-2)\n```",
+            tool_calls=[],
+        )
+    )
+    policy.memory.add(
+        AgentMessage(
+            sender="user",
+            content="Can you make it iterative and add memoization?",
+        )
+    )
 
     # Create AgentService + CompactAction
     svc = AgentService()
@@ -552,9 +565,7 @@ async def test_real_llm_compact():
     )
 
     # Check should_compact
-    token_est = estimate_token_count(
-        [{"content": "x" * 200}]  # simulate some tokens
-    )
+    token_est = estimate_token_count([{"content": "x" * 200}])  # simulate some tokens
     print(f"  Token estimate: {token_est}, threshold: {compact.threshold_tokens}")
     assert compact.should_compact(token_est) or token_est < compact.threshold_tokens
 
@@ -580,9 +591,9 @@ async def test_real_llm_agent_service_spawn():
     print("TEST: Real LLM AgentService spawn (integration)")
     print("=" * 60)
 
-    from lagent.llms.model import AsyncAPIClient, ModelConfig, SampleParameters
+    from lagent.agents import AsyncAgent
     from lagent.agents.aggregator.context import InternClawContextBuilder
-    from lagent.agents.internclaw_agent import AsyncPolicyAgent
+    from lagent.llms.model import AsyncAPIClient, ModelConfig, SampleParameters
 
     base_url = os.environ.get("LLM_BASE_URL", "http://35.220.164.252:3888/v1")
     api_key = os.environ.get("LLM_API_KEY", " ")
@@ -598,7 +609,7 @@ async def test_real_llm_agent_service_spawn():
     model_cfg = ModelConfig(model=model_name, base_url=base_url, api_key=api_key, proxy=proxy)
     sample_params = SampleParameters(temperature=0.7, top_p=1.0, top_k=50)
 
-    # We can't use full PyConfig here because AsyncPolicyAgent needs
+    # We can't use full PyConfig here because AsyncAgent needs
     # a ContextBuilder which needs a workspace path.  So we use a
     # custom factory instead.
     async def real_llm_factory(spec: AgentSpec, task: str):
@@ -610,7 +621,7 @@ async def test_real_llm_agent_service_spawn():
             sleep_interval=2,
         )
         aggregator = InternClawContextBuilder(workspace, tools=None)
-        agent = AsyncPolicyAgent(
+        agent = AsyncAgent(
             llm=model,
             aggregator=aggregator,
             name=spec.name,
@@ -648,14 +659,11 @@ async def test_real_llm_full_pipeline():
     print("TEST: Full pipeline with real LLM (integration)")
     print("=" * 60)
 
-    from lagent.llms.model import AsyncAPIClient, ModelConfig, SampleParameters
+    from lagent.agents import AsyncAgent
     from lagent.agents.aggregator.context import InternClawContextBuilder
-    from lagent.agents.internclaw_agent import (
-        AsyncPolicyAgent,
-        AsyncEnvAgent,
-        InternClawAgent,
-    )
+    from lagent.agents.internclaw_agent import AsyncEnvAgent, InternClawAgent
     from lagent.hooks.logger import MessageLogger
+    from lagent.llms.model import AsyncAPIClient, ModelConfig, SampleParameters
 
     base_url = os.environ.get("LLM_BASE_URL", "http://35.220.164.252:3888/v1")
     api_key = os.environ.get("LLM_API_KEY", " ")
@@ -678,7 +686,7 @@ async def test_real_llm_full_pipeline():
     svc = AgentService()
 
     # Step 2: Create PolicyAgent
-    policy = AsyncPolicyAgent(
+    policy = AsyncAgent(
         llm=model,
         aggregator=aggregator,
         name="policy",
@@ -722,6 +730,7 @@ async def test_real_llm_full_pipeline():
     except Exception as exc:
         print(f"  ⚠️  Agent failed: {exc}")
         import traceback
+
         traceback.print_exc()
 
     print("  🎉 Full pipeline: DONE\n")
@@ -730,6 +739,7 @@ async def test_real_llm_full_pipeline():
 # =====================================================================
 # Level 3: Full E2E (real LLM + sandbox)
 # =====================================================================
+
 
 async def test_e2e_with_sandbox():
     """Full E2E: InternClawAgent with sandbox MCP actions.
@@ -741,17 +751,13 @@ async def test_e2e_with_sandbox():
     print("TEST: Full E2E with sandbox (e2e)")
     print("=" * 60)
 
-    from lagent.llms.model import AsyncAPIClient, ModelConfig, SampleParameters
-    from lagent.agents.aggregator.context import InternClawContextBuilder
-    from lagent.agents.internclaw_agent import (
-        AsyncPolicyAgent,
-        AsyncEnvAgent,
-        InternClawAgent,
-    )
-    from lagent.skills.skills import SkillsLoader, SandboxSkillsBackend
-    from lagent.memory.memory import SandboxMemoryBackend
     from lagent.actions.mcp_client import AsyncMCPClientSandbox
+    from lagent.agents import AsyncAgent
+    from lagent.agents.aggregator.context import InternClawContextBuilder
+    from lagent.agents.internclaw_agent import AsyncEnvAgent, InternClawAgent
     from lagent.hooks.logger import MessageLogger
+    from lagent.llms.model import AsyncAPIClient, ModelConfig, SampleParameters
+    from lagent.skills.skills import SandboxSkillsBackend, SkillsLoader
 
     base_url = os.environ.get("LLM_BASE_URL", "http://35.220.164.252:3888/v1")
     api_key = os.environ.get("LLM_API_KEY", " ")
@@ -774,6 +780,7 @@ async def test_e2e_with_sandbox():
         # Discover workspace
         home_path = await shell_action.run(command='pwd')
         import json as _json
+
         cwd = _json.loads(home_path.result[0]['content'])['cwd']
         workspace_path = os.path.join(cwd, 'workspace')
         print(f"  Workspace: {workspace_path}")
@@ -784,7 +791,7 @@ async def test_e2e_with_sandbox():
         # AgentService + CompactAction
         svc = AgentService()
 
-        policy = AsyncPolicyAgent(
+        policy = AsyncAgent(
             llm=model,
             aggregator=aggregator,
             name="policy",
@@ -821,6 +828,7 @@ async def test_e2e_with_sandbox():
     except Exception as exc:
         print(f"  ⚠️  E2E test failed: {exc}")
         import traceback
+
         traceback.print_exc()
     finally:
         try:
@@ -834,6 +842,7 @@ async def test_e2e_with_sandbox():
 # =====================================================================
 # Runner
 # =====================================================================
+
 
 async def run_unit_tests():
     """Run all unit tests (no network required)."""
@@ -887,6 +896,7 @@ def main():
     # Default to unit tests if nothing specified
     if not any([args.unit, args.integration, args.e2e, args.all]):
         args.unit = True
+
     async def run_all():
         if args.unit or args.all:
             await run_unit_tests()

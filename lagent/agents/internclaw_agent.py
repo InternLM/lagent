@@ -56,23 +56,6 @@ def get_tool_prompt(actions: list, exclude_arguments: list = None) -> str:
     return tools
 
 
-class AsyncPolicyAgent(AsyncAgent):
-
-    async def forward(self, *message, **kwargs):
-        formatted_messages, tools = self.aggregator.aggregate(
-            self.memory, self.name, self.output_format, self.template
-        )
-        llm_response = await self.llm.chat(formatted_messages, tools=tools, **kwargs)
-        # message = AgentMessage(
-        #     sender=self.name,
-        #     content=llm_response.get('content') or '',
-        #     tool_calls=llm_response.get('tool_calls') or [],
-        #     reasoning_content=llm_response.get('reasoning_content'),
-        # )
-        # return message
-        return llm_response
-
-
 class AsyncEnvAgent(AsyncAgent):
     def __init__(self, actions, skills: SkillsLoader = None, long_term_memory=None, **kwargs):
         super().__init__(**kwargs)
@@ -168,13 +151,11 @@ class AsyncEnvAgent(AsyncAgent):
             result_dict['tool_call_id'] = tc.get('id', '')
             if resp.valid != ActionValidCode.OPEN:
                 result_dict['errmsg'] = (
-                    f'Tool Call Error: {resp.errmsg} in tool call '
-                    f'{json.dumps(tc, ensure_ascii=False)}'
+                    f'Tool Call Error: {resp.errmsg} in tool call ' f'{json.dumps(tc, ensure_ascii=False)}'
                 )
             elif resp.state != ActionStatusCode.SUCCESS:
                 result_dict['errmsg'] = (
-                    f'Tool Call Error: {resp.errmsg} in tool call '
-                    f'{json.dumps(tc, ensure_ascii=False)}'
+                    f'Tool Call Error: {resp.errmsg} in tool call ' f'{json.dumps(tc, ensure_ascii=False)}'
                 )
                 if resp.state == ActionStatusCode.ARGS_ERROR:
                     reward = -1
@@ -352,7 +333,7 @@ if __name__ == "__main__":
 
         # ── 4. Policy agent ──
         aggregator = InternClawContextBuilder(workspace, tools=None)
-        policy = AsyncPolicyAgent(
+        policy = AsyncAgent(
             llm=model,
             aggregator=aggregator,
             hooks=[logger_hook],
@@ -374,7 +355,7 @@ if __name__ == "__main__":
         )
 
         # ── 7. Consolidate agent (standard InternClawAgent) ──
-        consolidate_policy = AsyncPolicyAgent(
+        consolidate_policy = AsyncAgent(
             name='consolidate_policy',
             llm=model,
             template=CONSOLIDATION_PROMPT,

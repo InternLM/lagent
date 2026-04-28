@@ -15,17 +15,16 @@ import sys
 import tempfile
 from pathlib import Path
 
-from lagent.agents.compact_agent import AsyncCompactAgent, estimate_token_count
-from lagent.agents.internclaw_agent import (
-    AsyncEnvAgent, AsyncPolicyAgent, InternClawAgent,
-)
-from lagent.agents.aggregator.context import InternClawContextBuilder
-from lagent.memory import Memory, OpenClawMemoryProvider
 from lagent.actions.save_memory import SaveMemoryAction
+from lagent.agents import AsyncAgent
+from lagent.agents.aggregator.context import InternClawContextBuilder
+from lagent.agents.compact_agent import AsyncCompactAgent, estimate_token_count
+from lagent.agents.internclaw_agent import AsyncEnvAgent, InternClawAgent
+from lagent.memory import Memory, OpenClawMemoryProvider
 from lagent.schema import AgentMessage
 
-
 # ── Helpers ───────────────────────────────────────────────────────
+
 
 class MockLLM:
     """Mock LLM that returns predictable responses."""
@@ -47,6 +46,7 @@ class MockLLM:
 
 # ── Test 1: Provider + EnvAgent get_info injection ────────────────
 
+
 async def test_provider_injects_into_env_info():
     """Verify provider.get_info() content appears in env_info['memory']."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -65,6 +65,7 @@ async def test_provider_injects_into_env_info():
 
 
 # ── Test 2: CompactAgent with formatted_messages ──────────────────
+
 
 async def test_compact_formats_and_summarizes():
     """Verify CompactAgent correctly formats list[dict] input and produces summary."""
@@ -107,6 +108,7 @@ async def test_compact_formats_and_summarizes():
 
 # ── Test 3: ContextBuilder handles compact_boundary ───────────────
 
+
 async def test_context_builder_with_compact_boundary():
     """Verify ContextBuilder skips messages before boundary and prepends summary."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -126,10 +128,14 @@ async def test_context_builder_with_compact_boundary():
         mem.add(AgentMessage(sender='user', content='msg2', role='user'))
         mem.add(AgentMessage(sender='agent', content='msg3', role='assistant'))
         # This message carries the compact info
-        mem.add(AgentMessage(
-            sender='user', content='msg4 (after compact)', role='user',
-            env_info=env_info_with_compact,
-        ))
+        mem.add(
+            AgentMessage(
+                sender='user',
+                content='msg4 (after compact)',
+                role='user',
+                env_info=env_info_with_compact,
+            )
+        )
         mem.add(AgentMessage(sender='agent', content='msg5', role='assistant'))
 
         messages, tools = builder.aggregate(mem, name='agent')
@@ -173,6 +179,7 @@ async def test_context_builder_without_compact():
 
 # ── Test 4: Provider + SaveMemoryAction + ContextBuilder ──────────
 
+
 async def test_provider_action_contextbuilder_flow():
     """Full flow: write via action → read via provider → inject into ContextBuilder."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -193,10 +200,14 @@ async def test_provider_action_contextbuilder_flow():
         # Build context with provider info
         builder = InternClawContextBuilder(workspace)
         mem = Memory()
-        mem.add(AgentMessage(
-            sender='user', content='What do I like?', role='user',
-            env_info={'memory': info},
-        ))
+        mem.add(
+            AgentMessage(
+                sender='user',
+                content='What do I like?',
+                role='user',
+                env_info={'memory': info},
+            )
+        )
 
         messages, tools = builder.aggregate(mem, name='agent')
         system_prompt = messages[0]['content']
@@ -205,12 +216,14 @@ async def test_provider_action_contextbuilder_flow():
 
 # ── Test 5: Full InternClawAgent loop with compact ────────────────
 
+
 async def test_internclaw_compact_triggers():
     """Verify compact triggers during InternClawAgent loop when tokens exceed threshold."""
     compact_called = {'count': 0}
 
     class PolicyLLM:
         """Simulates policy: returns tool_calls for first N turns, then stops."""
+
         def __init__(self):
             self._turn = 0
 
@@ -239,7 +252,8 @@ async def test_internclaw_compact_triggers():
         )
 
         from lagent.agents.aggregator import DefaultAggregator
-        policy = AsyncPolicyAgent(llm=PolicyLLM(), aggregator=DefaultAggregator())
+
+        policy = AsyncAgent(llm=PolicyLLM(), aggregator=DefaultAggregator())
 
         # Minimal env that just passes through
         env = AsyncEnvAgent(actions=[])
@@ -254,11 +268,13 @@ async def test_internclaw_compact_triggers():
         result = await agent("Start a conversation about memory refactoring")
 
         # Compact should have been called at least once
-        assert compact_called['count'] > 0, \
-            f"Compact should have triggered, but was called {compact_called['count']} times"
+        assert (
+            compact_called['count'] > 0
+        ), f"Compact should have triggered, but was called {compact_called['count']} times"
 
 
 # ── Real model test ───────────────────────────────────────────────
+
 
 async def test_real_compact_with_provider():
     """Integration: real LLM + provider + compact."""
@@ -266,7 +282,7 @@ async def test_real_compact_with_provider():
 
     model_name = "gpt-5.4-mini"
     api_base = "http://35.220.164.252:3888/v1"
-    api_key = "" 
+    api_key = ""
     proxy = "http://100.100.72.89:8899"
 
     model = AsyncAPIClient(
@@ -299,7 +315,10 @@ async def test_real_compact_with_provider():
         formatted_messages = [
             {'role': 'system', 'content': f"You are helpful.\n\nMemory:\n{env_info.get('long_term', '')}"},
             {'role': 'user', 'content': 'Help me design the memory system'},
-            {'role': 'assistant', 'content': 'Based on the project context, I see you prefer minimal abstractions. Let me propose a design.'},
+            {
+                'role': 'assistant',
+                'content': 'Based on the project context, I see you prefer minimal abstractions. Let me propose a design.',
+            },
             {'role': 'user', 'content': 'Yes, Memory should be a pure list, no LTM base class'},
             {'role': 'assistant', 'content': 'Agreed. Provider=read, Action=write, both independent.'},
             {'role': 'user', 'content': 'What about compact?'},
@@ -320,17 +339,20 @@ async def test_real_compact_with_provider():
 
         assert content and len(content) > 50, "Summary should be substantial"
         content_lower = content.lower()
-        assert any(w in content_lower for w in ['memory', 'compact', 'provider']), \
-            "Summary should mention key topics from the conversation"
+        assert any(
+            w in content_lower for w in ['memory', 'compact', 'provider']
+        ), "Summary should mention key topics from the conversation"
 
         # Verify the provider's memory content influenced the summary
-        assert any(w in content_lower for w in ['minimal', 'abstraction', 'lagent']), \
-            "Summary should reflect project context from provider"
+        assert any(
+            w in content_lower for w in ['minimal', 'abstraction', 'lagent']
+        ), "Summary should reflect project context from provider"
 
         print("  Real compact + provider: OK")
 
 
 # ── Runner ────────────────────────────────────────────────────────
+
 
 async def main():
     run_real = True

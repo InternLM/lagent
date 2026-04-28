@@ -15,17 +15,16 @@ if str(ROOT) not in sys.path:
 
 from lagent.services.agent_loader import AgentLoader, AgentSpec, _import_module_from_path
 
-
 # ── Fixtures ─────────────────────────────────────────────────────────
 
 
 CONFIG_STANDARD = """\
 from lagent.agents.internclaw_agent import (
     AsyncEnvAgent,
-    AsyncPolicyAgent,
     InternClawAgent,
 )
 from lagent.llms.model import AsyncAPIClient
+from lagent.agents import AsyncAgent
 from lagent.agents.aggregator.context import InternClawContextBuilder
 
 name = "code-reviewer"
@@ -47,7 +46,7 @@ llm = dict(
 agent_config = dict(
     type=InternClawAgent,
     policy_agent=dict(
-        type=AsyncPolicyAgent,
+        type=AsyncAgent,
         llm=llm,
         aggregator=dict(type=InternClawContextBuilder),
         name="policy",
@@ -64,10 +63,10 @@ agent_config = dict(
 CONFIG_WITH_BUILD = """\
 from lagent.agents.internclaw_agent import (
     AsyncEnvAgent,
-    AsyncPolicyAgent,
     InternClawAgent,
 )
 from lagent.llms.model import AsyncAPIClient
+from lagent.agents import AsyncAgent
 from lagent.agents.aggregator.context import InternClawContextBuilder
 
 name = "translator"
@@ -87,7 +86,7 @@ llm = dict(
 agent_config = dict(
     type=InternClawAgent,
     policy_agent=dict(
-        type=AsyncPolicyAgent,
+        type=AsyncAgent,
         llm=llm,
         aggregator=dict(type=InternClawContextBuilder),
         name="policy",
@@ -269,6 +268,7 @@ async def test_spec_config_has_internclaw_structure(workspace):
 
     # Top-level: InternClawAgent
     from lagent.agents.internclaw_agent import InternClawAgent
+
     assert cfg["type"] is InternClawAgent
 
     # Nested: policy_agent with LLM
@@ -317,6 +317,7 @@ async def test_spec_create_uses_build_when_provided():
 @pytest.mark.asyncio
 async def test_spec_acreate_uses_async_build():
     """acreate() handles async build functions."""
+
     async def async_build(config):
         return type("MockAgent", (), {"name": "async-built"})()
 

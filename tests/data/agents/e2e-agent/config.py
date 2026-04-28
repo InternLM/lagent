@@ -6,12 +6,9 @@ Requires network access to the API endpoint.
 
 from pathlib import Path
 
+from lagent.agents import AsyncAgent
 from lagent.agents.aggregator.context import InternClawContextBuilder
-from lagent.agents.internclaw_agent import (
-    AsyncEnvAgent,
-    AsyncPolicyAgent,
-    InternClawAgent,
-)
+from lagent.agents.internclaw_agent import AsyncEnvAgent, InternClawAgent
 from lagent.llms.model import AsyncAPIClient
 
 name = "e2e-agent"
@@ -35,7 +32,7 @@ llm = dict(
 agent_config = dict(
     type=InternClawAgent,
     policy_agent=dict(
-        type=AsyncPolicyAgent,
+        type=AsyncAgent,
         llm=llm,
         aggregator=dict(type=InternClawContextBuilder, workspace=Path("/tmp")),
         name="policy",

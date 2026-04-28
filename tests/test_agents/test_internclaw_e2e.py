@@ -16,18 +16,17 @@ import sys
 import tempfile
 from pathlib import Path
 
-from lagent.agents.compact_agent import AsyncCompactAgent, estimate_token_count
-from lagent.agents.internclaw_agent import (
-    AsyncEnvAgent, AsyncPolicyAgent, InternClawAgent,
-)
+from lagent.actions.save_memory import AsyncSaveMemoryAction, SaveMemoryAction
+from lagent.agents import AsyncAgent
 from lagent.agents.aggregator.context import InternClawContextBuilder
 from lagent.agents.aggregator.default_aggregator import DefaultAggregator
+from lagent.agents.compact_agent import AsyncCompactAgent, estimate_token_count
+from lagent.agents.internclaw_agent import AsyncEnvAgent, InternClawAgent
 from lagent.memory import Memory, OpenClawMemoryProvider
-from lagent.actions.save_memory import SaveMemoryAction, AsyncSaveMemoryAction
 from lagent.schema import AgentMessage
 
-
 # ── Test 1: Consolidate agent writes to LTM ──────────────────────
+
 
 async def test_consolidate_agent_writes_memory():
     """Consolidate agent = InternClawAgent with SaveMemoryAction.
@@ -37,26 +36,31 @@ async def test_consolidate_agent_writes_memory():
 
     class ConsolidateLLM:
         """Mock LLM that calls save_memory tool."""
+
         async def chat(self, messages, **kwargs):
             return {
                 'content': '',
-                'tool_calls': [{
-                    'id': 'call_1',
-                    'function': {
-                        'name': 'AsyncSaveMemoryAction',
-                        'arguments': json.dumps({
-                            'history_entry': '[2026-04-09 12:00] Discussed memory refactoring. Decided to split compact and LTM.',
-                            'memory_update': '# Facts\n- User prefers minimal abstractions\n- Memory is a pure list\n- CompactAgent is a standard AsyncAgent',
-                        }),
-                    },
-                }],
+                'tool_calls': [
+                    {
+                        'id': 'call_1',
+                        'function': {
+                            'name': 'AsyncSaveMemoryAction',
+                            'arguments': json.dumps(
+                                {
+                                    'history_entry': '[2026-04-09 12:00] Discussed memory refactoring. Decided to split compact and LTM.',
+                                    'memory_update': '# Facts\n- User prefers minimal abstractions\n- Memory is a pure list\n- CompactAgent is a standard AsyncAgent',
+                                }
+                            ),
+                        },
+                    }
+                ],
             }
 
     with tempfile.TemporaryDirectory() as tmpdir:
         workspace = Path(tmpdir)
         save_action = AsyncSaveMemoryAction(workspace)
 
-        consolidate_policy = AsyncPolicyAgent(llm=ConsolidateLLM())
+        consolidate_policy = AsyncAgent(llm=ConsolidateLLM())
         consolidate_env = AsyncEnvAgent(actions=[save_action])
 
         consolidate_agent = InternClawAgent(
@@ -90,6 +94,7 @@ async def test_consolidate_agent_writes_memory():
 
 # ── Test 2: Consolidate + Provider round-trip ─────────────────────
 
+
 async def test_consolidate_then_provider_reads():
     """Consolidate writes → provider reads back the same content."""
 
@@ -97,16 +102,20 @@ async def test_consolidate_then_provider_reads():
         async def chat(self, messages, **kwargs):
             return {
                 'content': '',
-                'tool_calls': [{
-                    'id': 'call_1',
-                    'function': {
-                        'name': 'AsyncSaveMemoryAction',
-                        'arguments': json.dumps({
-                            'history_entry': '[2026-04-09] Round-trip test',
-                            'memory_update': '# Memory\n- Round-trip test passed',
-                        }),
-                    },
-                }],
+                'tool_calls': [
+                    {
+                        'id': 'call_1',
+                        'function': {
+                            'name': 'AsyncSaveMemoryAction',
+                            'arguments': json.dumps(
+                                {
+                                    'history_entry': '[2026-04-09] Round-trip test',
+                                    'memory_update': '# Memory\n- Round-trip test passed',
+                                }
+                            ),
+                        },
+                    }
+                ],
             }
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -114,7 +123,7 @@ async def test_consolidate_then_provider_reads():
 
         # Consolidate writes
         consolidate = InternClawAgent(
-            policy_agent=AsyncPolicyAgent(llm=ConsolidateLLM()),
+            policy_agent=AsyncAgent(llm=ConsolidateLLM()),
             env_agent=AsyncEnvAgent(actions=[AsyncSaveMemoryAction(workspace)]),
             max_turn=1,
             finish_condition=None,
@@ -129,6 +138,7 @@ async def test_consolidate_then_provider_reads():
 
 
 # ── Test 3: Full pipeline mock — compact + consolidate ────────────
+
 
 async def test_full_pipeline_compact_and_consolidate():
     """Full InternClawAgent pipeline: policy loops → compact triggers →
@@ -146,10 +156,12 @@ async def test_full_pipeline_compact_and_consolidate():
             if self._turn <= 2:
                 return {
                     'content': f'Working on turn {self._turn}...',
-                    'tool_calls': [{
-                        'id': f'call_{self._turn}',
-                        'function': {'name': 'test_tool', 'arguments': '{}'},
-                    }],
+                    'tool_calls': [
+                        {
+                            'id': f'call_{self._turn}',
+                            'function': {'name': 'test_tool', 'arguments': '{}'},
+                        }
+                    ],
                 }
             return {'content': 'All done.'}
 
@@ -158,16 +170,20 @@ async def test_full_pipeline_compact_and_consolidate():
             consolidate_called['count'] += 1
             return {
                 'content': '',
-                'tool_calls': [{
-                    'id': 'cons_1',
-                    'function': {
-                        'name': 'AsyncSaveMemoryAction',
-                        'arguments': json.dumps({
-                            'history_entry': '[2026-04-09] Consolidated',
-                            'memory_update': '# Consolidated memory',
-                        }),
-                    },
-                }],
+                'tool_calls': [
+                    {
+                        'id': 'cons_1',
+                        'function': {
+                            'name': 'AsyncSaveMemoryAction',
+                            'arguments': json.dumps(
+                                {
+                                    'history_entry': '[2026-04-09] Consolidated',
+                                    'memory_update': '# Consolidated memory',
+                                }
+                            ),
+                        },
+                    }
+                ],
             }
 
     class CompactLLM:
@@ -181,7 +197,7 @@ async def test_full_pipeline_compact_and_consolidate():
 
         # Consolidate agent
         consolidate = InternClawAgent(
-            policy_agent=AsyncPolicyAgent(llm=ConsolidateLLM()),
+            policy_agent=AsyncAgent(llm=ConsolidateLLM()),
             env_agent=AsyncEnvAgent(actions=[AsyncSaveMemoryAction(workspace)]),
             max_turn=1,
             finish_condition=None,
@@ -196,7 +212,7 @@ async def test_full_pipeline_compact_and_consolidate():
 
         # Main agent
         agent = InternClawAgent(
-            policy_agent=AsyncPolicyAgent(
+            policy_agent=AsyncAgent(
                 llm=PolicyLLM(),
                 aggregator=DefaultAggregator(),
             ),
@@ -221,6 +237,7 @@ async def test_full_pipeline_compact_and_consolidate():
 
 
 # ── Test 4: ContextBuilder with compact + provider together ──────
+
 
 async def test_context_builder_full_assembly():
     """ContextBuilder assembles: system prompt (with LTM) + compact summary + recent messages."""
@@ -247,10 +264,14 @@ async def test_context_builder_full_assembly():
             'conversation_summary': '## Summary\nDiscussed Python preferences.',
             'compact_boundary': 4,
         }
-        mem.add(AgentMessage(
-            sender='user', content='new msg after compact', role='user',
-            env_info=env_info_with_compact,
-        ))
+        mem.add(
+            AgentMessage(
+                sender='user',
+                content='new msg after compact',
+                role='user',
+                env_info=env_info_with_compact,
+            )
+        )
         mem.add(AgentMessage(sender='agent', content='response after compact', role='assistant'))
 
         messages, tools = builder.aggregate(mem, name='agent')
@@ -275,6 +296,7 @@ async def test_context_builder_full_assembly():
 
 # ── Test 5: Multiple compact rounds ──────────────────────────────
 
+
 async def test_multiple_compact_rounds():
     """Verify compact can trigger multiple times in a long session."""
     compact_count = {'n': 0}
@@ -288,10 +310,12 @@ async def test_multiple_compact_rounds():
             if self._turn <= 6:
                 return {
                     'content': f'Turn {self._turn} ' + 'x' * 100,  # padding for tokens
-                    'tool_calls': [{
-                        'id': f'c_{self._turn}',
-                        'function': {'name': 'noop', 'arguments': '{}'},
-                    }],
+                    'tool_calls': [
+                        {
+                            'id': f'c_{self._turn}',
+                            'function': {'name': 'noop', 'arguments': '{}'},
+                        }
+                    ],
                 }
             return {'content': 'Done.'}
 
@@ -307,7 +331,7 @@ async def test_multiple_compact_rounds():
     )
 
     agent = InternClawAgent(
-        policy_agent=AsyncPolicyAgent(
+        policy_agent=AsyncAgent(
             llm=PolicyLLM(),
             aggregator=DefaultAggregator(),
         ),
@@ -322,13 +346,14 @@ async def test_multiple_compact_rounds():
 
 # ── Real model test ───────────────────────────────────────────────
 
+
 async def test_real_full_pipeline():
     """Real model: consolidate + compact + provider full round-trip."""
     from lagent.llms.model import AsyncAPIClient, ModelConfig, SampleParameters
 
     model_name = "gpt-5.4-mini"
     api_base = "http://35.220.164.252:3888/v1"
-    api_key = "" 
+    api_key = ""
     proxy = "http://100.100.72.89:8899"
 
     model = AsyncAPIClient(
@@ -351,7 +376,7 @@ async def test_real_full_pipeline():
 
         # Consolidate agent with real model
         consolidate = InternClawAgent(
-            policy_agent=AsyncPolicyAgent(llm=model),
+            policy_agent=AsyncAgent(llm=model),
             env_agent=AsyncEnvAgent(actions=[AsyncSaveMemoryAction(workspace)]),
             max_turn=1,
             finish_condition=None,
@@ -394,9 +419,12 @@ async def test_real_full_pipeline():
             {'role': 'assistant', 'content': 'Done, no state tracking'},
         ]
 
-        compact_result = await compact(AgentMessage(
-            sender='test', content=formatted_messages,
-        ))
+        compact_result = await compact(
+            AgentMessage(
+                sender='test',
+                content=formatted_messages,
+            )
+        )
 
         content = compact_result.content
         if isinstance(content, dict):
@@ -410,6 +438,7 @@ async def test_real_full_pipeline():
 
 
 # ── Runner ────────────────────────────────────────────────────────
+
 
 async def main():
     run_real = True

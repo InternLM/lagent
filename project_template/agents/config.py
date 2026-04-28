@@ -19,14 +19,11 @@ build       : callable  — Custom build function: ``(config_dict) -> Agent``.
                           When unset, defaults to ``create_object(agent_config)``.
 """
 
-from lagent.agents.internclaw_agent import (
-    AsyncEnvAgent,
-    AsyncPolicyAgent,
-    InternClawAgent,
-)
-from lagent.llms.model import AsyncAPIClient
-from lagent.agents.aggregator.context import InternClawContextBuilder
 from lagent.actions.mcp_client import AsyncMCPClientSandbox
+from lagent.agents import AsyncAgent
+from lagent.agents.aggregator.context import InternClawContextBuilder
+from lagent.agents.internclaw_agent import AsyncEnvAgent, InternClawAgent
+from lagent.llms.model import AsyncAPIClient
 
 # ── Metadata ──────────────────────────────────────────────────────────
 
@@ -60,7 +57,7 @@ sandbox_action = dict(
 agent_config = dict(
     type=InternClawAgent,
     policy_agent=dict(
-        type=AsyncPolicyAgent,
+        type=AsyncAgent,
         llm=llm,
         aggregator=dict(type=InternClawContextBuilder),
         name="policy",
