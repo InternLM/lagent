@@ -12,7 +12,7 @@ from lagent.actions import AsyncActionExecutor
 from lagent.hooks import Hook
 from lagent.schema import ActionReturn, ActionStatusCode, ActionValidCode, AgentMessage, AgentStatusCode
 from lagent.skills.skills import SkillsLoader
-from lagent.utils import create_object, truncate_text
+from lagent.utils import create_object, load_class_from_string, truncate_text
 from .agent import AsyncAgent
 
 logger = logging.getLogger("lagent.agents.fc_agent")
@@ -86,6 +86,8 @@ class FunctionCallAgent(AsyncAgent):
         self.env_agent = create_object(env_agent)
         self.compact_agent = create_object(compact_agent)
         self.consolidate_agent = create_object(consolidate_agent)
+        if isinstance(finish_condition, str):
+            finish_condition = load_class_from_string(finish_condition)
         self.finish_condition = finish_condition
         self.max_turn = max_turn
         self.initialize_input = initialize_input
