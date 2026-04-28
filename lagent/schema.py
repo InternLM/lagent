@@ -51,7 +51,7 @@ class ActionReturn:
     tool_call_id: Optional[str] = None
 
     def format_result(self) -> str:
-        """Concatenate items in result."""
+        """Concatenate items in result, falling back to errmsg when result is empty."""
         result = []
         for item in self.result or []:
             if item['type'] == 'text':
@@ -59,6 +59,8 @@ class ActionReturn:
             else:
                 result.append(f"[{item['type']}]({item['content']})")
         result = '\n'.join(result)
+        if not result and self.errmsg:
+            return self.errmsg
         return result
 
 

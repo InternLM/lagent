@@ -8,9 +8,7 @@ tmux pane cannot be driven concurrently, so one call per turn per pane.
 ``MarkTaskComplete`` emits a sentinel the orchestrator interprets as a
 completion signal.  The orchestrator (``Terminus2Agent``) implements the
 two-step confirmation handshake — the action itself is stateless.
-"""
 
-"""Local tmux session wrapper.
 
 Port of harbor's ``TmuxSession`` that drops the ``BaseEnvironment.exec``
 indirection and runs ``tmux`` as a local subprocess.  Intended for use
@@ -25,7 +23,6 @@ import shlex
 import subprocess
 import time
 
-from __future__ import annotations
 
 from lagent.actions.base_action import AsyncActionMixin, BaseAction, tool_api
 from lagent.schema import ActionReturn, ActionStatusCode
