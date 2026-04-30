@@ -1,9 +1,8 @@
 """Tmux-backed tools exposed as standard function-call tools.
 
-``TerminalExecute`` takes a batch of keystroke sequences and returns the
-resulting pane output in one round.  Batching matters because
-``AsyncEnvAgent`` executes tool calls via ``asyncio.gather``; a persistent
-tmux pane cannot be driven concurrently, so one call per turn per pane.
+``TerminalExecute`` sends a single keystroke sequence to a persistent tmux
+pane and returns the resulting pane output.  A tmux pane cannot be driven
+concurrently, so issue one call per turn per pane.
 
 ``MarkTaskComplete`` emits a sentinel the orchestrator interprets as a
 completion signal.  The orchestrator (``Terminus2Agent``) implements the
@@ -133,7 +132,9 @@ class TmuxSession:
         rc, stdout, _ = await self._exec(" ".join(shlex.quote(a) for a in args))
         if rc != 0:
             return ""
-        return stdout or ""
+        # tmux capture-pane pads the output to pane height with empty lines;
+        # strip them so callers don't get a wall of trailing newlines.
+        return (stdout or "").rstrip()
 
     async def get_incremental_output(self) -> str:
         """Return new pane output since the last call, or the visible screen."""
@@ -306,11 +307,10 @@ def _limit_output(text: str, max_bytes: int = _OUTPUT_BYTE_LIMIT) -> str:
 
 
 class TerminalExecute(AsyncActionMixin, BaseAction):
-    """Send a batch of keystroke sequences to a persistent tmux pane.
+    """Send keystrokes to a persistent tmux pane.
 
     The pane survives across tool calls: commands modify cwd, env vars,
-    and running processes the next call inherits.  Use one call per turn
-    and list every keystroke sequence you want executed in order.
+    and running processes the next call inherits.  Use one call per turn.
     """
 
     def __init__(
@@ -346,67 +346,63 @@ class TerminalExecute(AsyncActionMixin, BaseAction):
         return self._session
 
     @tool_api
-    async def run(self, commands: list) -> ActionReturn:
-        """Execute a batch of keystroke sequences in the persistent tmux pane.
+    async def run(self, keystrokes: str, duration: float = 1.0) -> ActionReturn:
+        """Send keystrokes to the persistent tmux pane and return pane output.
+
+        Each call's keystrokes are sent verbatim to the terminal. Write them
+        exactly as you want them typed:
+        - End every command with '\\n' or it will not execute.
+        - Tmux-style escape sequences are accepted: 'C-c' (Ctrl+C),
+          'C-d' (Ctrl+D), 'Enter', 'Tab'.
 
         Args:
-            commands (list): list of command objects.  Each object is a dict
-                with the following fields:
-                - keystrokes (str): exact characters to send.  Append '\\n' to
-                  press Enter and run the command.  Tmux key names are also
-                  accepted: 'C-c', 'C-d', 'Enter', 'Tab'.
-                - duration (float): seconds to wait after sending before the
-                  next command (default 1.0, max 60.0).  Use 0.1 for fast
-                  commands (ls, cd, echo), 1.0 for gcc/find, longer for
-                  builds.  Prefer polling over long waits.
+            keystrokes (str): exact characters to send to the terminal.
+            duration (float): seconds to wait after sending before returning
+                output (default 1.0, max 60.0).  Use 0.1 for immediate
+                commands (cd, ls, echo, cat), 1.0 for typical commands
+                (gcc, find, rustc), longer for slow commands (make, wget,
+                long-running scripts).  Prefer polling with an empty
+                keystrokes string over long single waits — call again with
+                ``keystrokes=""`` and a longer duration if output is not
+                yet complete.  Never wait longer than 60 seconds.
 
         Returns:
-            str: terminal output produced by the batch (new pane content
-                since the last call, or the visible screen if that is not
-                determinable).
+            str: terminal output (new pane content since the last call, or
+                the visible screen if that is not determinable).
         """
-        if not isinstance(commands, list):
+        if not isinstance(keystrokes, str):
             return ActionReturn(
                 type=self.name,
-                errmsg="`commands` must be a list of {keystrokes, duration} objects.",
+                errmsg="`keystrokes` must be a string.",
                 state=ActionStatusCode.ARGS_ERROR,
             )
+        try:
+            duration = min(float(duration), _DEFAULT_DURATION_CAP_SEC)
+        except (TypeError, ValueError):
+            duration = 1.0
 
-        for raw in commands:
-            if not isinstance(raw, dict) or "keystrokes" not in raw:
-                return ActionReturn(
-                    type=self.name,
-                    errmsg=f"Invalid command entry: {raw!r}",
-                    state=ActionStatusCode.ARGS_ERROR,
-                )
-            keystrokes = raw["keystrokes"]
-            try:
-                duration = min(float(raw.get("duration", 1.0)), _DEFAULT_DURATION_CAP_SEC)
-            except (TypeError, ValueError):
-                duration = 1.0
-
-            try:
-                await self._session.send_keys(
-                    keystrokes,
-                    block=False,
-                    min_timeout_sec=duration,
-                )
-            except TimeoutError:
-                terminal_state = _limit_output(await self._session.get_incremental_output())
-                return ActionReturn(
-                    type=self.name,
-                    result=[
-                        {
-                            "type": "text",
-                            "content": _TIMEOUT_TEMPLATE.format(
-                                command=keystrokes,
-                                timeout_sec=duration,
-                                terminal_state=terminal_state,
-                            ),
-                        }
-                    ],
-                    state=ActionStatusCode.SUCCESS,
-                )
+        try:
+            await self._session.send_keys(
+                keystrokes,
+                block=False,
+                min_timeout_sec=duration,
+            )
+        except TimeoutError:
+            terminal_state = _limit_output(await self._session.get_incremental_output())
+            return ActionReturn(
+                type=self.name,
+                result=[
+                    {
+                        "type": "text",
+                        "content": _TIMEOUT_TEMPLATE.format(
+                            command=keystrokes,
+                            timeout_sec=duration,
+                            terminal_state=terminal_state,
+                        ),
+                    }
+                ],
+                state=ActionStatusCode.SUCCESS,
+            )
 
         terminal_state = _limit_output(await self._session.get_incremental_output())
         return ActionReturn(

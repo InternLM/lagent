@@ -3,7 +3,6 @@ import importlib.util
 import os
 import types
 
-from benedict import benedict
 
 
 class ConfigDict(dict):
@@ -54,21 +53,23 @@ class Config:
         return config_dict
 
 
-def to_native_types(obj: benedict):
-    """
-    递归地将任何嵌套的自定义对象（如 benedict）和集合
-    转换为 Python 的原生类型（dict, list, tuple, set 等）。
-    """
-    # 1. 最优先处理类字典对象
-    if isinstance(obj, dict):
-        return {key: to_native_types(value) for key, value in obj.items()}
+# from benedict import benedict
 
-    # 2. 处理非字符串的可迭代对象 (list, tuple, set 等)
-    #    必须先排除 str 和 bytes，因为它们也是可迭代的，但我们不希望遍历其字符。
-    if isinstance(obj, collections.abc.Iterable) and not isinstance(obj, (str, bytes)):
-        # type(obj) -> 获取原始容器的类型 (如 list, tuple, 或 set)
-        # (...)     -> 使用该类型的构造函数，重新创建一个新的、已转换内容的容器。
-        return type(obj)(to_native_types(item) for item in obj)
+# def to_native_types(obj: benedict):
+#     """
+#     递归地将任何嵌套的自定义对象（如 benedict）和集合
+#     转换为 Python 的原生类型（dict, list, tuple, set 等）。
+#     """
+#     # 1. 最优先处理类字典对象
+#     if isinstance(obj, dict):
+#         return {key: to_native_types(value) for key, value in obj.items()}
 
-    # 3. 如果不是以上任何情况（如 int, str, bool, None 等），直接返回值
-    return obj
+#     # 2. 处理非字符串的可迭代对象 (list, tuple, set 等)
+#     #    必须先排除 str 和 bytes，因为它们也是可迭代的，但我们不希望遍历其字符。
+#     if isinstance(obj, collections.abc.Iterable) and not isinstance(obj, (str, bytes)):
+#         # type(obj) -> 获取原始容器的类型 (如 list, tuple, 或 set)
+#         # (...)     -> 使用该类型的构造函数，重新创建一个新的、已转换内容的容器。
+#         return type(obj)(to_native_types(item) for item in obj)
+
+#     # 3. 如果不是以上任何情况（如 int, str, bool, None 等），直接返回值
+#     return obj

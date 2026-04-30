@@ -42,6 +42,7 @@ from lagent.actions.action_executor import ActionExecutor, AsyncActionExecutor
 from lagent.actions.base_action import BaseAction
 from lagent.schema import ActionReturn, ActionStatusCode, AgentMessage, dataclass2dict
 from lagent.utils import create_object
+from lagent.utils.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -398,7 +399,13 @@ async def async_lagent_call(sock_path: str, request_json: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _load_config(config_path: str) -> Union[List[Dict], Dict]:
+def _load_config(config_path: str, mode: str) -> Union[List[Dict], Dict]:
+    if config_path.endswith(".py"):
+        cfg = Config.fromfile(config_path)
+        expected = "agent_config" if mode == "agent" else "actions"
+        if expected not in cfg:
+            raise KeyError(f"{expected!r} not defined in {config_path}")
+        return cfg[expected]
     with open(config_path) as f:
         return json.load(f)
 
@@ -425,7 +432,8 @@ def main():
     )
     p_start.add_argument(
         "--config",
-        help="Path to JSON config (action list for Level 1, agent dict for Level 2)",
+        help="Path to config: JSON (action list / agent dict) or Python file "
+             "defining 'actions' (mode=actions) or 'agent_config' (mode=agent)",
     )
     # Backward compat
     p_start.add_argument("--actions-config", help=argparse.SUPPRESS)
@@ -454,7 +462,7 @@ def main():
         if not config_path:
             parser.error("Must provide --config (or --actions-config / --agent-config)")
 
-        config = _load_config(config_path)
+        config = _load_config(config_path, mode)
 
         if mode == "agent":
             daemon = AgentDaemon(agent=config, sock_path=args.sock)

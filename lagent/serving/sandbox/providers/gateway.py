@@ -31,7 +31,7 @@ from lagent.serving.sandbox.providers.base import SandboxClient
 logger = logging.getLogger(__name__)
 
 
-_DEFAULT_CREATES_PER_SEC = float(os.environ.get("GATEWAY_CREATES_PER_SEC", "4.0"))
+_DEFAULT_CREATES_PER_SEC = float(os.environ.get("GATEWAY_CREATES_PER_SEC", "3"))
 _DEFAULT_CREATES_BURST = int(os.environ.get("GATEWAY_CREATES_BURST", "8"))
 _DEFAULT_MAX_CONCURRENT_CREATES = int(os.environ.get("GATEWAY_MAX_CONCURRENT_CREATES", "64"))
 _DEFAULT_POOL_SIZE = int(os.environ.get("LAGENT_GATEWAY_POOL_SIZE", "1024"))

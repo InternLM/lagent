@@ -2,14 +2,14 @@ import asyncio
 import json
 import random
 import traceback
-from logging import getLogger
+
 from typing import Dict, List, Optional, TypedDict, Union
 
 import aiohttp
 
 from lagent.llms.openai import AsyncGPTAPI
-
-logger = getLogger(__name__)
+from lagent.utils import get_logger
+logger = get_logger()
 
 
 # from pdp_ext.fc_inferencer import ModelConfig, SampleParameters
@@ -31,7 +31,7 @@ class AsyncAPIClient(AsyncGPTAPI):
         model: ModelConfig,
         sample_params: SampleParameters,
         timeout: int = 600,
-        max_retry: int = 50,
+        max_retry: int = 1,
         sleep_interval: int = 5,
         extra_body: Optional[dict] = None,
         max_tool_response_length: Optional[int] = 4096,
@@ -97,7 +97,7 @@ class AsyncAPIClient(AsyncGPTAPI):
                     {
                         "index": 0,
                         "message": {"role": "assistant", "content": content},
-                        "finish_reason": "stop",
+                        "finish_reason": "failed",
                     }
                 ],
                 "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
@@ -125,7 +125,8 @@ class AsyncAPIClient(AsyncGPTAPI):
                 except asyncio.TimeoutError as e:
                     logger.error(f"LLM Call Timeout: {e}")
                     if attempt == self.max_retry - 1:
-                        return _error_completion(f"LLM Call Timeout: {e}")
+                        logger.error(f"LLM Call Error: {e}{traceback.format_exc()}")
+                        raise e
                     await asyncio.sleep(self.sleep_interval)
                 except Exception as e:
                     for val in [
@@ -141,12 +142,13 @@ class AsyncAPIClient(AsyncGPTAPI):
                             traceback.print_exc()
                             logger.error(f"[Retry] {attempt} LLM Call Error: {e}")
                             if attempt == self.max_retry - 1:
-                                return _error_completion(f"LLM Call Error: {e}")
+                                logger.error(f"LLM Call Error: {e}{traceback.format_exc()}")
+                                raise e
                             await asyncio.sleep(self.sleep_interval)
                             break
                     else:
-                        traceback.print_exc()
-                        return _error_completion(f"LLM Call Error: {e}")
+                        logger.error(f"LLM Call Error: {e}{traceback.format_exc()}")
+                        raise e
 
 
 if __name__ == '__main__':
