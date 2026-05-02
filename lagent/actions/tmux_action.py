@@ -37,6 +37,32 @@ _DEFAULT_DURATION_CAP_SEC = 60.0
 _TIMEOUT_TEMPLATE = "Command '{command}' timed out after {timeout_sec}s.\n\n{terminal_state}"
 
 
+TOOLSCHEMA =  {
+    "name": "bash_command",
+    "description": """Send keystrokes to the persistent tmux pane and return pane output.The pane is a real bash shell running in a pty: it only executes a command once the keystrokes include a line terminator.  Each call's keystrokes are sent verbatim; bash accumulates input across calls until it sees '\n' or 'Enter' — if you forget the terminator the command will sit unexecuted in the prompt and get concatenated with whatever you send next. Tmux-style key names are also accepted as tokens: 'C-c' (Ctrl+C), 'C-d' (Ctrl+D), 'Enter', 'Tab'.""",
+    "parameters": [
+        {
+            "name": "keystrokes",
+            "type": "string",
+            "description": """exact characters to send.  MUST end with '\n' (or 'Enter') for the command to actually execute — without it bash stays in "typing" state and you will only see the prompt echo back your input, not the command's output.""",
+        },
+        {
+            "name": "duration", 
+            "type": "number",
+            "description": """seconds to wait after sending before reading pane output (default 1.0, max 60.0).  A too-short duration is the other way this tool appears to "do nothing": the command is still running when we capture the pane, so you see the prompt without output and assume it failed.
+                Guidance:
+                - 1.0 for typical commands (ls, cat, cd, pip install,
+                    python scripts that finish quickly)
+                - 3-10 for builds / installers / downloads
+                - up to 60 for very slow commands
+                If output is incomplete, re-call with ``keystrokes=""`` and a longer ``duration`` to poll further — do NOT resend the command.""",
+            "default": 1.0,
+            },
+    ],
+    "required": ["keystrokes", "duration"],
+}
+
+
 class TmuxSession:
     """Persistent tmux pane driven by local subprocess calls."""
 
@@ -320,7 +346,7 @@ class TerminalExecute(AsyncActionMixin, BaseAction):
         pane_height: int = 40,
         working_dir: str | None = None,
         extra_env: dict[str, str] | None = None,
-        description: dict | None = None,
+        description: dict  = TOOLSCHEMA,
     ):
         """Create the tool and start the tmux session immediately.
 
@@ -349,22 +375,17 @@ class TerminalExecute(AsyncActionMixin, BaseAction):
     async def run(self, keystrokes: str, duration: float = 1.0) -> ActionReturn:
         """Send keystrokes to the persistent tmux pane and return pane output.
 
-        Each call's keystrokes are sent verbatim to the terminal. Write them
-        exactly as you want them typed:
-        - End every command with '\\n' or it will not execute.
-        - Tmux-style escape sequences are accepted: 'C-c' (Ctrl+C),
-          'C-d' (Ctrl+D), 'Enter', 'Tab'.
+        The pane is a real bash shell running in a pty: it only executes a command once the keystrokes include a line terminator.  Each call's keystrokes are sent verbatim; bash accumulates input across calls until it sees '\n' or 'Enter' — if you forget the terminator the command will sit unexecuted in the prompt and get concatenated with whatever you send next. Tmux-style key names are also accepted as tokens: 'C-c' (Ctrl+C), 'C-d' (Ctrl+D), 'Enter', 'Tab'.
 
         Args:
-            keystrokes (str): exact characters to send to the terminal.
-            duration (float): seconds to wait after sending before returning
-                output (default 1.0, max 60.0).  Use 0.1 for immediate
-                commands (cd, ls, echo, cat), 1.0 for typical commands
-                (gcc, find, rustc), longer for slow commands (make, wget,
-                long-running scripts).  Prefer polling with an empty
-                keystrokes string over long single waits — call again with
-                ``keystrokes=""`` and a longer duration if output is not
-                yet complete.  Never wait longer than 60 seconds.
+            keystrokes (str): exact characters to send.  MUST end with '\n' (or 'Enter') for the command to actually execute — without it bash stays in "typing" state and you will only see the prompt echo back your input, not the command's output.
+            duration (float): seconds to wait after sending before reading pane output (default 1.0, max 60.0).  A too-short duration is the other way this tool appears to "do nothing": the command is still running when we capture the pane, so you see the prompt without output and assume it failed.
+                Guidance:
+                  - 1.0 for typical commands (ls, cat, cd, pip install,
+                    python scripts that finish quickly)
+                  - 3-10 for builds / installers / downloads
+                  - up to 60 for very slow commands
+                If output is incomplete, re-call with ``keystrokes=""`` and a longer ``duration`` to poll further — do NOT resend the command.
 
         Returns:
             str: terminal output (new pane content since the last call, or
@@ -376,6 +397,25 @@ class TerminalExecute(AsyncActionMixin, BaseAction):
                 errmsg="`keystrokes` must be a string.",
                 state=ActionStatusCode.ARGS_ERROR,
             )
+        # Fast-fail on malformed input so RL gets a crisp reward signal.
+        # Empty string is allowed (polling pane without sending anything).
+        # Non-empty keystrokes MUST end with '\\n'/'\\r' or be a pure tmux
+        # key name like 'Enter' / 'C-m' / 'C-c' — otherwise bash will not
+        # execute and the pane will just echo characters.
+        # if keystrokes and not TmuxSession._is_executing_command(keystrokes):
+        #     return ActionReturn(
+        #         type=self.name,
+        #         errmsg=(
+        #             r"keystrokes must end with '\n' (or 'Enter') for bash to "
+        #             "actually execute the command.  Without a line terminator "
+        #             "the characters accumulate in the shell prompt and do "
+        #             "nothing — you will only see your own keystrokes echoed "
+        #             "back, not the command output.  Use ``keystrokes=\"\"`` "
+        #             "only when polling for more output from a previously "
+        #             "submitted command."
+        #         ),
+        #         state=ActionStatusCode.ARGS_ERROR,
+        #     )
         try:
             duration = min(float(duration), _DEFAULT_DURATION_CAP_SEC)
         except (TypeError, ValueError):
