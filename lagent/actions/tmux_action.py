@@ -112,7 +112,7 @@ class TmuxSession:
             capture_output=True,
             text=True,
         )
-        if result.returncode != 0 and result.stderr != 'duplicate session: terminus2\n':
+        if result.returncode != 0 and result.stderr != f'duplicate session: {self._session_name}\n':
             raise RuntimeError(f"Failed to start tmux session: {result.stderr!r}")
         subprocess.run(
             f"tmux set-option -g history-limit {self._history_limit}",

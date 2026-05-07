@@ -2,13 +2,13 @@ import asyncio
 import json
 import random
 import traceback
-
 from typing import Dict, List, Optional, TypedDict, Union
 
 import aiohttp
 
 from lagent.llms.openai import AsyncGPTAPI
 from lagent.utils import get_logger
+
 logger = get_logger()
 
 
@@ -54,7 +54,7 @@ class AsyncAPIClient(AsyncGPTAPI):
         self.max_tool_response_length = max_tool_response_length
         self.max_tool_calls_per_turn = max_tool_calls_per_turn
 
-    async def chat(self, messages: List[dict], tools=None, **gen_params) -> str:
+    async def chat(self, messages: List[dict], tools=None, **gen_params) -> dict:
         """Generate completion from a list of templates.
 
         Args:
