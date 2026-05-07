@@ -173,7 +173,11 @@ class WebVisitor(AsyncActionMixin, BaseAction):
                     llm_response = (
                         llm_response.content
                         if isinstance(llm_response, AgentMessage)
-                        else llm_response.choices[0].message.content
+                        else (
+                            llm_response['choices'][0]['message']['content']
+                            if isinstance(llm_response, dict)
+                            else llm_response.choices[0].message.content
+                        )
                     )
                 if not llm_response or len(llm_response) < 10:
                     tool_response = tool_response[: int(len(tool_response) * 0.7)]
