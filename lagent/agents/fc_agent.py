@@ -188,8 +188,9 @@ class EnvAgent(AsyncAgent):
         tool_response_truncate_side: Literal['left', 'right', 'middle'] = 'middle',
         action_hooks: List[Union[dict, Hook]] = None,
         name: Optional[str] = None,
+        **kwargs
     ):
-        super().__init__(name=name)
+        super().__init__(name=name, **kwargs)
         if isinstance(actions, AsyncActionExecutor):
             for action_hook in action_hooks or []:
                 actions.register_hook(create_object(action_hook))

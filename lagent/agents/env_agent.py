@@ -29,9 +29,10 @@ class RLEnvAgent(EnvAgent):
         enable_repeated_tool_call_penalty: bool = False,
         action_hooks: Optional[List[Union[dict, Hook]]] = None,
         name: Optional[str] = None,
+        **kwargs
     ):
         super().__init__(
-            actions, stateful_tools, max_tool_response_length, tool_response_truncate_side, action_hooks, name
+            actions, stateful_tools, max_tool_response_length, tool_response_truncate_side, action_hooks, name, **kwargs
         )
         self.judger: AsyncAgent = create_object(judger)
         # scoring rule settings
