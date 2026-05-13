@@ -55,7 +55,7 @@ class SandboxClient:
             ),
         )
 
-    async def execute(self, command: str, cwd: str = "/root", timeout_sec: int = 60) -> dict:
+    async def execute(self, command: str, cwd: str = "/root", timeout_sec: int = 60, detach: bool=False) -> dict:
         """Execute a bash command inside the sandbox.
 
         Args:
@@ -68,7 +68,7 @@ class SandboxClient:
         """
         resp = await self._client.post(
             "/exec",
-            json={"command": command, "cwd": cwd, "timeout_sec": timeout_sec},
+            json={"command": command, "cwd": cwd, "timeout_sec": timeout_sec, "detach": detach},
             timeout=timeout_sec + 10,
         )
         resp.raise_for_status()

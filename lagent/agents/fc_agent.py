@@ -80,8 +80,9 @@ class FunctionCallAgent(AsyncAgent):
         max_turn: Optional[int] = None,
         initialize_input: bool = True,
         name: Optional[str] = None,
+        **kwargs
     ):
-        super().__init__(name=name)
+        super().__init__(name=name, **kwargs)
         self.policy_agent = create_object(policy_agent)
         self.env_agent = create_object(env_agent)
         self.compact_agent = create_object(compact_agent)
