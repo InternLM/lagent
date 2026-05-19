@@ -1,48 +1,58 @@
-"""LLM Proxy Recorder — lightweight HTTP proxy that records LLM
-request/response pairs for trajectory capture.
+"""LLM Proxy Recorder — a lightweight HTTP proxy (`SessionClient`) for intercepting,
+translating, and recording LLM request/response trajectories.
 
-The proxy intercepts all LLM API calls from external agents, records the
-full request (including messages history) and response (including usage
-and logprobs), then forwards the response unchanged.
+This proxy intercepts OpenAI-schema API calls from external agents, forwards them
+to the actual model backend (with real-time schema translation if necessary),
+and quietly records the full conversation history (trajectories).
 
-Session routing is done via the API key: external agents receive a
-synthetic key ``sk-proxy-{session_id}`` which the proxy uses to tag
-records, then replaces with the real API key before forwarding.
+Key Features:
+- **Format Translation**: Dynamically converts standard OpenAI requests into
+  Anthropic format (if the endpoint indicates Anthropic, e.g., `/v1/messages`),
+  and translates the Anthropic API responses/streams back to OpenAI format.
+- **Reasoning/Thinking Support**: Fully supports capturing and preserving Claude's
+  extended `thinking` blocks, securely managing internal signature alignment across
+  multi-turn chats so reasoning context is not lost.
+- **Trajectory Recording**: Merges and retains conversation turns into `_records`.
+  Interrupted or duplicate prefix traces are intelligently filtered when calling
+  `get_messages()`, returning pure OpenAI message schemas.
 
 Usage::
 
-    proxy = LLMProxyRecorder(
+    proxy = SessionClient(
         real_api_key="sk-ant-...",
         real_base_url="https://api.anthropic.com",
+        session_id="my-session-id"
     )
     await proxy.start()
-    # set env for external agent:
-    #   OPENAI_BASE_URL=http://localhost:{proxy.port}/v1
-    #   OPENAI_API_KEY=sk-proxy-{session_id}
-    records = proxy.get_records(session_id)
+
+    # Configure your agent's LLM client to hit the proxy:
+    # OPENAI_BASE_URL = proxy.url
+    #
+    # Retrieve the deduplicated chat paths later:
+    trajectories = proxy.get_messages()
+
     await proxy.stop()
 """
 
 import asyncio
+import copy
 import json
 import logging
+import os
 import re
+import uuid
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
-try:
-    from aiohttp import ClientSession, web
-except ImportError:
-    ClientSession = None
-    web = None
+import aiohttp
+from aiohttp import web
 
 logger = logging.getLogger(__name__)
 
-SESSION_KEY_PATTERN = re.compile(r'^sk-proxy-(.+)$')
 
-
-class LLMProxyRecorder:
+class SessionClient:
     """Lightweight HTTP proxy that records LLM request/response pairs.
 
     Args:
@@ -56,18 +66,15 @@ class LLMProxyRecorder:
         real_api_key: str,
         real_base_url: str,
         port: int = 0,
+        session_id: Optional[str] = None,
         http_proxy: Optional[str] = None,
     ):
-        if web is None:
-            raise ImportError(
-                "aiohttp is required for LLMProxyRecorder. "
-                "Install it with: pip install aiohttp"
-            )
         self.real_api_key = real_api_key
         self.real_base_url = real_base_url.rstrip('/')
         self.port = port
         self.http_proxy = http_proxy
-        self._records: Dict[str, List[dict]] = defaultdict(list)
+        self.session_id = session_id or os.getenv('XTUNER_SESSION_ID') or uuid.uuid4().hex
+        self._records: Dict[str, List[List[dict]]] = defaultdict(list)
         self._app: Optional[web.Application] = None
         self._runner: Optional[web.AppRunner] = None
         self._site: Optional[web.TCPSite] = None
@@ -106,26 +113,9 @@ class LLMProxyRecorder:
         self._app = None
         logger.info("LLMProxyRecorder stopped")
 
-    def _parse_session_id(self, auth_header: str) -> Optional[str]:
-        """Extract session_id from Authorization header.
-
-        Expects format: ``Bearer sk-proxy-{session_id}``
-        """
-        if not auth_header:
-            return None
-        token = auth_header.removeprefix('Bearer ').strip()
-        # Also handle x-api-key style (Anthropic)
-        match = SESSION_KEY_PATTERN.match(token)
-        return match.group(1) if match else None
-
     async def _handle_request(self, request: web.Request) -> web.Response:
         """Proxy handler: extract session, forward, record, return."""
-        # 1. Extract session from auth header
-        auth = request.headers.get('Authorization', '')
-        api_key = request.headers.get('x-api-key', '')
-        session_id = self._parse_session_id(auth) or self._parse_session_id(api_key)
-
-        # 2. Read request body
+        # 1. Read request body
         request_body = await request.read()
         request_data = None
         try:
@@ -133,34 +123,50 @@ class LLMProxyRecorder:
         except (json.JSONDecodeError, UnicodeDecodeError):
             pass
 
-        # 3. Build forwarding headers — replace auth with real key
+        # === 3. Convert OpenAI request to Provider Request ===
+        # Detect if we should use Anthropic format by checking the requested endpoint
+        req_path = request.match_info['path']
+        is_anthropic = req_path.endswith('/messages') or '/v1/messages' in req_path
+
+        # By default we assume the incoming request is standard OpenAI
+        provider_request_data = copy.deepcopy(request_data) if request_data else {}
+
+        if is_anthropic and provider_request_data:
+            # We need to map OpenAI request -> Anthropic request
+            provider_request_data = self._convert_openai_to_anthropic_req(provider_request_data)
+            request_body = json.dumps(provider_request_data).encode('utf-8')
+
+        # 4. Build forwarding headers — replace auth with real key
         forward_headers = dict(request.headers)
         forward_headers.pop('Host', None)
         forward_headers.pop('host', None)
+        # CRITICAL: We modified the request body, so the original Content-Length is wrong.
+        # We must remove it so aiohttp can calculate the correct length automatically.
+        forward_headers.pop('Content-Length', None)
+        forward_headers.pop('content-length', None)
+
         if 'Authorization' in forward_headers:
             forward_headers['Authorization'] = f'Bearer {self.real_api_key}'
         if 'x-api-key' in forward_headers:
             forward_headers['x-api-key'] = self.real_api_key
 
-        # 4. Forward to real LLM
+        # 5. Forward to real LLM
         # Build target URL, avoiding path duplication
         # e.g. real_base_url="http://api.com/v1", path="/v1/chat/completions"
         # should produce "http://api.com/v1/chat/completions" not "http://api.com/v1/v1/..."
-        req_path = request.match_info['path']
-        from urllib.parse import urlparse
         base_parsed = urlparse(self.real_base_url)
         base_path = base_parsed.path.rstrip('/')
         if req_path.startswith(base_path.lstrip('/')):
             # Path already includes the base path prefix, use as-is
             target_url = f"{base_parsed.scheme}://{base_parsed.netloc}/{req_path}"
         else:
-            target_url = f"{self.real_base_url}/{req_path}"
+            target_url = f"{self.real_base_url}/{req_path.lstrip('/')}"
         if request.query_string:
             target_url += f"?{request.query_string}"
 
-        is_stream = request_data.get('stream', False) if request_data else False
+        is_stream = provider_request_data.get('stream', False) if provider_request_data else False
 
-        async with ClientSession() as client:
+        async with aiohttp.ClientSession() as client:
             async with client.request(
                 method=request.method,
                 url=target_url,
@@ -174,9 +180,9 @@ class LLMProxyRecorder:
                     response = web.StreamResponse(
                         status=resp.status,
                         headers={
-                            k: v for k, v in resp.headers.items()
-                            if k.lower() not in ('transfer-encoding', 'content-length',
-                                                'content-encoding')
+                            k: v
+                            for k, v in resp.headers.items()
+                            if k.lower() not in ('transfer-encoding', 'content-length', 'content-encoding')
                         },
                     )
                     await response.prepare(request)
@@ -190,14 +196,14 @@ class LLMProxyRecorder:
                     response = web.Response(
                         status=resp.status,
                         headers={
-                            k: v for k, v in resp.headers.items()
-                            if k.lower() not in ('transfer-encoding', 'content-length',
-                                                'content-encoding')
+                            k: v
+                            for k, v in resp.headers.items()
+                            if k.lower() not in ('transfer-encoding', 'content-length', 'content-encoding')
                         },
                         body=raw_response,
                     )
 
-        # 5. Parse response for recording
+        # 6. Parse response for recording
         response_data = None
         if is_stream:
             # Parse SSE stream to extract final data
@@ -208,23 +214,247 @@ class LLMProxyRecorder:
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
 
-        # 6. Record
-        if session_id and request_data:
-            record = {
-                'timestamp': datetime.now().isoformat(),
-                'request': request_data,
-                'response': response_data,
-                'path': request.path,
-                'method': request.method,
-                'stream': is_stream,
-            }
-            self._records[session_id].append(record)
+        # === Convert Provider Response to OpenAI Response ===
+        if is_anthropic and response_data:
+            response_data = self._convert_anthropic_to_openai_resp(response_data)
+
+        # 7. Record
+        if request_data and 'messages' in request_data:
+            # At this point, response_data is guaranteed to be in OpenAI format
+            assistant_msg = None
+            if response_data and 'choices' in response_data and response_data['choices']:
+                raw_msg = response_data['choices'][0].get('message')
+                if raw_msg:
+                    # Only keep pure standard OpenAI fields to prevent contamination
+                    # standard fields: role, content, tool_calls, function_call, refusal, reasoning_content
+                    assistant_msg = {"role": raw_msg.get("role", "assistant")}
+                    if "content" in raw_msg and raw_msg["content"] is not None:
+                        assistant_msg["content"] = raw_msg["content"]
+                    if "reasoning_content" in raw_msg and raw_msg["reasoning_content"] is not None:
+                        assistant_msg["reasoning_content"] = raw_msg["reasoning_content"]
+                    if "reasoning_signature" in raw_msg and raw_msg["reasoning_signature"] is not None:
+                        assistant_msg["reasoning_signature"] = raw_msg["reasoning_signature"]
+                    if "tool_calls" in raw_msg and raw_msg["tool_calls"] is not None:
+                        assistant_msg["tool_calls"] = raw_msg["tool_calls"]
+                    if "function_call" in raw_msg and raw_msg["function_call"] is not None:
+                        assistant_msg["function_call"] = raw_msg["function_call"]
+                    if "refusal" in raw_msg and raw_msg["refusal"] is not None:
+                        assistant_msg["refusal"] = raw_msg["refusal"]
+
+            # Keep the latest conversation history
+            messages = list(request_data['messages'])
+            if assistant_msg:
+                messages.append(assistant_msg)
+            self._records[self.session_id].append(messages)
+
             logger.debug(
-                f"Recorded LLM call for session {session_id}: "
-                f"{request.path} ({len(self._records[session_id])} total)"
+                f"Updated messages for session {self.session_id}: {len(self._records[self.session_id])} traces total"
             )
 
         return response
+
+    @staticmethod
+    def _convert_openai_to_anthropic_req(openai_req: dict) -> dict:
+        """Convert standard OpenAI request format to Anthropic format."""
+        anthropic_req = {
+            "model": openai_req.get("model", ""),
+            "messages": [],
+        }
+
+        if "max_tokens" in openai_req:
+            anthropic_req["max_tokens"] = openai_req["max_tokens"]
+        elif "max_completion_tokens" in openai_req:
+            anthropic_req["max_tokens"] = openai_req["max_completion_tokens"]
+        else:
+            anthropic_req["max_tokens"] = 4096  # Anthropic requires max_tokens
+
+        # Pass reasoning capabilities for supported models
+        if "thinking" in openai_req:
+            anthropic_req["thinking"] = openai_req["thinking"]
+
+        if "temperature" in openai_req:
+            anthropic_req["temperature"] = openai_req["temperature"]
+
+        if "top_p" in openai_req:
+            anthropic_req["top_p"] = openai_req["top_p"]
+
+        if "top_k" in openai_req:
+            anthropic_req["top_k"] = openai_req["top_k"]
+
+        if "stop" in openai_req:
+            if isinstance(openai_req["stop"], str):
+                anthropic_req["stop_sequences"] = [openai_req["stop"]]
+            elif isinstance(openai_req["stop"], list):
+                anthropic_req["stop_sequences"] = openai_req["stop"]
+
+        if "stream" in openai_req:
+            anthropic_req["stream"] = openai_req["stream"]
+
+        # Convert Messages
+        system_prompts = []
+        for msg in openai_req.get("messages", []):
+            role = msg.get("role")
+            content = msg.get("content", "")
+
+            if role == "system":
+                system_prompts.append(content)
+                continue
+
+            anthropic_msg = {"role": role, "content": []}
+
+            # Handle thinking / reasoning blocks for assistant
+            if role == "assistant" and msg.get("reasoning_content"):
+                if msg.get("reasoning_signature"):
+                    anthropic_msg["content"].append(
+                        {
+                            "type": "thinking",
+                            "thinking": msg.get("reasoning_content"),
+                            "signature": msg.get("reasoning_signature"),
+                        }
+                    )
+                # If there's reasoning_content but no signature, Anthropic API will reject it if passed as 'thinking' block.
+                # In that case, we can't safely inject it natively to Claude API without breaking the call.
+
+            # Content could be a string or list (vision, etc). Here we handle common cases.
+            if isinstance(content, str):
+                if content:
+                    anthropic_msg["content"].append({"type": "text", "text": content})
+            else:
+                # If it's already a list (like OpenAI vision), map accordingly.
+                # Avoid overwriting the reasoning block we just appended
+                if isinstance(content, list):
+                    anthropic_msg["content"].extend(content)
+                else:
+                    anthropic_msg["content"] = content
+
+            # Handle OpenAI tool calls -> Anthropic tool_use
+            if "tool_calls" in msg:
+                for tc in msg["tool_calls"]:
+                    anthropic_msg["content"].append(
+                        {
+                            "type": "tool_use",
+                            "id": tc.get("id"),
+                            "name": tc.get("function", {}).get("name"),
+                            "input": json.loads(tc.get("function", {}).get("arguments", "{}")),
+                        }
+                    )
+
+            # Handle OpenAI tool response -> Anthropic tool_result
+            if role == "tool":
+                anthropic_msg["role"] = "user"  # Anthropic uses 'user' for tool results
+                anthropic_msg["content"].append(
+                    {"type": "tool_result", "tool_use_id": msg.get("tool_call_id"), "content": msg.get("content", "")}
+                )
+
+            anthropic_req["messages"].append(anthropic_msg)
+
+        if system_prompts:
+            anthropic_req["system"] = "\n".join(system_prompts)
+
+        # Convert Tools
+        if "tools" in openai_req:
+            anthropic_req["tools"] = []
+            for tool in openai_req["tools"]:
+                if tool.get("type") == "function":
+                    fn = tool.get("function", {})
+                    anthropic_req["tools"].append(
+                        {
+                            "name": fn.get("name"),
+                            "description": fn.get("description", ""),
+                            "input_schema": fn.get("parameters", {}),
+                        }
+                    )
+
+        # Convert tool_choice
+        if "tool_choice" in openai_req:
+            tc = openai_req["tool_choice"]
+            if tc == "auto":
+                anthropic_req["tool_choice"] = {"type": "auto"}
+            elif tc == "required":
+                anthropic_req["tool_choice"] = {"type": "any"}
+            elif isinstance(tc, dict) and tc.get("type") == "function" and "function" in tc:
+                anthropic_req["tool_choice"] = {"type": "tool", "name": tc["function"]["name"]}
+
+        # Remove empty content arrays if they got created
+        for msg in anthropic_req["messages"]:
+            if (
+                isinstance(msg["content"], list)
+                and len(msg["content"]) == 1
+                and msg["content"][0].get("type") == "text"
+            ):
+                msg["content"] = msg["content"][0]["text"]  # Simplify
+
+        return anthropic_req
+
+    @staticmethod
+    def _convert_anthropic_to_openai_resp(anthro_resp: dict) -> dict:
+        """Convert Anthropic response format to OpenAI format."""
+        openai_resp = {
+            "id": anthro_resp.get("id", ""),
+            "model": anthro_resp.get("model", ""),
+            "choices": [{"index": 0, "message": {"role": "assistant"}}],
+            "usage": {},
+        }
+
+        message = openai_resp["choices"][0]["message"]
+        content_text = ""
+        tool_calls = []
+
+        # Handle anthro_resp (which could be the parsed stream output or direct HTTP response)
+        content_blocks = anthro_resp.get("content", [])
+        for block in content_blocks:
+            if block.get("type") == "text":
+                content_text += block.get("text", "")
+            elif block.get("type") == "tool_use":
+                # Ensure input is a dictionary before dumping
+                input_data = block.get("input", {})
+                if isinstance(input_data, str):
+                    try:
+                        input_data = json.loads(input_data)
+                    except:
+                        pass
+                tool_calls.append(
+                    {
+                        "id": block.get("id"),
+                        "type": "function",
+                        "function": {
+                            "name": block.get("name"),
+                            "arguments": json.dumps(input_data) if isinstance(input_data, dict) else str(input_data),
+                        },
+                    }
+                )
+            elif block.get("type") in ("thinking", "reasoning"):
+                reasoning_text = block.get("thinking", block.get("text", ""))
+                assistant_msg = openai_resp["choices"][0]["message"]
+                assistant_msg["reasoning_content"] = assistant_msg.get("reasoning_content", "") + reasoning_text
+
+                if block.get("signature"):
+                    assistant_msg["reasoning_signature"] = block.get("signature")
+
+        message["content"] = content_text if content_text else None
+        if tool_calls:
+            message["tool_calls"] = tool_calls
+
+        # Handle stop reason
+        stop_reason_map = {
+            "end_turn": "stop",
+            "max_tokens": "length",
+            "stop_sequence": "stop",
+            "tool_use": "tool_calls",
+        }
+        anthro_stop = anthro_resp.get("stop_reason")
+        openai_resp["choices"][0]["finish_reason"] = stop_reason_map.get(anthro_stop, anthro_stop)
+
+        # Handle Usage
+        if "usage" in anthro_resp:
+            openai_resp["usage"] = {
+                "prompt_tokens": anthro_resp["usage"].get("input_tokens", 0),
+                "completion_tokens": anthro_resp["usage"].get("output_tokens", 0),
+                "total_tokens": anthro_resp["usage"].get("input_tokens", 0)
+                + anthro_resp["usage"].get("output_tokens", 0),
+            }
+
+        return openai_resp
 
     @staticmethod
     def _parse_stream_response(raw: bytes) -> Optional[dict]:
@@ -248,9 +478,8 @@ class LLMProxyRecorder:
         # Detect format: OpenAI has "choices", Anthropic has "type"
         first = events[0]
         if 'choices' in first or first.get('object') == 'chat.completion.chunk':
-            return LLMProxyRecorder._parse_openai_stream(events)
-        else:
-            return LLMProxyRecorder._parse_anthropic_stream(events)
+            return SessionClient._parse_openai_stream(events)
+        return SessionClient._parse_anthropic_stream(events)
 
     @staticmethod
     def _parse_openai_stream(events: list) -> Optional[dict]:
@@ -306,9 +535,7 @@ class LLMProxyRecorder:
         msg = message['choices'][0]['message']
         msg['content'] = ''.join(content_parts)
         if tool_calls_map:
-            msg['tool_calls'] = [
-                tool_calls_map[i] for i in sorted(tool_calls_map)
-            ]
+            msg['tool_calls'] = [tool_calls_map[i] for i in sorted(tool_calls_map)]
         if usage:
             message['usage'] = usage
         return message
@@ -349,6 +576,10 @@ class LLMProxyRecorder:
                 elif delta_type == 'thinking_delta':
                     current_block.setdefault('thinking', '')
                     current_block['thinking'] += delta.get('thinking', '')
+                elif delta_type == 'signature_delta':
+                    # Sometimes reasoning blocks have signature chunk in anthropic stream
+                    current_block.setdefault('signature', '')
+                    current_block['signature'] += delta.get('signature', '')
                 elif delta_type == 'input_json_delta':
                     current_block.setdefault('partial_json', '')
                     current_block['partial_json'] += delta.get('partial_json', '')
@@ -359,9 +590,7 @@ class LLMProxyRecorder:
                     # Parse partial_json into input for tool_use blocks
                     if 'partial_json' in current_block:
                         try:
-                            current_block['input'] = json.loads(
-                                current_block.pop('partial_json')
-                            )
+                            current_block['input'] = json.loads(current_block.pop('partial_json'))
                         except json.JSONDecodeError:
                             current_block['input'] = current_block.pop('partial_json')
                     content_blocks.append(current_block)
@@ -384,333 +613,145 @@ class LLMProxyRecorder:
         message['content'] = content_blocks
         return message
 
-    def get_records(self, session_id: str) -> List[dict]:
-        """Get all recorded LLM call records for a session.
-
-        Each record contains:
-            - timestamp: ISO 8601 timestamp
-            - request: Full request body (messages, tools, etc.)
-            - response: Full response body (choices, usage, etc.)
-            - path: API path
-            - method: HTTP method
-            - stream: Whether streaming was used
-
-        Args:
-            session_id: The session identifier.
+    def get_messages(self) -> List[List[dict]]:
+        """Get the latest conversation messages in OpenAI format for this session.
+        If a sequence of messages is a prefix of another sequence, it will be filtered out.
 
         Returns:
-            List of record dicts, ordered by timestamp.
+            List of message sequences.
         """
-        return list(self._records.get(session_id, []))
-
-    # ── Standardization ────────────────────────────────────────
-
-    @staticmethod
-    def normalize_record(record: dict) -> dict:
-        """Normalize a raw proxy record into a standard training format.
-
-        Handles both Anthropic and OpenAI API formats, strips billing
-        headers and other noise, and produces a uniform structure::
-
-            {
-                "messages": [
-                    {"role": "system", "content": "..."},
-                    {"role": "user", "content": "..."},
-                    {"role": "assistant", "content": "...",
-                     "reasoning_content": "...", "extra_info": {...}},
-                    ...
-                ],
-                "tools": [...],
-                "meta": {
-                    "model": "...",
-                    "usage": {...},
-                    "stop_reason": "...",
-                    "timestamp": "...",
-                },
-                "response": {
-                    "role": "assistant",
-                    "content": "...",
-                    "reasoning_content": "...",
-                    "extra_info": {"usage": {...}, "model": "...", ...},
-                },
-            }
-        """
-        req = record.get('request', {})
-        resp = record.get('response') or {}
-
-        # ── Normalize system prompt ──
-        system = req.get('system')
-        system_text = None
-        if system:
-            if isinstance(system, list):
-                # Anthropic: list of content blocks, skip billing headers
-                parts = []
-                for block in system:
-                    if not isinstance(block, dict):
-                        continue
-                    text = block.get('text', '')
-                    # Skip billing/tracking headers
-                    if text.startswith('x-anthropic-billing-header'):
-                        continue
-                    parts.append(text)
-                system_text = '\n'.join(parts) if parts else None
-            elif isinstance(system, str):
-                system_text = system
-
-        # ── Normalize messages ──
-        messages = []
-        if system_text:
-            messages.append({'role': 'system', 'content': system_text})
-
-        for msg in req.get('messages', []):
-            role = msg.get('role', 'user')
-            content = msg.get('content', '')
-
-            # Flatten content blocks to text
-            if isinstance(content, list):
-                text_parts = []
-                reasoning_parts = []
-                for block in content:
-                    if not isinstance(block, dict):
-                        text_parts.append(str(block))
-                        continue
-                    btype = block.get('type', '')
-                    if btype == 'text':
-                        text_parts.append(block.get('text', ''))
-                    elif btype in ('thinking', 'reasoning'):
-                        reasoning_parts.append(block.get('thinking', block.get('text', '')))
-                    elif btype == 'tool_use':
-                        text_parts.append(f"[tool_use: {block.get('name', '')}]")
-                    elif btype == 'tool_result':
-                        text_parts.append(f"[tool_result: {str(block.get('content', ''))[:200]}]")
-                    else:
-                        text_parts.append(block.get('text', str(block)))
-
-                norm_msg = {'role': role, 'content': '\n'.join(text_parts)}
-                if reasoning_parts:
-                    norm_msg['reasoning_content'] = '\n'.join(reasoning_parts)
-            else:
-                norm_msg = {'role': role, 'content': str(content)}
-
-            messages.append(norm_msg)
-
-        # ── Normalize tools ──
-        tools = req.get('tools')
-
-        # ── Normalize response ──
-        resp_content = ''
-        resp_reasoning = ''
-        resp_extra = {}
-
-        # Anthropic format
-        resp_blocks = resp.get('content', [])
-        if isinstance(resp_blocks, list):
-            text_parts = []
-            reasoning_parts = []
-            for block in resp_blocks:
-                if not isinstance(block, dict):
-                    continue
-                btype = block.get('type', '')
-                if btype == 'text':
-                    text_parts.append(block.get('text', ''))
-                elif btype in ('thinking', 'reasoning'):
-                    reasoning_parts.append(block.get('thinking', block.get('text', '')))
-                elif btype == 'tool_use':
-                    text_parts.append(f"[tool_use: {block.get('name', '')}]")
-            resp_content = '\n'.join(text_parts)
-            resp_reasoning = '\n'.join(reasoning_parts)
-
-        # OpenAI format
-        choices = resp.get('choices', [])
-        if choices and not resp_content:
-            choice = choices[0]
-            msg = choice.get('message', {})
-            resp_content = msg.get('content', '') or ''
-            # Handle tool_calls
-            tool_calls = msg.get('tool_calls', [])
-            if tool_calls:
-                tc_strs = []
-                for tc in tool_calls:
-                    fn = tc.get('function', {})
-                    tc_strs.append(f"[tool_call: {fn.get('name', '')}({fn.get('arguments', '')[:100]})]")
-                if not resp_content:
-                    resp_content = '\n'.join(tc_strs)
-                resp_extra['tool_calls'] = tool_calls
-            resp_extra['finish_reason'] = choice.get('finish_reason')
-
-        # Usage (both formats)
-        usage = resp.get('usage', {})
-        if usage:
-            resp_extra['usage'] = usage
-        if resp.get('model'):
-            resp_extra['model'] = resp['model']
-        if resp.get('stop_reason'):
-            resp_extra['stop_reason'] = resp['stop_reason']
-
-        # Meta
-        model = req.get('model') or resp.get('model')
-        meta = {
-            'model': model,
-            'usage': usage,
-            'timestamp': record.get('timestamp'),
-        }
-        if resp.get('stop_reason'):
-            meta['stop_reason'] = resp['stop_reason']
-        if choices and choices[0].get('finish_reason'):
-            meta['stop_reason'] = choices[0]['finish_reason']
-
-        response_msg = {'role': 'assistant', 'content': resp_content}
-        if resp_reasoning:
-            response_msg['reasoning_content'] = resp_reasoning
-        if resp_extra:
-            response_msg['extra_info'] = resp_extra
-
-        return {
-            'messages': messages,
-            'tools': tools,
-            'meta': meta,
-            'response': response_msg,
-        }
-
-    def get_normalized_records(self, session_id: str) -> List[dict]:
-        """Get all records in normalized format."""
-        return [self.normalize_record(r) for r in self.get_records(session_id)]
-
-    # ── Chain Rebuilding ──────────────────────────────────────
-
-    def rebuild_chains(self, session_id: str) -> List[List[dict]]:
-        """Rebuild conversation chains from normalized records.
-
-        Two consecutive records belong to the same chain if:
-        1. Messages count grew (history is appending)
-        2. The previous response text appears in current messages
-
-        Args:
-            session_id: The session identifier.
-
-        Returns:
-            List of chains. Each chain is a list of normalized records.
-        """
-        records = self.get_normalized_records(session_id)
+        records = self._records.get(self.session_id, [])
         if not records:
             return []
 
-        chains: List[List[dict]] = []
-        current_chain: List[dict] = [records[0]]
+        filtered = []
+        for i, seq_i in enumerate(records):
+            is_prefix = False
+            for j, seq_j in enumerate(records):
+                if i == j:
+                    continue
 
-        for prev, curr in zip(records, records[1:]):
-            prev_msgs = prev['messages']
-            curr_msgs = curr['messages']
+                # If they are exactly identical, keep the one with the higher index
+                if len(seq_i) == len(seq_j) and seq_i == seq_j:
+                    if i < j:
+                        is_prefix = True
+                        break
+                # If one is a strict prefix of the other, skip it
+                elif len(seq_i) < len(seq_j) and seq_j[: len(seq_i)] == seq_i:
+                    is_prefix = True
+                    break
 
-            msgs_grew = len(curr_msgs) > len(prev_msgs)
+            if not is_prefix:
+                filtered.append(seq_i)
 
-            prev_response_text = prev['response'].get('content', '')[:200]
-            has_prev_response = (
-                prev_response_text
-                and any(
-                    m.get('role') == 'assistant'
-                    and prev_response_text in m.get('content', '')
-                    for m in curr_msgs
-                )
-            )
+        return filtered
 
-            if msgs_grew and has_prev_response:
-                current_chain.append(curr)
-            else:
-                chains.append(current_chain)
-                current_chain = [curr]
+    def release_trace(self):
+        """Clear recorded data for this session."""
+        self._records.pop(self.session_id, None)
 
-        chains.append(current_chain)
-        return chains
 
-    # ── Training Sample Export ────────────────────────────────
+if __name__ == '__main__':
 
-    def to_training_samples(self, session_id: str) -> List[dict]:
-        """Convert recorded LLM calls into SFT/RL training samples.
+    async def _test_debug_openai():
+        logging.basicConfig(level=logging.DEBUG)
 
-        Each chain produces one sample::
+        # 1. Start the proxy
+        proxy = SessionClient(
+            real_api_key=os.getenv("OPENAI_API_KEY", "EMPTY"),  # Provide a valid OpenAI key if needed
+            real_base_url="http://s-20260104203038-22bhb.ailab-evalservice.pjh-service.org.cn/v1",
+            session_id="test_session_123",
+        )
+        await proxy.start()
 
-            {
-                "messages": [
-                    {"role": "system", "content": "..."},
-                    {"role": "user", "content": "..."},
-                    {"role": "assistant", "content": "...",
-                     "reasoning_content": "...",
-                     "extra_info": {"usage": {...}, "model": "..."}},
-                    ...
-                ],
-                "tools": [...],
-                "meta": {
-                    "num_calls": 3,
-                    "model": "...",
-                    "total_usage": {...},
-                },
-            }
-        """
-        chains = self.rebuild_chains(session_id)
-        samples = []
+        # 2. Simulate an Agent sending an OpenAI-format request to the proxy
+        dummy_payload = {
+            "model": "agentic_rl_qwen35a3b_service",
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Tell me a joke."},
+            ],
+            "stream": False,
+        }
 
-        for chain in chains:
-            if not chain:
-                continue
+        print(f"\n--- Sending request to Proxy at {proxy.url} ---")
+        async with aiohttp.ClientSession() as session:
+            try:
+                # Send to proxy URL, the proxy forwards it to real_base_url
+                async with session.post(
+                    f"{proxy.url}/chat/completions",
+                    json=dummy_payload,
+                    headers={"Authorization": "Bearer sk-proxy-test"},
+                ) as resp:
+                    print(f"Proxy returned status: {resp.status}")
+                    result = await resp.json()
+                    print("Response received from LLM:")
+                    print(json.dumps(result, indent=2, ensure_ascii=False))
+            except Exception as e:
+                print(f"Request failed (is the target server running?): {e}")
 
-            last = chain[-1]
+        # 3. Check what the proxy recorded
+        print("\n--- Recorded Context (OpenAI Format) ---")
+        messages = proxy.get_messages()
+        print(json.dumps(messages, indent=2, ensure_ascii=False))
 
-            # Take the last record's messages (most complete history)
-            # + append the last response
-            messages = list(last['messages'])
+        # Clean up
+        proxy.release_trace()
+        await proxy.stop()
 
-            # Attach extra_info to assistant messages by matching response text
-            response_extra_map = {}
-            for rec in chain:
-                resp = rec['response']
-                text = resp.get('content', '')[:200]
-                if text:
-                    extra = dict(resp.get('extra_info', {}))
-                    response_extra_map[text] = extra
+    async def _test_debug_claude():
+        logging.basicConfig(level=logging.DEBUG)
 
-            for msg in messages:
-                if msg.get('role') == 'assistant':
-                    text = msg.get('content', '')[:200]
-                    if text in response_extra_map:
-                        msg['extra_info'] = response_extra_map[text]
+        proxy = SessionClient(
+            real_api_key=os.getenv("ANTHROPIC_AUTH_TOKEN", "EMPTY"),  # Provide a valid Claude key if needed
+            real_base_url=os.getenv('ANTHROPIC_BASE_URL'),  # The Claude v1 proxy target
+            session_id="test_claude_123",
+            http_proxy=os.getenv("HTTP_PROXY"),
+        )
+        await proxy.start()
 
-            # Append final response as the last assistant message
-            last_resp = dict(last['response'])
-            messages.append(last_resp)
+        # Simulate sending OpenAI schema request, but pointing to Anthropic endpoint
+        dummy_payload = {
+            "model": "claude-sonnet-4-20250514",
+            "messages": [
+                # {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Tell me a joke."},
+            ],
+            "stream": True,  # Let's test streaming capabilities too
+            "max_completion_tokens": 10000,
+            "thinking": {"type": "enabled", "budget_tokens": 2048},
+        }
 
-            # Aggregate usage
-            total_usage = {
-                'total_input_tokens': 0,
-                'total_output_tokens': 0,
-            }
-            for rec in chain:
-                u = rec['meta'].get('usage', {})
-                total_usage['total_input_tokens'] += u.get(
-                    'input_tokens', u.get('prompt_tokens', 0))
-                total_usage['total_output_tokens'] += u.get(
-                    'output_tokens', u.get('completion_tokens', 0))
+        print(f"\n--- Sending request to Proxy Claude at {proxy.url} ---")
+        async with aiohttp.ClientSession() as session:
+            try:
+                # Assuming the external agent posts to /v1/messages since we trigger Anthropic handling by endpoint now
+                async with session.post(
+                    f"{proxy.url}/v1/messages",
+                    json=dummy_payload,
+                    headers={"Authorization": "Bearer sk-proxy-test", "x-api-key": "sk-proxy-test"},
+                ) as resp:
+                    print(f"Proxy returned status: {resp.status}")
 
-            sample = {
-                'messages': messages,
-                'tools': last.get('tools'),
-                'meta': {
-                    'num_calls': len(chain),
-                    'model': last['meta'].get('model'),
-                    'total_usage': total_usage,
-                },
-            }
-            samples.append(sample)
+                    if dummy_payload["stream"]:
+                        print("Stream response chunks:")
+                        async for chunk in resp.content.iter_any():
+                            print(chunk.decode("utf-8", errors="replace"), end="")
+                        print("\nStream finished.")
+                    else:
+                        result = await resp.json()
+                        print("Response received from LLM:")
+                        print(json.dumps(result, indent=2, ensure_ascii=False))
+            except Exception as e:
+                print(f"Request failed: {e}")
 
-        return samples
+        # Check proxy records
+        print("\n--- Recorded Context (OpenAI Format) ---")
+        messages = proxy.get_messages()
+        print(json.dumps(messages, indent=2, ensure_ascii=False))
 
-    def clear(self, session_id: Optional[str] = None):
-        """Clear recorded data.
+        proxy.release_trace()
+        await proxy.stop()
 
-        Args:
-            session_id: Clear only this session. If None, clear all.
-        """
-        if session_id:
-            self._records.pop(session_id, None)
-        else:
-            self._records.clear()
+    asyncio.run(_test_debug_openai())
+    # asyncio.run(_test_debug_claude())

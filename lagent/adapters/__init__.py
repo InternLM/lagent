@@ -1,8 +1,8 @@
 from .base import AsyncExternalAgent, BaseExternalAgent
-from .cli_adapter import CLIAgentAdapter
 from .claude_code import ClaudeCodeAdapter
 from .claude_code_sdk import ClaudeCodeSDKAdapter
-from .proxy import LLMProxyRecorder
+from .cli_adapter import CLIAgentAdapter
+from .proxy import SessionClient
 from .sdk_adapter import SDKAgentAdapter
 
 __all__ = [
@@ -12,5 +12,5 @@ __all__ = [
     'ClaudeCodeAdapter',
     'ClaudeCodeSDKAdapter',
     'SDKAgentAdapter',
-    'LLMProxyRecorder',
+    'SessionClient',
 ]
