@@ -199,6 +199,16 @@ class SessionClient:
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
 
+            # Additional fallback for Anthropic HTTP API error responses wrapped in proper JSON
+            if response_data and response_data.get('type') == 'error':
+                logger.error(f"Received error from provider: {response_data}")
+                raise RuntimeError(f"Provider returned error: {response_data}")
+
+            # Additional fallback for OpenAI HTTP API error responses
+            if response_data and 'error' in response_data and isinstance(response_data['error'], dict):
+                logger.error(f"Received error from provider: {response_data}")
+                raise RuntimeError(f"Provider returned error: {response_data}")
+
         # 7. Record
         if request_data and 'messages' in request_data:
             assistant_msg = None
