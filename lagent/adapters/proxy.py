@@ -40,7 +40,9 @@ from urllib.parse import urlparse
 import aiohttp
 from aiohttp import web
 
-logger = logging.getLogger(__name__)
+from lagent.utils import get_logger
+
+logger = get_logger(__name__, 'info')
 
 
 class SessionClient:
@@ -113,6 +115,11 @@ class SessionClient:
             request_data = json.loads(request_body) if request_body else None
         except (json.JSONDecodeError, UnicodeDecodeError):
             pass
+
+        # 2. Inject session_id into request body
+        if isinstance(request_data, dict):
+            request_data['session_id'] = self.session_id
+            request_body = json.dumps(request_data).encode('utf-8')
 
         # Detect if we should use Anthropic format by checking the requested endpoint
         req_path = request.match_info['path']
@@ -212,29 +219,30 @@ class SessionClient:
         # 7. Record
         if request_data and 'messages' in request_data:
             assistant_msg = None
-            if is_anthropic and response_data:
-                assistant_msg = {"role": response_data.get("role", "assistant")}
-                if "content" in response_data and response_data["content"] is not None:
-                    assistant_msg["content"] = response_data["content"]
+
+            if is_anthropic:
+                # Handle Anthropic trace format
+                if response_data:
+                    assistant_msg = {"role": response_data.get("role", "assistant")}
+                    allowed_anthropic_fields = ["content"]
+                    for field in allowed_anthropic_fields:
+                        if response_data.get(field) is not None:
+                            assistant_msg[field] = response_data[field]
             else:
-                if response_data and 'choices' in response_data and response_data['choices']:
+                # Handle standard OpenAI trace format
+                if response_data and response_data.get('choices'):
                     raw_msg = response_data['choices'][0].get('message')
                     if raw_msg:
-                        # Only keep pure standard OpenAI fields to prevent contamination
-                        # standard fields: role, content, tool_calls, function_call, refusal, reasoning_content
                         assistant_msg = {"role": raw_msg.get("role", "assistant")}
-                        if "content" in raw_msg and raw_msg["content"] is not None:
-                            assistant_msg["content"] = raw_msg["content"]
-                        if "reasoning_content" in raw_msg and raw_msg["reasoning_content"] is not None:
-                            assistant_msg["reasoning_content"] = raw_msg["reasoning_content"]
-                        if "reasoning_signature" in raw_msg and raw_msg["reasoning_signature"] is not None:
-                            assistant_msg["reasoning_signature"] = raw_msg["reasoning_signature"]
-                        if "tool_calls" in raw_msg and raw_msg["tool_calls"] is not None:
-                            assistant_msg["tool_calls"] = raw_msg["tool_calls"]
-                        if "function_call" in raw_msg and raw_msg["function_call"] is not None:
-                            assistant_msg["function_call"] = raw_msg["function_call"]
-                        if "refusal" in raw_msg and raw_msg["refusal"] is not None:
-                            assistant_msg["refusal"] = raw_msg["refusal"]
+                        # Only keep pure standard OpenAI fields to prevent contamination
+                        allowed_fields = ["content", "tool_calls", "function_call", "refusal"]
+                        # Support for o1 and future reasoning models natively
+                        if "reasoning_content" in raw_msg:
+                            allowed_fields.append("reasoning_content")
+
+                        for field in allowed_fields:
+                            if raw_msg.get(field) is not None:
+                                assistant_msg[field] = raw_msg[field]
 
             # Keep the latest conversation history
             messages = list(request_data['messages'])
