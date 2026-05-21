@@ -288,6 +288,7 @@ class SessionClient:
             'choices': [{'message': {'role': 'assistant', 'content': ''}}],
         }
         content_parts = []
+        reasoning_content_parts = []
         tool_calls_map: Dict[int, dict] = {}  # index → {id, type, function}
         usage = {}
 
@@ -304,6 +305,10 @@ class SessionClient:
                 # Content
                 if delta.get('content'):
                     content_parts.append(delta['content'])
+
+                # Reasoning Content
+                if delta.get('reasoning_content'):
+                    reasoning_content_parts.append(delta['reasoning_content'])
 
                 # Tool calls
                 for tc_delta in delta.get('tool_calls') or []:
@@ -334,6 +339,8 @@ class SessionClient:
 
         msg = message['choices'][0]['message']
         msg['content'] = ''.join(content_parts)
+        if reasoning_content_parts:
+            msg['reasoning_content'] = ''.join(reasoning_content_parts)
         if tool_calls_map:
             msg['tool_calls'] = [tool_calls_map[i] for i in sorted(tool_calls_map)]
         if usage:
