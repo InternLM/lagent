@@ -66,7 +66,7 @@ class SessionClient:
         self.real_base_url = real_base_url.rstrip('/')
         self.port = port
         self.http_proxy = http_proxy
-        self.session_id = session_id or os.getenv('XTUNER_SESSION_ID') or uuid.uuid4().hex
+        self.session_id = session_id or os.getenv('XTUNER_SESSION_ID') or str(uuid.uuid4().int)
         self._records: Dict[str, List[List[dict]]] = defaultdict(list)
         self._app: Optional[web.Application] = None
         self._runner: Optional[web.AppRunner] = None
@@ -306,7 +306,7 @@ class SessionClient:
                     content_parts.append(delta['content'])
 
                 # Tool calls
-                for tc_delta in delta.get('tool_calls', []):
+                for tc_delta in delta.get('tool_calls') or []:
                     idx = tc_delta.get('index', 0)
                     if idx not in tool_calls_map:
                         tool_calls_map[idx] = {
