@@ -242,7 +242,25 @@ class SessionClient:
 
                         for field in allowed_fields:
                             if raw_msg.get(field) is not None:
-                                assistant_msg[field] = raw_msg[field]
+                                val = copy.deepcopy(raw_msg[field])
+                                if field == "tool_calls":
+                                    for tc in val:
+                                        if tc.get("type") == "function" and "function" in tc:
+                                            args = tc["function"].get("arguments")
+                                            if isinstance(args, str):
+                                                try:
+                                                    tc["function"]["arguments"] = json.loads(args)
+                                                except json.JSONDecodeError:
+                                                    pass
+                                elif field == "function_call":
+                                    args = val.get("arguments")
+                                    if isinstance(args, str):
+                                        try:
+                                            val["arguments"] = json.loads(args)
+                                        except json.JSONDecodeError:
+                                            pass
+
+                                assistant_msg[field] = val
 
             # Keep the latest conversation history
             messages = list(request_data['messages'])
