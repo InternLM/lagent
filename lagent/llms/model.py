@@ -2,17 +2,16 @@ import asyncio
 import json
 import random
 import traceback
-from typing import Dict, List, Optional, TypedDict, Union
+from typing import Dict, List, Optional, TypedDict
 
 import aiohttp
 
 from lagent.llms.openai import AsyncGPTAPI
-from lagent.utils import get_logger
+from lagent.utils import ctx_session_id, get_logger
 
 logger = get_logger()
 
 
-# from pdp_ext.fc_inferencer import ModelConfig, SampleParameters
 class SampleParameters(TypedDict):
     temperature: float
     top_p: float
@@ -36,6 +35,7 @@ class AsyncAPIClient(AsyncGPTAPI):
         extra_body: Optional[dict] = None,
         max_tool_response_length: Optional[int] = 4096,
         max_tool_calls_per_turn: int = 5,
+        session_id: str | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -53,6 +53,7 @@ class AsyncAPIClient(AsyncGPTAPI):
         self.extra_body = extra_body
         self.max_tool_response_length = max_tool_response_length
         self.max_tool_calls_per_turn = max_tool_calls_per_turn
+        self.session_id = session_id or ctx_session_id.get()
 
     async def chat(self, messages: List[dict], tools=None, **gen_params) -> dict:
         """Generate completion from a list of templates.
@@ -81,27 +82,26 @@ class AsyncAPIClient(AsyncGPTAPI):
             payload["reasoning_effort"] = reasoning_effort
         if self.extra_body:
             payload.update(self.extra_body)
+        if self.session_id is not None:
+            payload["session_id"] = self.session_id
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
-        }
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
 
-        def _error_completion(content: str) -> dict:
-            return {
-                "id": "error",
-                "object": "chat.completion",
-                "created": 0,
-                "model": self.model_name,
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {"role": "assistant", "content": content},
-                        "finish_reason": "failed",
-                    }
-                ],
-                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-            }
+        # def _error_completion(content: str) -> dict:
+        #     return {
+        #         "id": "error",
+        #         "object": "chat.completion",
+        #         "created": 0,
+        #         "model": self.model_name,
+        #         "choices": [
+        #             {
+        #                 "index": 0,
+        #                 "message": {"role": "assistant", "content": content},
+        #                 "finish_reason": "failed",
+        #             }
+        #         ],
+        #         "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        #     }
 
         connector = aiohttp.TCPConnector(ssl=False)
         timeout = aiohttp.ClientTimeout(total=self.timeout)
@@ -119,6 +119,29 @@ class AsyncAPIClient(AsyncGPTAPI):
                             text = await resp.text()
                             raise RuntimeError(f"HTTP {resp.status}: {text}")
                         data = await resp.json()
+
+                    # Parse tool call arguments from string to dict
+                    if isinstance(data, dict):
+                        for choice in data.get('choices', []):
+                            msg = choice.get('message', {})
+                            for tc in msg.get('tool_calls') or []:
+                                if tc.get('type') == 'function':
+                                    func = tc.get('function', {})
+                                    args = func.get('arguments')
+                                    if isinstance(args, str):
+                                        try:
+                                            func['arguments'] = json.loads(args)
+                                        except json.JSONDecodeError:
+                                            pass
+
+                            fc = msg.get('function_call')
+                            if isinstance(fc, dict):
+                                args = fc.get('arguments')
+                                if isinstance(args, str):
+                                    try:
+                                        fc['arguments'] = json.loads(args)
+                                    except json.JSONDecodeError:
+                                        pass
 
                     return data
 
