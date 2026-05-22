@@ -80,7 +80,7 @@ class FunctionCallAgent(AsyncAgent):
         max_turn: Optional[int] = None,
         initialize_input: bool = True,
         name: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(name=name, **kwargs)
         self.policy_agent = create_object(policy_agent)
@@ -189,7 +189,7 @@ class EnvAgent(AsyncAgent):
         tool_response_truncate_side: Literal['left', 'right', 'middle'] = 'middle',
         action_hooks: List[Union[dict, Hook]] = None,
         name: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(name=name, **kwargs)
         if isinstance(actions, AsyncActionExecutor):
@@ -235,7 +235,9 @@ class EnvAgent(AsyncAgent):
         tool_responses = await asyncio.gather(
             *[self._retry_mechanism(self.execute_tool)(tool_call) for tool_call in message.tool_calls]
         )
-        for tool_call_id, tool_response in zip(message.tool_calls_ids, tool_responses):
+        for tool_call_id, tool_response in zip(
+            message.tool_calls_ids or [tc.get('id') for tc in message.tool_calls], tool_responses
+        ):
             tool_response.tool_call_id = tool_call_id
             res = tool_response.format_result()
             if self.max_tool_response_length is not None and len(res) > self.max_tool_response_length:
