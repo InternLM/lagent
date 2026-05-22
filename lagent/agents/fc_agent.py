@@ -171,6 +171,10 @@ class FunctionCallAgent(AsyncAgent):
         except Exception:
             logger.exception("Compact failed")
 
+    def get_messages(self, prefix='', destination=None) -> List[Dict[str, list]]:
+        message_dict = super().get_messages(prefix, destination)
+        return [{'messages': message_dict['policy_agent.messages'], 'tools': message_dict['policy_agent.tools']}]
+
 
 class MemoryProvider(Protocol):
     async def get_info(self) -> dict:

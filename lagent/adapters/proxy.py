@@ -66,7 +66,7 @@ class SessionClient:
         self.port = port
         self.http_proxy = http_proxy
         self.session_id = session_id or ctx_session_id.get() or os.getenv('XTUNER_SESSION_ID') or str(uuid.uuid4().int)
-        self._records: Dict[str, List[List[dict]]] = defaultdict(list)
+        self._records: Dict[str, List[Dict[str, list]]] = defaultdict(list)
         self._app: Optional[web.Application] = None
         self._runner: Optional[web.AppRunner] = None
         self._site: Optional[web.TCPSite] = None
@@ -265,7 +265,10 @@ class SessionClient:
             messages = list(request_data['messages'])
             if assistant_msg:
                 messages.append(assistant_msg)
-            self._records[self.session_id].append(messages)
+
+            record_item = {"messages": messages, "tools": request_data.get("tools")}
+
+            self._records[self.session_id].append(record_item)
 
             logger.debug(
                 f"Updated messages for session {self.session_id}: {len(self._records[self.session_id])} traces total"
@@ -437,9 +440,9 @@ class SessionClient:
         message['content'] = content_blocks
         return message
 
-    def get_messages(self) -> List[List[dict]]:
+    def get_messages(self) -> List[Dict[str, list]]:
         """Get the latest conversation messages for this session.
-        If a sequence of messages is a prefix of another sequence, it will be filtered out.
+        If a sequence of messages is a prefix of another sequence and tools match, it will be filtered out.
 
         Returns:
             List of message sequences.
@@ -449,10 +452,20 @@ class SessionClient:
             return []
 
         filtered = []
-        for i, seq_i in enumerate(records):
+        for i, rec_i in enumerate(records):
             is_prefix = False
-            for j, seq_j in enumerate(records):
+            seq_i = rec_i.get("messages", [])
+            tools_i = rec_i.get("tools")
+
+            for j, rec_j in enumerate(records):
                 if i == j:
+                    continue
+
+                seq_j = rec_j.get("messages", [])
+                tools_j = rec_j.get("tools")
+
+                # Check if tools are completely identical
+                if tools_i != tools_j:
                     continue
 
                 # If they are exactly identical, keep the one with the higher index
@@ -466,7 +479,7 @@ class SessionClient:
                     break
 
             if not is_prefix:
-                filtered.append(seq_i)
+                filtered.append(rec_i)
 
         return filtered
 

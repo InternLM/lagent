@@ -151,7 +151,6 @@ class AgentMessage(BaseModel):
             'raw_content',
             'raw_content_ids',
             'raw_content_logprobs',
-            'extra_info',
         ]:
             if getattr(self, key, None) is not None:
                 msg[key] = getattr(self, key)
