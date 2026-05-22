@@ -1,3 +1,4 @@
+from .context import ContextVar
 from .package import is_module_exist
 from .util import (
     GeneratorWithReturn,
@@ -13,9 +14,13 @@ __all__ = [
     'is_module_exist',
     'filter_suffix',
     'create_object',
+    'ctx_session_id',
     'get_logger',
     'load_class_from_string',
     'async_as_completed',
     'GeneratorWithReturn',
     'truncate_text',
 ]
+
+
+ctx_session_id = ContextVar("session_id", None)
