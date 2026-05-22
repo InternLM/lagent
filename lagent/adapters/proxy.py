@@ -30,7 +30,6 @@ Usage::
 
 import copy
 import json
-import logging
 import os
 import uuid
 from collections import defaultdict
@@ -40,7 +39,7 @@ from urllib.parse import urlparse
 import aiohttp
 from aiohttp import web
 
-from lagent.utils import get_logger
+from lagent.utils import ctx_session_id, get_logger
 
 logger = get_logger(__name__, 'info')
 
@@ -66,7 +65,8 @@ class SessionClient:
         self.real_base_url = real_base_url.rstrip('/')
         self.port = port
         self.http_proxy = http_proxy
-        self.session_id = session_id or os.getenv('XTUNER_SESSION_ID') or str(uuid.uuid4().int)
+        self.session_id = session_id or ctx_session_id.get() or os.getenv('XTUNER_SESSION_ID') or str(uuid.uuid4().int)
+        self._is_reusing = False
         self._records: Dict[str, List[List[dict]]] = defaultdict(list)
         self._app: Optional[web.Application] = None
         self._runner: Optional[web.AppRunner] = None
@@ -79,12 +79,36 @@ class SessionClient:
 
     @property
     def is_running(self) -> bool:
-        return self._site is not None
+        return self._site is not None or self._is_reusing
 
-    async def start(self):
-        """Start the proxy HTTP server."""
+    async def start(self, reuse: bool = False):
+        """Start the proxy HTTP server.
+
+        Args:
+            reuse: If True, skip starting the server and reuse the existing one if the port is already in use.
+        """
         if self.is_running:
             return
+
+        if self.port != 0:
+            import socket
+
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                result = sock.connect_ex(('127.0.0.1', self.port))
+            finally:
+                sock.close()
+
+            if result == 0:
+                if reuse:
+                    self._is_reusing = True
+                    logger.info(f"Port {self.port} is already in use. Reusing the existing proxy service.")
+                    return
+                else:
+                    raise OSError(
+                        f"Port {self.port} is already in use by another service. Set reuse=True in start() to reuse it, or use port=0 to auto-assign a free port."
+                    )
+
         self._app = web.Application()
         # Catch-all route to proxy any path
         self._app.router.add_route('*', '/{path:.*}', self._handle_request)
@@ -99,6 +123,12 @@ class SessionClient:
 
     async def stop(self):
         """Stop the proxy HTTP server."""
+        if self._is_reusing:
+            logger.info(
+                f"Skipping stop() because this SessionClient is reusing the existing proxy service on port {self.port}."
+            )
+            return
+
         if self._runner:
             await self._runner.cleanup()
         self._site = None
