@@ -216,6 +216,12 @@ class SandboxAgent:
         if "error" in result:
             raise RuntimeError(result["error"])
 
+    async def get_messages(self) -> List[Dict[str, list]]:
+        result = await self._daemon_call({"cmd": "get_messages"})
+        if "error" in result:
+            raise RuntimeError(result["error"])
+        return result.get("messages", [])
+
     async def reset(self, recursive: bool = True) -> None:
         result = await self._daemon_call({
             "cmd": "reset",
