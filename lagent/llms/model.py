@@ -33,8 +33,6 @@ class AsyncAPIClient(AsyncGPTAPI):
         max_retry: int = 1,
         sleep_interval: int = 5,
         extra_body: Optional[dict] = None,
-        max_tool_response_length: Optional[int] = 4096,
-        max_tool_calls_per_turn: int = 5,
         session_id: str | None = None,
         **kwargs,
     ):
@@ -51,8 +49,6 @@ class AsyncAPIClient(AsyncGPTAPI):
         self.timeout = timeout
         self.sleep_interval = sleep_interval
         self.extra_body = extra_body
-        self.max_tool_response_length = max_tool_response_length
-        self.max_tool_calls_per_turn = max_tool_calls_per_turn
         self.session_id = session_id or ctx_session_id.get()
 
     async def chat(self, messages: List[dict], tools=None, **gen_params) -> dict:
@@ -71,7 +67,7 @@ class AsyncAPIClient(AsyncGPTAPI):
         payload: Dict = dict(
             model=self.model_name,
             messages=messages,
-            stream=False,
+            stream=True,
             temperature=self.sample_params.get("temperature", 0.7),
             top_p=self.sample_params.get("top_p", 1.0),
             max_tokens=self.sample_params.get("max_tokens", 64 * 1024),
@@ -109,41 +105,118 @@ class AsyncAPIClient(AsyncGPTAPI):
             for attempt in range(self.max_retry):
                 url = random.choice(self.base_urls)
                 try:
-                    async with session.post(
-                        url,
-                        json=payload,
-                        headers=headers,
-                        proxy=self.proxy,
-                    ) as resp:
+                    message_data = {
+                        "id": "",
+                        "object": "chat.completion",
+                        "created": 0,
+                        "model": self.model_name,
+                        "choices": [
+                            {"index": 0, "message": {"role": "assistant", "content": ""}, "finish_reason": None}
+                        ],
+                    }
+                    content_parts = []
+                    reasoning_content_parts = []
+                    tool_calls_map = {}
+                    function_call_data = None
+                    usage = {}
+
+                    async with session.post(url, json=payload, headers=headers, proxy=self.proxy) as resp:
                         if resp.status != 200:
                             text = await resp.text()
                             raise RuntimeError(f"HTTP {resp.status}: {text}")
-                        data = await resp.json()
 
-                    # Parse tool call arguments from string to dict
-                    if isinstance(data, dict):
-                        for choice in data.get('choices', []):
-                            msg = choice.get('message', {})
-                            for tc in msg.get('tool_calls') or []:
-                                if tc.get('type') == 'function':
-                                    func = tc.get('function', {})
-                                    args = func.get('arguments')
-                                    if isinstance(args, str):
-                                        try:
-                                            func['arguments'] = json.loads(args)
-                                        except json.JSONDecodeError:
-                                            pass
-
-                            fc = msg.get('function_call')
-                            if isinstance(fc, dict):
-                                args = fc.get('arguments')
-                                if isinstance(args, str):
+                        async for line in resp.content:
+                            if line:
+                                decoded = line.decode("utf-8").strip()
+                                if not decoded:
+                                    continue
+                                if decoded.startswith("data: "):
+                                    data_str = decoded[6:]
+                                    if data_str == "[DONE]":
+                                        break
                                     try:
-                                        fc['arguments'] = json.loads(args)
+                                        data = json.loads(data_str)
+                                        if "id" in data and not message_data["id"]:
+                                            message_data["id"] = data["id"]
+                                        if "created" in data and not message_data["created"]:
+                                            message_data["created"] = data["created"]
+                                        if "model" in data:
+                                            message_data["model"] = data["model"]
+
+                                        for choice in data.get("choices", []):
+                                            delta = choice.get("delta", {})
+
+                                            if "content" in delta and delta["content"]:
+                                                content_parts.append(delta["content"])
+
+                                            if "reasoning_content" in delta and delta["reasoning_content"]:
+                                                reasoning_content_parts.append(delta["reasoning_content"])
+
+                                            for tc_delta in delta.get("tool_calls") or []:
+                                                idx = tc_delta.get("index", 0)
+                                                if idx not in tool_calls_map:
+                                                    tool_calls_map[idx] = {
+                                                        "id": tc_delta.get("id", ""),
+                                                        "type": tc_delta.get("type", "function"),
+                                                        "function": {"name": "", "arguments": ""},
+                                                    }
+                                                tc = tool_calls_map[idx]
+                                                fn = tc_delta.get("function", {})
+                                                if fn.get("name"):
+                                                    tc["function"]["name"] += fn["name"]
+                                                if fn.get("arguments"):
+                                                    tc["function"]["arguments"] += fn["arguments"]
+                                                if tc_delta.get("id"):
+                                                    tc["id"] = tc_delta["id"]
+
+                                            fc_delta = delta.get("function_call")
+                                            if fc_delta:
+                                                if function_call_data is None:
+                                                    function_call_data = {"name": "", "arguments": ""}
+                                                if fc_delta.get("name"):
+                                                    function_call_data["name"] += fc_delta["name"]
+                                                if fc_delta.get("arguments"):
+                                                    function_call_data["arguments"] += fc_delta["arguments"]
+
+                                            if "finish_reason" in choice and choice["finish_reason"]:
+                                                message_data["choices"][0]["finish_reason"] = choice["finish_reason"]
+
+                                        if "usage" in data and data["usage"]:
+                                            usage = data["usage"]
                                     except json.JSONDecodeError:
                                         pass
 
-                    return data
+                    msg = message_data["choices"][0]["message"]
+                    msg["content"] = "".join(content_parts)
+                    if reasoning_content_parts:
+                        msg["reasoning_content"] = "".join(reasoning_content_parts)
+
+                    if tool_calls_map:
+                        tool_calls = []
+                        for idx in sorted(tool_calls_map.keys()):
+                            tc = tool_calls_map[idx]
+                            args = tc["function"].get("arguments")
+                            if isinstance(args, str):
+                                try:
+                                    tc["function"]["arguments"] = json.loads(args)
+                                except json.JSONDecodeError:
+                                    pass
+                            tool_calls.append(tc)
+                        msg["tool_calls"] = tool_calls
+
+                    if function_call_data:
+                        args = function_call_data.get("arguments")
+                        if isinstance(args, str):
+                            try:
+                                function_call_data["arguments"] = json.loads(args)
+                            except json.JSONDecodeError:
+                                pass
+                        msg["function_call"] = function_call_data
+
+                    if usage:
+                        message_data["usage"] = usage
+
+                    return message_data
 
                 except asyncio.TimeoutError as e:
                     logger.error(f"LLM Call Timeout: {e}")
