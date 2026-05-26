@@ -355,7 +355,7 @@ class AgentDaemon(BaseDaemon):
 
         if cmd == 'get_messages':
             try:
-                return {'messages': self.agent.get_messages()}
+                return self.agent.get_messages()
             except Exception as e:
                 return {"error": str(e)}
 
