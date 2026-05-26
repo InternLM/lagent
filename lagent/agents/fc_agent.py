@@ -4,69 +4,18 @@ import logging
 import platform
 from copy import deepcopy
 from dataclasses import asdict
+from functools import reduce
+from operator import add
 from typing import Any, Dict, List, Literal, Optional, Protocol, Union
 
 from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
 
-from lagent.actions import AsyncActionExecutor
-from lagent.hooks import Hook
 from lagent.schema import ActionReturn, ActionStatusCode, ActionValidCode, AgentMessage, AgentStatusCode
 from lagent.skills.skills import SkillsLoader
 from lagent.utils import create_object, load_class_from_string, truncate_text
 from .agent import AsyncAgent
 
 logger = logging.getLogger("lagent.agents.fc_agent")
-
-DEFAULT_TOOL_TEMPLATE = """# Tools
-
-You may call one or more functions to assist with the user query.
-
-You are provided with function signatures within <tools></tools> XML tags:
-<tools>
-{tools}
-</tools>
-
-For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
-<tool_call>
-{{"name": <function-name>, "arguments": <args-json-object>}}
-</tool_call>"""
-
-
-def get_tool_prompt(
-    actions: list, exclude_arguments: list = None, to_string: bool = True, template: str = DEFAULT_TOOL_TEMPLATE
-) -> Union[str, List[dict]]:
-    exclude_arguments = exclude_arguments or ['session_id']
-
-    def _convert_tool_schema(action_description: dict, name_pattern: str = '{}') -> dict:
-        properties = {}
-        for param in action_description['parameters']:
-            param = deepcopy(param)
-            param_name, param_type = param.pop('name'), param.pop('type')
-            if param_name in exclude_arguments:
-                continue
-            param_type = [t.lower() for t in param_type] if isinstance(param_type, list) else param_type.lower()
-            properties[param_name] = {'type': param_type, **param}
-        return {
-            'type': 'function',
-            'function': {
-                'name': name_pattern.format(action_description['name']),
-                'description': action_description['description'],
-                'parameters': {'type': 'object', 'properties': properties, 'required': action_description['required']},
-            },
-        }
-
-    tools = []
-    for action in actions if isinstance(actions, list) else [actions]:
-        action = create_object(action)
-        action_desc = action.description
-        if action.is_toolkit:
-            for api in action_desc['api_list']:
-                tools.append(_convert_tool_schema(api, f"{action.name}.{{}}"))
-        else:
-            tools.append(_convert_tool_schema(action_desc))
-    if not to_string:
-        return tools
-    return template.format(tools='\n'.join([json.dumps(tool, ensure_ascii=False) for tool in tools]))
 
 
 class FunctionCallAgent(AsyncAgent):
@@ -184,23 +133,18 @@ class EnvAgent(AsyncAgent):
         actions,
         skills: Optional[SkillsLoader] = None,
         long_term_memory: Optional[MemoryProvider] = None,
-        stateful_tools: List[str] = None,
         max_tool_response_length: int = None,
-        tool_response_truncate_side: Literal['left', 'right', 'middle'] = 'middle',
-        action_hooks: List[Union[dict, Hook]] = None,
-        name: Optional[str] = None,
+        tool_response_truncate_side: Optional[Literal['left', 'right', 'middle']] = None,
         **kwargs,
     ):
-        super().__init__(name=name, **kwargs)
-        if isinstance(actions, AsyncActionExecutor):
-            for action_hook in action_hooks or []:
-                actions.register_hook(create_object(action_hook))
-            self.actions = actions
-        else:
-            self.actions = AsyncActionExecutor(actions, hooks=action_hooks)
+        super().__init__(**kwargs)
+        self.actions: dict = {}
+        for action in actions:
+            action = create_object(action)
+            for tool in action.to_openai_format_tools():
+                self.actions[tool['function']['name']] = action
         self.skills = create_object(skills)
         self.long_term_memory = create_object(long_term_memory)
-        self.stateful_tools = stateful_tools or []
         self.max_tool_response_length = max_tool_response_length
         self.tool_response_truncate_side = tool_response_truncate_side
         self._retry_mechanism = retry(
@@ -223,7 +167,7 @@ class EnvAgent(AsyncAgent):
         if self.long_term_memory is not None:
             env_info['memory'] = await self.long_term_memory.get_info()
         if self.actions:
-            env_info['tools'] = get_tool_prompt(list(self.actions.actions.values()), to_string=False)
+            env_info['tools'] = reduce(add, [action.to_openai_format_tools() for action in self.actions.values()])
         for name in ['system', 'machine', 'python_version']:
             env_info['runtime'][name] = getattr(platform, name)()
         return env_info
@@ -235,17 +179,13 @@ class EnvAgent(AsyncAgent):
         tool_responses = await asyncio.gather(
             *[self._retry_mechanism(self.execute_tool)(tool_call) for tool_call in message.tool_calls]
         )
+        content = []
         for tool_call_id, tool_response in zip(
             message.tool_calls_ids or [tc.get('id') for tc in message.tool_calls], tool_responses
         ):
             tool_response.tool_call_id = tool_call_id
-            res = tool_response.format_result()
-            if self.max_tool_response_length is not None and len(res) > self.max_tool_response_length:
-                res = truncate_text(res, max_num=self.max_tool_response_length, side=self.tool_response_truncate_side)
-                tool_response.result = [{'type': 'text', 'content': res}]
-        return AgentMessage(
-            sender=self.name, content=[asdict(resp) for resp in tool_responses], env_info=await self.get_env_info()
-        )
+            content.append(asdict(tool_response))
+        return AgentMessage(sender=self.name, content=content, env_info=await self.get_env_info())
 
     async def execute_tool(self, tool_call: dict) -> ActionReturn:
         tool_call = deepcopy(tool_call)
@@ -256,15 +196,14 @@ class EnvAgent(AsyncAgent):
                 return ActionReturn(valid=ActionValidCode.INVALID, errmsg=f'Tool {tool_call["name"]} Not Found')
             if isinstance(tool_call['arguments'], str):
                 tool_call['arguments'] = json.loads(tool_call['arguments'])
-            if tool_call['name'] in self.stateful_tools:
-                tool_call['arguments']['session_id'] = str(id(self))
         except Exception as e:
             return ActionReturn(valid=ActionValidCode.INVALID, errmsg=f'Invalid tool call format: {str(e)}')
-        tool_response: ActionReturn = (
-            await self.actions(
-                AgentMessage(
-                    sender='assistant', content=dict(name=tool_call['name'], parameters=tool_call['arguments'])
-                ),
-            )
-        ).content
+        action = self.actions[tool_call['name']]
+        tool_response: ActionReturn = await action(
+            tool_call['arguments'], tool_call['name'].rsplit('.', 1)[-1] if action.is_toolkit else 'run'
+        )
+        if tool_response.max_tool_response_length is None:
+            tool_response.max_tool_response_length = self.max_tool_response_length
+        if tool_response.tool_response_truncate_side is None:
+            tool_response.tool_response_truncate_side = self.tool_response_truncate_side
         return tool_response

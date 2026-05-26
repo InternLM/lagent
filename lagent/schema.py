@@ -1,10 +1,12 @@
 from dataclasses import asdict, dataclass
 from enum import IntEnum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 from uuid import uuid4
 
 from openai.types.chat import ChatCompletion
 from pydantic import BaseModel, Field
+
+from .utils import truncate_text
 
 
 def enum_dict_factory(inputs):
@@ -49,6 +51,8 @@ class ActionReturn:
     thought: Optional[str] = None
     valid: Optional[ActionValidCode] = ActionValidCode.OPEN
     tool_call_id: Optional[str] = None
+    max_tool_response_length: Optional[int] = None
+    tool_response_truncate_side: Optional[Literal['left', 'right', 'middle']] = None
 
     def format_result(self) -> str:
         """Concatenate items in result, falling back to errmsg when result is empty."""
@@ -61,6 +65,10 @@ class ActionReturn:
         result = '\n'.join(result)
         if not result and self.errmsg:
             return self.errmsg
+        if self.max_tool_response_length is not None and len(result) > self.max_tool_response_length:
+            result = truncate_text(
+                result, max_num=self.max_tool_response_length, side=self.tool_response_truncate_side or 'middle'
+            )
         return result
 
 

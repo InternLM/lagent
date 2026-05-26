@@ -4,7 +4,7 @@ import re
 from abc import ABCMeta
 from copy import deepcopy
 from functools import wraps
-from typing import Callable, Iterable, Optional, Type, get_args, get_origin
+from typing import Callable, Iterable, List, Literal, Optional, Type, get_args, get_origin
 
 try:
     from typing import Annotated
@@ -347,10 +347,14 @@ class BaseAction(metaclass=ToolMeta):
         self,
         description: Optional[dict] = None,
         parser: Type[BaseParser] = JsonParser,
+        max_tool_response_length: int = None,
+        tool_response_truncate_side: Optional[Literal['left', 'right', 'middle']] = None,
     ):
         self._description = deepcopy(description or self.__tool_description__)
         self._name = self._description['name']
         self._parser = parser(self)
+        self._max_tool_response_length = max_tool_response_length
+        self._tool_response_truncate_side = tool_response_truncate_side
 
     def __call__(self, inputs: str, name='run') -> ActionReturn:
         fallback_args = {'inputs': inputs, 'name': name}
@@ -375,6 +379,8 @@ class BaseAction(metaclass=ToolMeta):
         else:
             result = self._parser.parse_outputs(outputs)
             action_return = ActionReturn(inputs, type=self.name, result=result)
+        action_return.max_tool_response_length = self._max_tool_response_length
+        action_return.tool_response_truncate_side = self._tool_response_truncate_side
         return action_return
 
     @property
@@ -389,6 +395,68 @@ class BaseAction(metaclass=ToolMeta):
     def description(self) -> dict:
         """Description of the tool."""
         return self._description
+
+    def to_openai_format_tools(self) -> List[dict]:
+        """Convert the action to OpenAI-format tools."""
+
+        def _get_json_type(param_type) -> str:
+            if isinstance(param_type, type):
+                param_type = param_type.__name__
+            ptype = str(param_type).lower()
+            mapping = {
+                'str': 'string',
+                'string': 'string',
+                'float': 'number',
+                'number': 'number',
+                'int': 'integer',
+                'integer': 'integer',
+                'bool': 'boolean',
+                'boolean': 'boolean',
+                'dict': 'object',
+                'object': 'object',
+                'list': 'array',
+                'array': 'array',
+                'tuple': 'array',
+            }
+            return mapping.get(ptype, 'string')
+
+        def _convert_schema(desc: dict, name: str) -> dict:
+            properties = {}
+            for param in desc.get('parameters', []):
+                param_copy = deepcopy(param)
+                param_name = param_copy.pop('name')
+
+                # Convert type to standard JSON schema type
+                param_type = param_copy.pop('type', 'string')
+                if isinstance(param_type, list):
+                    json_type = [_get_json_type(t) for t in param_type]
+                else:
+                    json_type = _get_json_type(param_type)
+
+                prop = {'type': json_type}
+                # Update with remaining attributes (description, enum, items, etc.)
+                prop.update(param_copy)
+
+                properties[param_name] = prop
+
+            parameters = {'type': 'object', 'properties': properties}
+
+            required = desc.get('required', [])
+            if required:
+                parameters['required'] = required
+
+            return {
+                'type': 'function',
+                'function': {'name': name, 'description': desc.get('description', ''), 'parameters': parameters},
+            }
+
+        tools = []
+        if self.is_toolkit:
+            for api in self.description.get('api_list', []):
+                tools.append(_convert_schema(api, f"{self.name}.{api['name']}"))
+        else:
+            tools.append(_convert_schema(self.description, self.name))
+        return tools
 
     def __repr__(self):
         return f'{self.description}'
