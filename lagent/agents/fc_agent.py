@@ -202,6 +202,8 @@ class EnvAgent(AsyncAgent):
                 tool_call['arguments'] = json.loads(tool_call['arguments'])
         except Exception as e:
             return ActionReturn(valid=ActionValidCode.INVALID, errmsg=f'Invalid tool call format: {str(e)}')
+        if tool_call['name'] not in self.actions:
+            return ActionReturn(valid=ActionValidCode.INVALID, errmsg=f'Tool {tool_call["name"]} Not Found')
         action = self.actions[tool_call['name']]
         tool_response: ActionReturn = await action(
             tool_call['arguments'], tool_call['name'].rsplit('.', 1)[-1] if action.is_toolkit else 'run'
