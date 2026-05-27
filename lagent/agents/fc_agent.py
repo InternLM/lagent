@@ -187,23 +187,22 @@ class EnvAgent(AsyncAgent):
         return AgentMessage(sender=self.name, content=content, env_info=await self.get_env_info())
 
     async def execute_tool(self, tool_call: dict) -> ActionReturn:
-        tool_call = deepcopy(tool_call)
+        tool_call, tool_call_id = deepcopy(tool_call), None
         try:
+            tool_call_id = tool_call.get('id')
             if 'function' in tool_call:
                 tool_call = tool_call['function']
-            if tool_call['name'].split('.', 1)[0] not in self.actions:
+            if tool_call['name'] not in self.actions:
                 return ActionReturn(valid=ActionValidCode.INVALID, errmsg=f'Tool {tool_call["name"]} Not Found')
             if isinstance(tool_call['arguments'], str):
                 tool_call['arguments'] = json.loads(tool_call['arguments'])
         except Exception as e:
             return ActionReturn(valid=ActionValidCode.INVALID, errmsg=f'Invalid tool call format: {str(e)}')
-        if tool_call['name'] not in self.actions:
-            return ActionReturn(valid=ActionValidCode.INVALID, errmsg=f'Tool {tool_call["name"]} Not Found')
         action = self.actions[tool_call['name']]
         tool_response: ActionReturn = await action(
             tool_call['arguments'], tool_call['name'].rsplit('.', 1)[-1] if action.is_toolkit else 'run'
         )
-        tool_response.tool_call_id = tool_call.get('id')
+        tool_response.tool_call_id = tool_call_id
         if tool_response.max_tool_response_length is None:
             tool_response.max_tool_response_length = self.max_tool_response_length
         if tool_response.tool_response_truncate_side is None:
