@@ -61,7 +61,6 @@ class Agent:
         self._scroll_mode: bool = False
 
     def __call__(self, *message: AgentMessage, **kwargs) -> AgentMessage:
-        # message.receiver = self.name
         message = [AgentMessage(sender='user', content=m) if isinstance(m, str) else copy.deepcopy(m) for m in message]
         for hook in self._hooks.values():
             result = hook.before_agent(self, message)

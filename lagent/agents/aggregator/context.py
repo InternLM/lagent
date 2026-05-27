@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from lagent.agents.aggregator import DefaultAggregator
+from lagent.agents.aggregator.default_aggregator import DefaultAggregator
 from lagent.schema import ActionReturn
 
 
@@ -46,14 +46,12 @@ class InternClawContextBuilder:
 
             skills_summary = env_info.get("skills")
             if skills_summary:
-                parts.append(
-                    f"""# Skills
+                parts.append(f"""# Skills
 
 The following skills extend your capabilities. To use a skill, read its SKILL.md file using the read_file tool.
 Skills with available="false" need dependencies installed first - you can try installing them with apt/brew.
 
-{skills_summary}"""
-                )
+{skills_summary}""")
 
         parts.append(self._build_runtime_context(None, None))
 

@@ -21,34 +21,19 @@ class DefaultAggregator:
             _message.extend(self.aggregate_system_intruction(system_instruction))
         for message in messages:
             if message.sender == name:
-                _message.append(message.to_model_request())
+                _message.append(message.to_model_request('assistant'))
+            elif isinstance(message.content, list):
+                _message.extend(message.to_model_request('tool'))
+            elif (
+                len(_message) > 0
+                and _message[-1]['role'] == 'user'
+                and isinstance(_message[-1]['content'], str)
+                and isinstance(message.content, str)
+            ):
+                _message[-1]['content'] += message.content
+                _message[-1]['extra_info'] = message.extra_info
             else:
-                user_message, extra_info = message.content, message.extra_info
-                if isinstance(user_message, list):
-                    for m in user_message:
-                        if isinstance(m, dict):
-                            m = ActionReturn(**m)
-                        assert isinstance(m, ActionReturn), f"Expected m to be ActionReturn, but got {type(m)}"
-                        _message.append(
-                            dict(
-                                role='tool',
-                                tool_call_id=m.tool_call_id,
-                                content=m.format_result(),
-                                name=m.type,
-                                extra_info=extra_info,
-                            )
-                        )
-                else:
-                    if (
-                        len(_message) > 0
-                        and _message[-1]['role'] == 'user'
-                        and isinstance(_message[-1]['content'], str)
-                        and isinstance(user_message, str)
-                    ):
-                        _message[-1]['content'] += user_message
-                        _message[-1]['extra_info'] = extra_info
-                    else:
-                        _message.append(dict(role='user', content=user_message, extra_info=extra_info))
+                _message.append(message.to_model_request('user'))
 
         latest_env_info = None
         for message in messages:

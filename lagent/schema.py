@@ -102,25 +102,23 @@ class AgentStatusCode(IntEnum):
 class AgentMessage(BaseModel):
     content: Any
     sender: str = 'user'
-    thinking: Optional[str] = None
-    content_ids: Optional[List[int]] = Field(default=None, repr=False)
-    content_logprobs: Optional[List[float]] = Field(default=None, repr=False)
-    thinking_ids: Optional[List[int]] = Field(default=None, repr=False)
-    thinking_logprobs: Optional[List[float]] = Field(default=None, repr=False)
-    raw_content: Optional[str] = Field(default=None, repr=False)
-    raw_content_ids: Optional[List[int]] = Field(default=None, repr=False)
-    raw_content_logprobs: Optional[List[float]] = Field(default=None, repr=False)
+    role: Optional[str] = None
+    reasoning_content: Optional[str] = None
     tool_calls: Optional[List[dict]] = None
-    tool_calls_ids: Optional[List[str]] = None
     formatted: Optional[Any] = None
     extra_info: dict = Field(default_factory=dict)
-    type: Optional[str] = None
-    receiver: Optional[str] = None
     stream_state: Union[ModelStatusCode, AgentStatusCode] = AgentStatusCode.END
     finish_reason: Optional[str] = None
     uid: Union[int, str] = Field(default_factory=lambda: uuid4().hex, repr=False)
     env_info: Optional[Dict[str, Any]] = None
-    reward: Optional[float] = None
+
+    def model_post_init(self, _):
+        if isinstance(self.content, list):
+            self.role = 'tool'
+        elif self.sender not in ['system', 'user']:
+            self.role = 'assistant'
+        else:
+            self.role = self.sender
 
     @classmethod
     def from_model_response(cls, response: Union[ChatCompletion, dict], sender: str) -> "AgentMessage":
@@ -129,40 +127,45 @@ class AgentMessage(BaseModel):
             response = response.model_dump()
 
         choice = response['choices'][0]
-        msg = choice['message']
+        msg = choice.get('message', {})
         finish_reason = choice.get('finish_reason')
         return cls(
             sender=sender,
             content=msg.get('content') or "",
-            thinking=msg.get('reasoning_content'),
-            raw_content=msg.get('raw_content'),
-            content_ids=msg.get('content_ids'),
-            content_logprobs=msg.get('content_logprobs'),
-            thinking_ids=msg.get('reasoning_content_ids'),
-            thinking_logprobs=msg.get('reasoning_content_logprobs'),
-            raw_content_ids=msg.get('raw_content_ids'),
-            raw_content_logprobs=msg.get('raw_content_logprobs'),
-            extra_info=msg.get('extra_info') or {},
+            reasoning_content=msg.get('reasoning_content'),
             tool_calls=msg.get('tool_calls'),
+            extra_info=msg.get('extra_info') or {},
             stream_state=choice.get('stream_state')
-            or (ModelStatusCode.SESSION_OUT_OF_LIMIT if finish_reason == 'length' else ModelStatusCode.END),
+            or (ModelStatusCode.SESSION_OUT_OF_LIMIT if finish_reason == 'length' else AgentStatusCode.END),
             finish_reason=finish_reason,
         )
 
-    def to_model_request(self, role: str = 'assistant') -> dict:
+    def to_model_request(self, role: Optional[str] = None) -> Union[dict, List[dict]]:
         """Convert AgentMessage to model request dict."""
-        msg = {'role': role, 'content': self.content}
-        for key in [
-            'tool_calls',
-            'content_ids',
-            'content_logprobs',
-            'raw_content',
-            'raw_content_ids',
-            'raw_content_logprobs',
-        ]:
-            if getattr(self, key, None) is not None:
-                msg[key] = getattr(self, key)
-        for key in ['thinking', 'thinking_ids', 'thinking_logprobs']:
-            if getattr(self, key, None) is not None:
-                msg[key.replace("thinking", "reasoning_content")] = getattr(self, key)
+        final_role = role if role is not None else self.role
+
+        if final_role == 'tool' and isinstance(self.content, list):
+            res = []
+            for item in self.content:
+                if isinstance(item, dict):
+                    item = ActionReturn(**item)
+                assert isinstance(item, ActionReturn), f"Expected item to be ActionReturn, but got {type(item)}"
+                res.append(
+                    dict(
+                        role=final_role,
+                        tool_call_id=item.tool_call_id,
+                        content=item.format_result(),
+                        name=item.type,
+                        extra_info=self.extra_info,
+                    )
+                )
+            return res
+
+        msg = {'role': final_role, 'content': self.content}
+        if final_role != 'assistant':
+            msg['extra_info'] = self.extra_info
+        if self.reasoning_content is not None:
+            msg['reasoning_content'] = self.reasoning_content
+        if self.tool_calls is not None:
+            msg['tool_calls'] = self.tool_calls
         return msg

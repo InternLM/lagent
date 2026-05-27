@@ -183,12 +183,7 @@ class EnvAgent(AsyncAgent):
         tool_responses = await asyncio.gather(
             *[self._retry_mechanism(self.execute_tool)(tool_call) for tool_call in message.tool_calls]
         )
-        content = []
-        for tool_call_id, tool_response in zip(
-            message.tool_calls_ids or [tc.get('id') for tc in message.tool_calls], tool_responses
-        ):
-            tool_response.tool_call_id = tool_call_id
-            content.append(asdict(tool_response))
+        content = [asdict(resp) for resp in tool_responses]
         return AgentMessage(sender=self.name, content=content, env_info=await self.get_env_info())
 
     async def execute_tool(self, tool_call: dict) -> ActionReturn:
@@ -208,6 +203,7 @@ class EnvAgent(AsyncAgent):
         tool_response: ActionReturn = await action(
             tool_call['arguments'], tool_call['name'].rsplit('.', 1)[-1] if action.is_toolkit else 'run'
         )
+        tool_response.tool_call_id = tool_call.get('id')
         if tool_response.max_tool_response_length is None:
             tool_response.max_tool_response_length = self.max_tool_response_length
         if tool_response.tool_response_truncate_side is None:
