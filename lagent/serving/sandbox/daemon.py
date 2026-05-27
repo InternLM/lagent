@@ -36,9 +36,10 @@ import logging
 import os
 import struct
 import sys
+from functools import reduce
+from operator import add
 from typing import Any, Dict, List, Optional, Union
 
-from lagent.actions.action_executor import ActionExecutor, AsyncActionExecutor
 from lagent.actions.base_action import BaseAction
 from lagent.schema import ActionReturn, ActionStatusCode, AgentMessage, dataclass2dict
 from lagent.utils import create_object
@@ -181,7 +182,11 @@ class ActionDaemon(BaseDaemon):
         super().__init__(sock_path=sock_path)
         for i, action in enumerate(actions):
             actions[i] = create_object(action)
-        self.executor = AsyncActionExecutor(actions)
+        self.actions = {}
+        for action in actions:
+            action = create_object(action)
+            for tool in action.to_openai_format_tools():
+                self.actions[tool['function']['name']] = action
 
     async def _dispatch(self, request: dict) -> dict:
         cmd = request.get("cmd")
@@ -191,7 +196,7 @@ class ActionDaemon(BaseDaemon):
             return await super()._dispatch(request)
 
         if cmd == "list_tools":
-            return {"tools": self.executor.description()}
+            return {"tools": reduce(add, [action.to_openai_format_tools() for action in self.actions.values()])}
 
         # Action call
         name = request.get("name")
@@ -205,7 +210,8 @@ class ActionDaemon(BaseDaemon):
             )
 
         try:
-            action_return = await self.executor.forward(name, parameters)
+            action = self.actions[name]
+            action_return = await action(parameters, name.rsplit('.', 1)[-1] if action.is_toolkit else 'run')
         except Exception as e:
             logger.exception("Action %s failed", name)
             action_return = ActionReturn(
@@ -318,9 +324,9 @@ class AgentDaemon(BaseDaemon):
         # Tool introspection (via EnvAgent if available)
         if cmd == "list_tools":
             env = getattr(self.agent, 'env_agent', None)
-            executor = getattr(env, 'actions', None) if env else None
-            if executor:
-                return {"tools": executor.description()}
+            actions: dict = getattr(env, 'actions', None) if env else None
+            if actions:
+                return {"tools": reduce(add, [action.to_openai_format_tools() for action in actions.values()])}
             return {"tools": []}
 
         # Agent commands
@@ -433,7 +439,7 @@ def main():
     p_start.add_argument(
         "--config",
         help="Path to config: JSON (action list / agent dict) or Python file "
-             "defining 'actions' (mode=actions) or 'agent_config' (mode=agent)",
+        "defining 'actions' (mode=actions) or 'agent_config' (mode=agent)",
     )
     # Backward compat
     p_start.add_argument("--actions-config", help=argparse.SUPPRESS)
