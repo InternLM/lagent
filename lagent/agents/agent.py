@@ -58,7 +58,6 @@ class Agent:
             for hook in hooks:
                 hook = create_object(hook)
                 self.register_hook(hook)
-        self._scroll_mode: bool = False
 
     def __call__(self, *message: AgentMessage, **kwargs) -> AgentMessage:
         message = [AgentMessage(sender='user', content=m) if isinstance(m, str) else copy.deepcopy(m) for m in message]
@@ -66,23 +65,8 @@ class Agent:
             result = hook.before_agent(self, message)
             if result:
                 message = result
-
-        # resume aborted rollout
-        _message = self._scroll_buffer(message[-1])
-        if _message is not None:
-            if _message.finish_reason != 'abort':
-                _message = copy.deepcopy(_message)
-                for hook in self._hooks.values():
-                    result = hook.after_agent(self, _message)
-                    if result:
-                        _message = result
-                return _message
-            message[-1].extra_info['partial_response'] = _message
-        else:
-            self.memory and self.memory.add(message)
+        self.memory and self.memory.add(message)
         response_message = self.forward(*message, **kwargs)
-        if _message and _message.finish_reason == 'abort':
-            message[-1].extra_info.pop('partial_response', None)
         if not isinstance(response_message, AgentMessage):
             if isinstance(response_message, str):
                 response_message = AgentMessage(sender=self.name, content=response_message)
@@ -190,40 +174,6 @@ class Agent:
                 agent.get_messages(destination=destination, prefix=prefix + name + '.')
         return destination
 
-    def _scroll_buffer(self, message, hash_func=lambda m: m.uid):
-        if not self.memory:
-            return
-        mem = self.memory.get_memory()
-        finish_reasons = [m.finish_reason for m in mem]
-        if not ('abort' in finish_reasons or self._scroll_mode):
-            return
-        if not self._scroll_mode:
-            self._enable_scroll_mode(recursive=True)
-        aborted_msg_idx = finish_reasons.index('abort') if 'abort' in finish_reasons else len(mem) - 1
-        self.memory.delete(range(aborted_msg_idx + 1, len(mem)))
-        enc = hash_func(message)
-        for i in range(0, aborted_msg_idx):
-            if hash_func(mem[i]) == enc:
-                ret = mem[i + 1]
-                if i + 1 == aborted_msg_idx:
-                    if ret.finish_reason == 'abort':
-                        self.memory.delete(aborted_msg_idx)
-                    self._disable_scroll_mode()
-                return ret
-        self._disable_scroll_mode(recursive=True)
-
-    def _enable_scroll_mode(self, recursive=False):
-        self._scroll_mode = True
-        if recursive:
-            for sub_agent in getattr(self, '_agents', {}).values():
-                sub_agent._enable_scroll_mode(True)
-
-    def _disable_scroll_mode(self, recursive=False):
-        self._scroll_mode = False
-        if recursive:
-            for sub_agent in getattr(self, '_agents', {}).values():
-                sub_agent._disable_scroll_mode(True)
-
     def __repr__(self):
 
         def _rcsv_repr(agent, n_indent=1):
@@ -249,23 +199,8 @@ class AsyncAgentMixin:
             result = hook.before_agent(self, message)
             if result:
                 message = result
-
-        # resume aborted rollout
-        _message = self._scroll_buffer(message[-1])
-        if _message is not None:
-            if _message.finish_reason != 'abort':
-                _message = copy.deepcopy(_message)
-                for hook in self._hooks.values():
-                    result = hook.after_agent(self, _message)
-                    if result:
-                        _message = result
-                return _message
-            message[-1].extra_info['partial_response'] = _message
-        else:
-            self.memory and self.memory.add(message)
+        self.memory and self.memory.add(message)
         response_message = await self.forward(*message, **kwargs)
-        if _message and _message.finish_reason == 'abort':
-            message[-1].extra_info.pop('partial_response', None)
         if not isinstance(response_message, AgentMessage):
             if isinstance(response_message, str):
                 response_message = AgentMessage(sender=self.name, content=response_message)
