@@ -898,6 +898,11 @@ class WebBrowser(BaseAction):
 
     @tool_api
     def open_url(self, url: str) -> dict:
+        """Open the url and return the content of the page.
+
+        Args:
+            url (str): The URL of the page to open.
+        """
         print(f'Start Browsing: {url}')
         web_success, web_content = self.fetcher.fetch(url)
         if web_success:
@@ -972,6 +977,11 @@ class AsyncWebBrowser(AsyncActionMixin, WebBrowser):
 
     @tool_api
     async def open_url(self, url: str) -> dict:
+        """Open the url and return the content of the page.
+
+        Args:
+            url (str): The URL of the page to open.
+        """
         print(f'Start Browsing: {url}')
         web_success, web_content = await self.fetcher.afetch(url)
         if web_success:
