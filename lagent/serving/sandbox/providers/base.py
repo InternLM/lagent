@@ -66,6 +66,7 @@ class SandboxClient:
         Returns:
             dict: Server response with ``stdout`` / ``stderr`` / ``return_code``.
         """
+        timeout_sec = int(timeout_sec)
         resp = await self._client.post(
             "/exec",
             json={"command": command, "cwd": cwd, "timeout_sec": timeout_sec, "detach": detach},
