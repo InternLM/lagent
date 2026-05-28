@@ -120,9 +120,10 @@ class SessionClient:
             request_data['session_id'] = self.session_id
             request_body = json.dumps(request_data).encode('utf-8')
 
-        # Detect if we should use Anthropic format by checking the requested endpoint
+        # Detect provider format by inspecting the requested endpoint
         req_path = request.match_info['path']
         is_anthropic = req_path.endswith('/messages') or '/v1/messages' in req_path
+        is_responses = req_path.endswith('/responses') or '/v1/responses' in req_path
 
         # By default we assume the incoming request is already in the target format
         provider_request_data = copy.deepcopy(request_data) if request_data else {}
@@ -216,8 +217,11 @@ class SessionClient:
                 raise RuntimeError(f"Provider returned error: {response_data}")
 
         # 7. Record
-        if request_data and 'messages' in request_data:
+        has_messages = isinstance(request_data, dict) and 'messages' in request_data
+        has_input = isinstance(request_data, dict) and 'input' in request_data
+        if has_messages or has_input:
             assistant_msg = None
+            response_items: Optional[list] = None  # for Responses API: flat output items
 
             if is_anthropic:
                 # Handle Anthropic trace format
@@ -227,6 +231,15 @@ class SessionClient:
                     for field in allowed_anthropic_fields:
                         if response_data.get(field) is not None:
                             assistant_msg[field] = response_data[field]
+            elif is_responses:
+                # OpenAI Responses API: the conversation is a flat list of output
+                # items (message / function_call / reasoning / ...). Store them
+                # flattened so the client's next-turn `input` (which echoes them)
+                # prefix-matches under get_messages() dedup. Convention:
+                # `function_call.arguments` is stored as a dict, applied uniformly
+                # to input- and output-side items below.
+                if response_data and response_data.get('output') is not None:
+                    response_items = copy.deepcopy(response_data.get('output', []))
             else:
                 # Handle standard OpenAI trace format
                 if response_data and response_data.get('choices'):
@@ -261,10 +274,38 @@ class SessionClient:
 
                                 assistant_msg[field] = val
 
-            # Keep the latest conversation history
-            messages = list(request_data['messages'])
-            if assistant_msg:
+            # Build the request side message list
+            if has_messages:
+                messages = list(request_data['messages'])
+            else:
+                raw_input = request_data['input']
+                if isinstance(raw_input, str):
+                    messages = [{"role": "user", "content": raw_input}]
+                elif isinstance(raw_input, list):
+                    messages = list(raw_input)
+                else:
+                    messages = []
+
+            if response_items:
+                messages.extend(response_items)
+            elif assistant_msg:
                 messages.append(assistant_msg)
+
+            # Convention: function_call.arguments stored as dict (not JSON
+            # string). Applied to all items uniformly — including input items
+            # echoed from prior turns — so multi-turn prefix dedup in
+            # get_messages() still works.
+            if is_responses:
+                for idx, item in enumerate(messages):
+                    if isinstance(item, dict) and item.get('type') == 'function_call':
+                        args = item.get('arguments')
+                        if isinstance(args, str):
+                            try:
+                                parsed = json.loads(args)
+                            except json.JSONDecodeError:
+                                continue
+                            # Avoid mutating dicts shared with request_data['input']
+                            messages[idx] = {**item, 'arguments': parsed}
 
             record_item = {"messages": messages, "tools": request_data.get("tools")}
 
@@ -295,8 +336,12 @@ class SessionClient:
         if not events:
             return None
 
-        # Detect format: OpenAI has "choices", Anthropic has "type"
+        # Detect format: Responses API events start with "response.";
+        # OpenAI ChatCompletion has "choices"; Anthropic uses message_start / content_block_*
         first = events[0]
+        evt_type = first.get('type', '')
+        if evt_type.startswith('response.') or first.get('object') == 'response':
+            return SessionClient._parse_responses_stream(events)
         if 'choices' in first or first.get('object') == 'chat.completion.chunk':
             return SessionClient._parse_openai_stream(events)
         return SessionClient._parse_anthropic_stream(events)
@@ -366,6 +411,135 @@ class SessionClient:
         if usage:
             message['usage'] = usage
         return message
+
+    @staticmethod
+    def _parse_responses_stream(events: list) -> Optional[dict]:
+        """Reconstruct an OpenAI Responses API result from stream events.
+
+        Prefers the terminal ``response.completed`` / ``response.failed`` /
+        ``response.incomplete`` event, which carries the full response object.
+        Falls back to incremental reconstruction from delta events when no
+        terminal event was seen (e.g. truncated stream).
+        """
+        # Fast path: terminal events embed the full response object
+        for event in reversed(events):
+            evt_type = event.get('type', '')
+            if evt_type in ('response.completed', 'response.failed', 'response.incomplete'):
+                resp = event.get('response')
+                if resp is not None:
+                    return resp
+
+        # Fallback: rebuild from per-event deltas
+        response: Dict = {}
+        output_items: Dict[int, dict] = {}
+
+        for event in events:
+            evt_type = event.get('type', '')
+
+            if evt_type in ('response.created', 'response.in_progress'):
+                r = event.get('response') or {}
+                for k, v in r.items():
+                    if k != 'output' and k not in response:
+                        response[k] = v
+
+            elif evt_type == 'response.output_item.added':
+                idx = event.get('output_index', len(output_items))
+                item = event.get('item')
+                if item is not None:
+                    output_items[idx] = copy.deepcopy(item)
+
+            elif evt_type == 'response.output_item.done':
+                idx = event.get('output_index', 0)
+                item = event.get('item')
+                if item is not None:
+                    output_items[idx] = copy.deepcopy(item)
+
+            elif evt_type == 'response.content_part.added':
+                idx = event.get('output_index', 0)
+                content_idx = event.get('content_index', 0)
+                part = event.get('part') or {}
+                item = output_items.setdefault(idx, {'type': 'message', 'content': []})
+                content = item.setdefault('content', [])
+                while len(content) <= content_idx:
+                    content.append({})
+                content[content_idx] = copy.deepcopy(part)
+
+            elif evt_type == 'response.output_text.delta':
+                idx = event.get('output_index', 0)
+                content_idx = event.get('content_index', 0)
+                delta = event.get('delta', '')
+                item = output_items.setdefault(idx, {'type': 'message', 'content': []})
+                content = item.setdefault('content', [])
+                while len(content) <= content_idx:
+                    content.append({'type': 'output_text', 'text': ''})
+                part = content[content_idx]
+                part.setdefault('text', '')
+                part['text'] += delta
+
+            elif evt_type == 'response.output_text.done':
+                idx = event.get('output_index', 0)
+                content_idx = event.get('content_index', 0)
+                text = event.get('text')
+                if text is not None:
+                    item = output_items.setdefault(idx, {'type': 'message', 'content': []})
+                    content = item.setdefault('content', [])
+                    while len(content) <= content_idx:
+                        content.append({'type': 'output_text', 'text': ''})
+                    content[content_idx]['text'] = text
+
+            elif evt_type == 'response.refusal.delta':
+                idx = event.get('output_index', 0)
+                content_idx = event.get('content_index', 0)
+                delta = event.get('delta', '')
+                item = output_items.setdefault(idx, {'type': 'message', 'content': []})
+                content = item.setdefault('content', [])
+                while len(content) <= content_idx:
+                    content.append({'type': 'refusal', 'refusal': ''})
+                part = content[content_idx]
+                part.setdefault('refusal', '')
+                part['refusal'] += delta
+
+            elif evt_type == 'response.function_call_arguments.delta':
+                idx = event.get('output_index', 0)
+                delta = event.get('delta', '')
+                item = output_items.setdefault(idx, {'type': 'function_call'})
+                item.setdefault('arguments', '')
+                item['arguments'] += delta
+
+            elif evt_type == 'response.function_call_arguments.done':
+                idx = event.get('output_index', 0)
+                args = event.get('arguments')
+                if args is not None:
+                    item = output_items.setdefault(idx, {'type': 'function_call'})
+                    item['arguments'] = args
+
+            elif evt_type == 'response.reasoning_summary_part.added':
+                idx = event.get('output_index', 0)
+                summary_idx = event.get('summary_index', 0)
+                part = event.get('part') or {}
+                item = output_items.setdefault(idx, {'type': 'reasoning', 'summary': []})
+                summary = item.setdefault('summary', [])
+                while len(summary) <= summary_idx:
+                    summary.append({})
+                summary[summary_idx] = copy.deepcopy(part)
+
+            elif evt_type == 'response.reasoning_summary_text.delta':
+                idx = event.get('output_index', 0)
+                summary_idx = event.get('summary_index', 0)
+                delta = event.get('delta', '')
+                item = output_items.setdefault(idx, {'type': 'reasoning', 'summary': []})
+                summary = item.setdefault('summary', [])
+                while len(summary) <= summary_idx:
+                    summary.append({'type': 'summary_text', 'text': ''})
+                part = summary[summary_idx]
+                part.setdefault('text', '')
+                part['text'] += delta
+
+        if not response and not output_items:
+            return None
+
+        response['output'] = [output_items[i] for i in sorted(output_items)]
+        return response
 
     @staticmethod
     def _parse_anthropic_stream(events: list) -> Optional[dict]:
