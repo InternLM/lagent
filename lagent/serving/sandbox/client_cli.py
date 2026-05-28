@@ -6,7 +6,6 @@ so an outer runner can record each phase as an explicit entry.
 """
 
 from __future__ import annotations
-
 import argparse
 import asyncio
 import json
@@ -28,7 +27,7 @@ class DaemonCallError(RuntimeError):
     pass
 
 
-def _call_json(sock: str, payload: dict[str, Any]) -> dict[str, Any]:
+def _call_json(sock: str, payload: dict[str, Any]) -> dict[str, Any] | list:
     raw = asyncio.run(_async_call(sock, json.dumps(payload, ensure_ascii=False).encode()))
     try:
         obj = json.loads(raw or "{}")
@@ -36,8 +35,8 @@ def _call_json(sock: str, payload: dict[str, Any]) -> dict[str, Any]:
         raise DaemonCallError(f"invalid daemon response: {exc}: {raw[:500]}") from exc
     if isinstance(obj, dict) and obj.get("error"):
         raise DaemonCallError(str(obj["error"]))
-    if not isinstance(obj, dict):
-        raise DaemonCallError(f"daemon response must be a JSON object, got {type(obj).__name__}")
+    if not isinstance(obj, (dict, list)):
+        raise DaemonCallError(f"daemon response must be a JSON object or array, got {type(obj).__name__}")
     return obj
 
 
