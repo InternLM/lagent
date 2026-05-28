@@ -31,11 +31,12 @@ Usage::
 
 import os
 from abc import abstractmethod
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
 
 from lagent.agents.agent import Agent, AsyncAgentMixin
 from lagent.schema import AgentMessage
+from lagent.utils import create_object, ctx_session_id
 
 
 class BaseExternalAgent(Agent):
@@ -78,8 +79,8 @@ class BaseExternalAgent(Agent):
         self.working_dir = working_dir
         self.env_vars = env_vars or {}
         self.timeout = timeout
-        self.session_id = uuid4().hex[:8]
-        self.proxy = proxy
+        self.proxy = create_object(proxy)
+        self.session_id = self.proxy and self.proxy.session_id or ctx_session_id.get() or uuid4().hex[:8]
         self._setup_done = False
 
     @abstractmethod
@@ -110,12 +111,14 @@ class BaseExternalAgent(Agent):
         env.update(self.env_vars)
         if self.proxy:
             session_key = f"sk-proxy-{self.session_id}"
-            env.update({
-                'OPENAI_BASE_URL': self.proxy.url,
-                'OPENAI_API_KEY': session_key,
-                'ANTHROPIC_BASE_URL': self.proxy.url,
-                'ANTHROPIC_API_KEY': session_key,
-            })
+            env.update(
+                {
+                    'OPENAI_BASE_URL': self.proxy.url,
+                    'OPENAI_API_KEY': session_key,
+                    'ANTHROPIC_BASE_URL': self.proxy.url,
+                    'ANTHROPIC_API_KEY': session_key,
+                }
+            )
         return env
 
     def _extract_task(self, messages: tuple) -> str:
@@ -156,19 +159,22 @@ class BaseExternalAgent(Agent):
     def state_dict(self, prefix='', destination=None) -> Dict:
         dest = super().state_dict(prefix=prefix, destination=destination)
         if self.proxy:
-            dest[prefix + 'llm_trace'] = self.proxy.get_records(self.session_id)
+            dest[prefix + 'llm_trace'] = self.proxy.get_messages()
         return dest
 
     def load_state_dict(self, state_dict: Dict):
         # Filter out llm_trace keys before passing to parent
-        filtered = {
-            k: v for k, v in state_dict.items()
-            if not k.endswith('llm_trace')
-        }
+        filtered = {k: v for k, v in state_dict.items() if not k.endswith('llm_trace')}
         # Parent expects exact key match, add missing memory key if needed
         if not any(k.endswith('memory') for k in filtered):
             filtered['' + 'memory'] = []
         super().load_state_dict(filtered)
+
+    def get_messages(self) -> List[dict]:
+        """Get the LLM trace from the proxy, if available."""
+        if self.proxy:
+            return self.proxy.get_messages()
+        return []
 
 
 class AsyncExternalAgent(AsyncAgentMixin, BaseExternalAgent):
@@ -184,9 +190,7 @@ class AsyncExternalAgent(AsyncAgentMixin, BaseExternalAgent):
 
     def run_external(self, task: str, **kwargs) -> str:
         """Sync fallback — not used in async path."""
-        raise NotImplementedError(
-            "Use run_external_async() for AsyncExternalAgent"
-        )
+        raise NotImplementedError("Use run_external_async() for AsyncExternalAgent")
 
     async def forward(self, *message: AgentMessage, **kwargs) -> Union[AgentMessage, str]:
         task = self._extract_task(message)

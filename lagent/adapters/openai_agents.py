@@ -44,6 +44,8 @@ class OpenAIAgentsAdapter(SDKAgentAdapter):
         model: str = 'gpt-4o-mini',
         instructions: Optional[str] = None,
         max_turns: int = 10,
+        tools: Optional[list] = None,
+        mcp_servers: Optional[list] = None,
         agent_name: str = 'assistant',
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
@@ -53,24 +55,35 @@ class OpenAIAgentsAdapter(SDKAgentAdapter):
         kwargs.setdefault('name', 'openai-agents')
         kwargs.setdefault('description', f'OpenAI Agents SDK ({model})')
         kwargs.setdefault('sdk_module', 'agents')
-        kwargs.setdefault('sdk_config', {
-            'model': model,
-            'instructions': instructions or 'You are a helpful assistant.',
-            'max_turns': max_turns,
-            'agent_name': agent_name,
-            'api_key': api_key or os.environ.get('OPENAI_API_KEY', ''),
-            'base_url': base_url or os.environ.get('OPENAI_BASE_URL', ''),
-            'http_proxy': http_proxy,
-        })
+        kwargs.setdefault(
+            'sdk_config',
+            {
+                'model': model,
+                'instructions': instructions or 'You are a helpful assistant.',
+                'max_turns': max_turns,
+                'tools': tools or [],
+                'mcp_servers': mcp_servers or [],
+                'agent_name': agent_name,
+                'api_key': api_key or os.environ.get('OPENAI_API_KEY', ''),
+                'base_url': base_url or os.environ.get('OPENAI_BASE_URL', ''),
+                'http_proxy': http_proxy,
+            },
+        )
         super().__init__(**kwargs)
         self._last_result: Any = None
 
     def create_sdk_agent(self, config: Dict[str, Any]) -> Any:
         from agents import Agent
+        from agents.model_settings import ModelSettings
+        from openai.types import Reasoning
+
         return Agent(
             name=config.get('agent_name', 'assistant'),
             model=config['model'],
+            model_settings=ModelSettings(reasoning=Reasoning(summary="auto")),
             instructions=config.get('instructions', 'You are a helpful assistant.'),
+            tools=config.get('tools'),
+            mcp_servers=config.get('mcp_servers'),
         )
 
     def invoke_sdk_agent(self, agent: Any, task: str, **kwargs) -> str:
@@ -78,10 +91,10 @@ class OpenAIAgentsAdapter(SDKAgentAdapter):
         raise NotImplementedError("Use invoke_sdk_agent_async")
 
     async def invoke_sdk_agent_async(self, agent: Any, task: str, **kwargs) -> str:
-        from agents import Runner, RunConfig
+        import httpx
+        from agents import RunConfig, Runner
         from agents.models.openai_provider import OpenAIProvider
         from openai import AsyncOpenAI
-        import httpx
 
         config = self.sdk_config
 
@@ -92,9 +105,7 @@ class OpenAIAgentsAdapter(SDKAgentAdapter):
         if config.get('base_url'):
             client_kwargs['base_url'] = config['base_url']
         if config.get('http_proxy'):
-            client_kwargs['http_client'] = httpx.AsyncClient(
-                proxy=config['http_proxy']
-            )
+            client_kwargs['http_client'] = httpx.AsyncClient(proxy=config['http_proxy'])
 
         # Override with LLM proxy if present
         if self.proxy:
@@ -112,17 +123,12 @@ class OpenAIAgentsAdapter(SDKAgentAdapter):
 
         # Multi-turn: pass previous result as input
         if self._last_result is not None:
-            input_data = self._last_result.to_input_list() + [
-                {"role": "user", "content": task}
-            ]
+            input_data = self._last_result.to_input_list() + [{"role": "user", "content": task}]
         else:
             input_data = task
 
         result = await Runner.run(
-            starting_agent=agent,
-            input=input_data,
-            max_turns=config.get('max_turns', 10),
-            run_config=run_config,
+            starting_agent=agent, input=input_data, max_turns=config.get('max_turns', 10), run_config=run_config
         )
 
         self._last_result = result
