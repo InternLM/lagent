@@ -42,6 +42,7 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         system_prompt: Custom system prompt.
         allowed_tools: List of allowed tool names.
         disallowed_tools: List of disallowed tool names.
+        mcp_servers: Dict of MCP server configs.
         cwd: Working directory for Claude Code.
         effort: Reasoning effort level ("low", "medium", "high", "max").
         thinking: Thinking config dict. Default: adaptive.
@@ -56,6 +57,7 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         system_prompt: Optional[str] = None,
         allowed_tools: Optional[List[str]] = None,
         disallowed_tools: Optional[List[str]] = None,
+        mcp_servers: Optional[Dict[str, dict]] = None,
         cwd: Optional[str] = None,
         effort: Optional[str] = None,
         thinking: Optional[dict] = None,
@@ -71,6 +73,7 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         self.system_prompt = system_prompt
         self.allowed_tools = allowed_tools or []
         self.disallowed_tools = disallowed_tools or []
+        self.mcp_servers = mcp_servers or {}
         self.cwd = cwd or self.working_dir
         self.effort = effort
         self.thinking = thinking
@@ -83,10 +86,7 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         try:
             import claude_agent_sdk
         except ImportError:
-            raise RuntimeError(
-                "claude-agent-sdk is required. "
-                "Install with: pip install claude-agent-sdk"
-            )
+            raise RuntimeError("claude-agent-sdk is required. " "Install with: pip install claude-agent-sdk")
 
     async def run_external_async(self, task: str, **kwargs) -> str:
         from claude_agent_sdk import (
@@ -112,6 +112,8 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
             options.allowed_tools = self.allowed_tools
         if self.disallowed_tools:
             options.disallowed_tools = self.disallowed_tools
+        if self.mcp_servers:
+            options.mcp_servers = self.mcp_servers
         if self.cwd:
             options.cwd = self.cwd
         if self.effort:
@@ -190,9 +192,8 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
             # SDK may error after yielding some messages.
             # Log but don't lose what we already captured.
             import logging
-            logging.getLogger(__name__).warning(
-                f"SDK query error (captured {len(messages)} events): {exc}"
-            )
+
+            logging.getLogger(__name__).warning(f"SDK query error (captured {len(messages)} events): {exc}")
 
         self._sdk_trace.extend(messages)
 
@@ -214,26 +215,3 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         if result_msg and result_msg.result:
             return result_msg.result
         return result_text or '(no output)'
-
-    def state_dict(self, prefix='', destination=None) -> dict:
-        dest = super().state_dict(prefix=prefix, destination=destination)
-        dest[prefix + 'sdk_trace'] = list(self._sdk_trace)
-        if self._session_id:
-            dest[prefix + 'claude_session_id'] = self._session_id
-        return dest
-
-    def load_state_dict(self, state_dict: dict):
-        filtered = {
-            k: v for k, v in state_dict.items()
-            if not k.endswith(('sdk_trace', 'claude_session_id'))
-        }
-        if not any(k.endswith('memory') for k in filtered):
-            filtered['memory'] = []
-        super().load_state_dict(filtered)
-
-        # Restore session for multi-turn
-        for k, v in state_dict.items():
-            if k.endswith('claude_session_id'):
-                self._session_id = v
-            if k.endswith('sdk_trace'):
-                self._sdk_trace = v or []
