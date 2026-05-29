@@ -1,100 +1,256 @@
-"""Thin Terminus2 adapter for lagent.
+"""Terminus2 black-box adapter wrapping harbor's Terminus2.
 
-This module intentionally does not port Terminus2's parser, prompt, or agent
-loop.  It wraps the upstream implementation from ``terminal-bench`` and exposes
-it through lagent's black-box ``AsyncExternalAgent`` protocol.
+This adapter wires :class:`harbor.agents.terminus_2.terminus_2.Terminus2` into
+lagent's :class:`AsyncExternalAgent` contract.  Harbor owns the agent loop,
+parser, prompt templates, LiteLLM call layer (with proper ``reraise=True``
+retry semantics) and tmux-based terminal interaction; this adapter only
+provides a local ``BaseEnvironment`` shim so harbor's ``TmuxSession`` can drive
+the *current* container via subprocess instead of HTTP.
 
-The default terminal backend is a local tmux wrapper around
-``lagent.actions.tmux_action.TmuxSession``.  That keeps the adapter usable
-inside the lagent sandbox daemon, where the process is already running inside
-the task container and does not need terminal-bench's Docker-backed session.
-If you want the original terminal-bench Docker session, set
-``terminal_backend="terminal_bench"`` and pass ``container_name``.
+Harbor and its prompt templates are imported lazily inside ``setup()`` /
+``run_external_async()`` so installing lagent without harbor on PYTHONPATH
+keeps ``import lagent.adapters`` working.
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
-import shlex
 import shutil
-import subprocess
+import tempfile
 from contextlib import contextmanager
-from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Optional
 
-from lagent.actions.tmux_action import TmuxSession as LocalTmuxSession
 from lagent.agents.agent import Agent
 from lagent.utils import create_object
 
 from .base import AsyncExternalAgent, _json_safe
 
 
-class _LocalTerminusSession:
-    """Sync, duck-typed session object consumed by terminal-bench Terminus2."""
+class Terminus2Adapter(AsyncExternalAgent):
+    """Wrap upstream ``harbor.agents.terminus_2.terminus_2.Terminus2``.
+
+    Args:
+        model (str | None): LiteLLM model name. Defaults to ``RL_LLM_MODEL`` or
+            ``OPENAI_MODEL``.
+        base_url (str | None): LiteLLM ``api_base``.  Defaults to
+            ``RL_LLM_BASE_URL`` or ``OPENAI_BASE_URL``.  When ``proxy`` is set,
+            the proxy's URL takes precedence.
+        api_key (str | None): API key exposed to LiteLLM through env vars.  When
+            ``proxy`` is set, a synthetic ``sk-proxy-<session>`` key is used.
+        max_episodes (int | None): Max agent loop iterations.  Forwarded to
+            harbor as ``max_turns``.
+        parser_name (str): ``"json"`` or ``"xml"``.
+        temperature (float): LiteLLM sampling temperature.
+        reasoning_effort (str | None): One of ``"none"``, ``"minimal"``,
+            ``"low"``, ``"medium"``, ``"high"``, ``"default"``.
+        enable_summarize (bool): Allow harbor to summarize on
+            ``ContextLengthExceededError``.  Default ``False`` so context
+            overflow surfaces as a real error.
+        record_terminal_session (bool): Record asciinema cast.  Default
+            ``False`` to skip asciinema dependency.
+        suppress_max_turns_warning (bool): Quiet harbor's per-turn warning.
+        tmux_pane_width (int): tmux ``-x``.
+        tmux_pane_height (int): tmux ``-y``.
+        logging_dir (str | None): Directory for harbor's per-episode logs and
+            ``trajectory.*.json``.  A fresh ``tempfile.mkdtemp`` is allocated
+            per call when omitted.
+        terminus2_kwargs (dict | None): Forwarded verbatim to harbor's
+            ``Terminus2`` constructor.  Use this for advanced fields like
+            ``model_info``, ``llm_call_kwargs``, ``max_thinking_tokens``,
+            ``trajectory_config`` without growing the adapter signature.
+        **kwargs: Forwarded to :class:`AsyncExternalAgent` (``timeout``,
+            ``working_dir``, ``env_vars``, ``proxy``, ``hooks``).
+    """
 
     def __init__(
         self,
-        session_name: str,
-        *,
-        pane_width: int = 160,
-        pane_height: int = 40,
-        working_dir: str | None = None,
-        extra_env: dict[str, str] | None = None,
-        kill_on_finish: bool = True,
+        model: Optional[str] = None,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+        max_episodes: Optional[int] = 100,
+        parser_name: str = "json",
+        temperature: float = 0.7,
+        reasoning_effort: Optional[str] = None,
+        enable_summarize: bool = False,
+        record_terminal_session: bool = False,
+        suppress_max_turns_warning: bool = True,
+        tmux_pane_width: int = 160,
+        tmux_pane_height: int = 40,
+        logging_dir: Optional[str] = None,
+        terminus2_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs,
     ) -> None:
-        self._session_name = session_name
-        self._kill_on_finish = kill_on_finish
-        self._session = LocalTmuxSession(
-            session_name=session_name,
-            pane_width=pane_width,
-            pane_height=pane_height,
-            working_dir=working_dir,
-            extra_env=extra_env,
+        proxy_cfg = kwargs.get("proxy")
+        if isinstance(proxy_cfg, dict):
+            kwargs["proxy"] = create_object(proxy_cfg)
+
+        kwargs.setdefault("name", "terminus2")
+        kwargs.setdefault("description", "Harbor Terminus2 black-box agent")
+        kwargs.setdefault("working_dir", os.environ.get("TASK_WORKSPACE", "/app"))
+        super().__init__(**kwargs)
+
+        self.model = model or os.environ.get("RL_LLM_MODEL") or os.environ.get("OPENAI_MODEL", "")
+        self.base_url = base_url or os.environ.get("RL_LLM_BASE_URL") or os.environ.get("OPENAI_BASE_URL", "")
+        self.api_key = api_key or os.environ.get("RL_LLM_API_KEY") or os.environ.get("OPENAI_API_KEY", "")
+        self.max_episodes = max_episodes
+        self.parser_name = parser_name
+        self.temperature = temperature
+        self.reasoning_effort = reasoning_effort
+        self.enable_summarize = enable_summarize
+        self.record_terminal_session = record_terminal_session
+        self.suppress_max_turns_warning = suppress_max_turns_warning
+        self.tmux_pane_width = tmux_pane_width
+        self.tmux_pane_height = tmux_pane_height
+        self.logging_dir = Path(logging_dir) if logging_dir else None
+        self.terminus2_kwargs = dict(terminus2_kwargs or {})
+
+        self._last_messages: list[dict[str, Any]] | None = None
+        self._last_trajectory_steps: list[Any] | None = None
+        self._last_context_metadata: dict[str, Any] | None = None
+        self._last_failure_mode: str | None = None
+        self._last_n_episodes: int | None = None
+
+    def setup(self) -> None:
+        try:
+            import harbor.agents.terminus_2.terminus_2  # noqa: F401
+        except ImportError as exc:
+            raise RuntimeError(
+                "Terminus2Adapter requires harbor on PYTHONPATH. "
+                "Install harbor's source tree under PYTHONPATH (e.g., via the "
+                "tb_pkg_install.sh build script that lagent's tb2-eval recipe "
+                "uses) along with: pydantic, shortuuid, requests, pyyaml, "
+                "tenacity, python-dotenv, litellm, jinja2, pathspec, packaging, "
+                "logzero."
+            ) from exc
+
+        if not self.model:
+            raise RuntimeError("Terminus2Adapter requires model or RL_LLM_MODEL.")
+
+        if shutil.which("tmux") is None:
+            raise RuntimeError("tmux is required by Terminus2Adapter but was not found on PATH.")
+
+    async def run_external_async(self, task: str, **kwargs) -> str:
+        from harbor.agents.terminus_2.terminus_2 import Terminus2 as HarborTerminus2
+        from harbor.models.agent.context import AgentContext
+
+        local_env_cls = _get_local_sandbox_environment_cls()
+
+        api_base = self.proxy.url if self.proxy is not None else (self.base_url or None)
+        api_key = f"sk-proxy-{self.session_id}" if self.proxy is not None else (self.api_key or None)
+
+        owns_logging_dir = self.logging_dir is None
+        logs_dir = self.logging_dir or Path(tempfile.mkdtemp(prefix="harbor-terminus2-"))
+        logs_dir.mkdir(parents=True, exist_ok=True)
+
+        env = local_env_cls(
+            workspace=self.working_dir or "/app",
+            trial_dir=logs_dir,
+            env_vars=self.env_vars or None,
         )
 
-    def start(self) -> None:
-        # LocalTmuxSession starts in its constructor.
-        return None
+        env_updates: dict[str, str | None] = {
+            **{k: v for k, v in (self.env_vars or {}).items()},
+            "OPENAI_API_KEY": api_key,
+            "ANTHROPIC_API_KEY": api_key,
+            "ANTHROPIC_AUTH_TOKEN": api_key,
+            "OPENAI_BASE_URL": api_base,
+            "ANTHROPIC_BASE_URL": api_base,
+        }
 
-    def stop(self) -> None:
-        if not self._kill_on_finish:
-            return
-        subprocess.run(
-            f"tmux kill-session -t {shlex.quote(self._session_name)}",
-            shell=True,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            with _temporary_env(env_updates):
+                agent = HarborTerminus2(
+                    logs_dir=logs_dir,
+                    model_name=self.model,
+                    api_base=api_base,
+                    max_turns=self.max_episodes,
+                    parser_name=self.parser_name,
+                    temperature=self.temperature,
+                    reasoning_effort=self.reasoning_effort,
+                    enable_summarize=self.enable_summarize,
+                    record_terminal_session=self.record_terminal_session,
+                    suppress_max_turns_warning=self.suppress_max_turns_warning,
+                    tmux_pane_width=self.tmux_pane_width,
+                    tmux_pane_height=self.tmux_pane_height,
+                    session_id=self.session_id,
+                    **self.terminus2_kwargs,
+                )
 
-    def is_session_alive(self) -> bool:
-        return asyncio.run(self._session.is_session_alive())
+                await env.start(force_build=False)
+                await agent.setup(env)
 
-    def send_keys(
-        self,
-        keys: str | list[str],
-        block: bool = False,
-        min_timeout_sec: float = 0.0,
-        max_timeout_sec: float = 180.0,
-    ) -> None:
-        asyncio.run(
-            self._session.send_keys(
-                keys,
-                block=block,
-                min_timeout_sec=min_timeout_sec,
-                max_timeout_sec=max_timeout_sec,
-            )
-        )
+                context = AgentContext()
+                run_coro = agent.run(task, env, context)
+                if self.timeout is not None:
+                    await asyncio.wait_for(run_coro, timeout=self.timeout)
+                else:
+                    await run_coro
 
-    def capture_pane(self, capture_entire: bool = False) -> str:
-        return asyncio.run(self._session.capture_pane(capture_entire=capture_entire))
+                self._capture_state(agent, context)
+                return self._format_result(agent)
+        finally:
+            try:
+                await env.stop(delete=False)
+            except Exception:
+                pass
+            if owns_logging_dir:
+                await asyncio.to_thread(shutil.rmtree, str(logs_dir), True)
 
-    def get_incremental_output(self) -> str:
-        return asyncio.run(self._session.get_incremental_output())
+    def state_dict(self, prefix: str = "", destination=None) -> Dict[str, Any]:
+        dest = Agent.state_dict(self, prefix=prefix, destination=destination)
+        if self.proxy is not None and hasattr(self.proxy, "get_messages"):
+            try:
+                dest[prefix + "llm_trace"] = _json_safe(self.proxy.get_messages())
+            except Exception:
+                pass
+        dest[prefix + "terminus2.messages"] = _json_safe(self._last_messages)
+        dest[prefix + "terminus2.trajectory_steps"] = _json_safe(self._last_trajectory_steps)
+        dest[prefix + "terminus2.context_metadata"] = _json_safe(self._last_context_metadata)
+        dest[prefix + "terminus2.failure_mode"] = self._last_failure_mode
+        dest[prefix + "terminus2.n_episodes"] = self._last_n_episodes
+        return dest
 
-    def get_asciinema_timestamp(self) -> float:
-        return 0.0
+    def get_messages(self, prefix: str = "", destination=None) -> Dict[str, Any]:
+        dest = super().get_messages(prefix=prefix, destination=destination)
+        if self._last_messages is not None:
+            dest[prefix + "terminus2.messages"] = _json_safe(self._last_messages)
+        return dest
+
+    # ─────────────────────────────────────────────────────────────────
+    # Internal helpers
+    # ─────────────────────────────────────────────────────────────────
+
+    def _capture_state(self, agent: Any, context: Any) -> None:
+        chat = getattr(agent, "_chat", None)
+        if chat is not None:
+            messages = getattr(chat, "messages", None)
+            if isinstance(messages, list):
+                self._last_messages = list(messages)
+        trajectory = getattr(agent, "_trajectory_steps", None)
+        if isinstance(trajectory, list):
+            self._last_trajectory_steps = list(trajectory)
+        metadata = getattr(context, "metadata", None)
+        if metadata is not None:
+            self._last_context_metadata = dict(metadata)
+        self._last_n_episodes = getattr(agent, "_n_episodes", None)
+
+    def _format_result(self, agent: Any) -> str:
+        chat = getattr(agent, "_chat", None)
+        if chat is not None:
+            messages = getattr(chat, "messages", None) or []
+            for msg in reversed(messages):
+                if isinstance(msg, dict) and msg.get("role") == "assistant":
+                    content = msg.get("content")
+                    if isinstance(content, str) and content:
+                        return content
+        return "Terminus2 finished."
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Module-private helpers
+# ─────────────────────────────────────────────────────────────────────
 
 
 @contextmanager
@@ -115,215 +271,169 @@ def _temporary_env(updates: dict[str, str | None]):
                 os.environ[key] = old_value
 
 
-def _object_to_dict(value: Any) -> Any:
-    if value is None:
-        return None
-    if is_dataclass(value):
-        return asdict(value)
-    if hasattr(value, "model_dump"):
-        return value.model_dump(mode="json")
-    if hasattr(value, "__dict__"):
-        return {k: _object_to_dict(v) for k, v in vars(value).items() if not k.startswith("_")}
-    if isinstance(value, (list, tuple)):
-        return [_object_to_dict(v) for v in value]
-    if isinstance(value, dict):
-        return {k: _object_to_dict(v) for k, v in value.items()}
-    return value
+_LOCAL_SANDBOX_ENVIRONMENT_CLS: type | None = None
 
 
-class Terminus2Adapter(AsyncExternalAgent):
-    """Wrap upstream ``terminal_bench.agents.terminus_2.Terminus2``.
+def _get_local_sandbox_environment_cls() -> type:
+    """Lazily build the harbor ``BaseEnvironment`` subclass.
 
-    Args:
-        model: LiteLLM model name. Defaults to ``RL_LLM_MODEL`` or
-            ``OPENAI_MODEL``.
-        base_url: LiteLLM ``api_base``. Defaults to ``RL_LLM_BASE_URL`` or
-            ``OPENAI_BASE_URL``. If ``proxy`` is set, the proxy URL is used.
-        api_key: API key exposed to LiteLLM through env vars. If ``proxy`` is
-            set, a synthetic ``sk-proxy-<session>`` key is used.
-        terminal_backend: ``"local"`` for lagent's in-container tmux session,
-            or ``"terminal_bench"`` for terminal-bench's Docker session.
-        container_name: Required when ``terminal_backend="terminal_bench"``.
+    Defined as a factory so that ``import lagent.adapters.terminus2`` does not
+    require harbor to be on PYTHONPATH; harbor is only needed when
+    ``run_external_async`` actually fires.
+
+    Returns:
+        type: Cached ``LocalSandboxEnvironment`` class.
     """
+    global _LOCAL_SANDBOX_ENVIRONMENT_CLS
+    if _LOCAL_SANDBOX_ENVIRONMENT_CLS is not None:
+        return _LOCAL_SANDBOX_ENVIRONMENT_CLS
 
-    def __init__(
-        self,
-        model: Optional[str] = None,
-        base_url: Optional[str] = None,
-        api_key: Optional[str] = None,
-        max_episodes: Optional[int] = 30,
-        parser_name: str = "json",
-        temperature: float = 0.7,
-        terminal_backend: Literal["local", "terminal_bench"] = "local",
-        container_name: Optional[str] = None,
-        commands_path: Optional[str] = None,
-        disable_recording: bool = True,
-        user: str = "",
-        pane_width: int = 160,
-        pane_height: int = 40,
-        session_name: Optional[str] = None,
-        auto_start_session: bool = True,
-        kill_session_on_finish: bool = True,
-        logging_dir: Optional[str] = None,
-        require_tmux: bool = True,
-        **kwargs,
-    ) -> None:
-        proxy_cfg = kwargs.get("proxy")
-        if isinstance(proxy_cfg, dict):
-            kwargs["proxy"] = create_object(proxy_cfg)
+    from harbor.environments.base import BaseEnvironment, ExecResult
+    from harbor.models.environment_type import EnvironmentType
+    from harbor.models.task.config import EnvironmentConfig
+    from harbor.models.trial.paths import TrialPaths
 
-        kwargs.setdefault("name", "terminus2")
-        kwargs.setdefault("description", "Terminal-Bench Terminus2 agent")
-        kwargs.setdefault("working_dir", os.environ.get("TASK_WORKSPACE", "/app"))
-        super().__init__(**kwargs)
+    class LocalSandboxEnvironment(BaseEnvironment):
+        """Run harbor's ``BaseEnvironment`` operations as local subprocess calls.
 
-        self.model = model or os.environ.get("RL_LLM_MODEL") or os.environ.get("OPENAI_MODEL", "")
-        self.base_url = base_url or os.environ.get("RL_LLM_BASE_URL") or os.environ.get("OPENAI_BASE_URL", "")
-        self.api_key = api_key or os.environ.get("RL_LLM_API_KEY") or os.environ.get("OPENAI_API_KEY", "")
-        self.max_episodes = max_episodes
-        self.parser_name = parser_name
-        self.temperature = temperature
-        self.terminal_backend = terminal_backend
-        self.container_name = container_name
-        self.commands_path = Path(commands_path) if commands_path else None
-        self.disable_recording = disable_recording
-        self.user = user
-        self.pane_width = pane_width
-        self.pane_height = pane_height
-        self.session_name = session_name or f"terminus2-{self.session_id}"
-        self._explicit_session_name = session_name is not None
-        self.auto_start_session = auto_start_session
-        self.kill_session_on_finish = kill_session_on_finish
-        self.logging_dir = Path(logging_dir) if logging_dir else None
-        self.require_tmux = require_tmux
-        self._run_index = 0
+        Harbor's :class:`~harbor.environments.base.BaseEnvironment` abstracts
+        "run a command in the task container".  Concrete subclasses ship in
+        harbor for Docker/GKE/Modal/e2b/Daytona/PJLab — all assume harbor runs
+        *outside* the container and reaches in over an SDK or HTTP.
 
-        self._last_result: Any = None
-        self._last_result_dict: dict[str, Any] | None = None
-        self._last_session_name: str | None = None
+        When :class:`Terminus2Adapter` runs inside the lagent sandbox daemon,
+        it is *already* in the task container.  Harbor's ``environment.exec``
+        therefore degenerates to a local subprocess call,
+        ``upload/download_file`` to ``shutil.copy`` (source and destination are
+        both on this machine), and ``start/stop`` to no-ops.
 
-    def setup(self) -> None:
-        try:
-            import terminal_bench.agents.terminus_2.terminus_2  # noqa: F401
-        except ImportError as exc:
-            raise RuntimeError(
-                "Terminus2Adapter requires terminal-bench to be installed or added to PYTHONPATH. "
-                "Install with `pip install terminal-bench` or inject the terminal-bench repo into PYTHONPATH."
-            ) from exc
+        Args:
+            workspace (str): Path the agent's terminal session starts in.
+                Forwarded as ``cwd`` to subprocess calls when the caller does
+                not override.
+            trial_dir (Path | None): Directory used for harbor logging
+                artefacts (``trial_paths.agent_dir`` etc.).  A fresh
+                ``tempfile.mkdtemp`` dir is allocated when omitted.
+            default_user (str | int | None): Forwarded to harbor's call sites
+                that ask for ``user``; ignored by ``exec`` (subprocess inherits
+                the daemon's effective user).
+            env_vars (dict[str, str] | None): Persistent env injected into
+                every ``exec``.
+        """
 
-        if not self.model:
-            raise RuntimeError("Terminus2Adapter requires model or RL_LLM_MODEL.")
+        def __init__(
+            self,
+            workspace: str = "/app",
+            *,
+            trial_dir: Path | None = None,
+            default_user: str | int | None = None,
+            env_vars: dict[str, str] | None = None,
+        ) -> None:
+            if trial_dir is None:
+                trial_dir = Path(tempfile.mkdtemp(prefix="harbor-local-env-"))
+            trial_dir.mkdir(parents=True, exist_ok=True)
 
-        if self.terminal_backend == "local":
-            if self.require_tmux and shutil.which("tmux") is None:
-                raise RuntimeError("tmux is required by Terminus2Adapter but was not found on PATH.")
-        elif self.terminal_backend == "terminal_bench":
-            if not self.container_name:
-                raise RuntimeError("container_name is required when terminal_backend='terminal_bench'.")
-        else:
-            raise ValueError(f"Unsupported terminal_backend: {self.terminal_backend}")
+            super().__init__(
+                environment_dir=trial_dir,
+                environment_name="lagent-local",
+                session_id=trial_dir.name,
+                trial_paths=TrialPaths(trial_dir=trial_dir),
+                task_env_config=EnvironmentConfig(),
+                persistent_env=env_vars,
+                suppress_override_warnings=True,
+            )
+            self._workspace = workspace
+            self.default_user = default_user
 
-    async def run_external_async(self, task: str, **kwargs) -> str:
-        run_coro = asyncio.to_thread(self._run_task_sync, task)
-        if self.timeout is None:
-            return await run_coro
-        return await asyncio.wait_for(run_coro, timeout=self.timeout)
+        @staticmethod
+        def type() -> EnvironmentType:
+            return EnvironmentType.DOCKER
 
-    def _run_task_sync(self, instruction: str) -> str:
-        from terminal_bench.agents.terminus_2.terminus_2 import Terminus2
+        @property
+        def is_mounted(self) -> bool:
+            return False
 
-        api_base = self.proxy.url if self.proxy is not None else (self.base_url or None)
-        api_key = f"sk-proxy-{self.session_id}" if self.proxy is not None else self.api_key
-        env_updates = {
-            **self.env_vars,
-            "OPENAI_API_KEY": api_key or None,
-            "ANTHROPIC_API_KEY": api_key or None,
-            "ANTHROPIC_AUTH_TOKEN": api_key or None,
-            "OPENAI_BASE_URL": api_base,
-            "ANTHROPIC_BASE_URL": api_base,
-        }
+        @property
+        def supports_gpus(self) -> bool:
+            return False
 
-        session = self._build_session()
-        try:
-            if self.auto_start_session and hasattr(session, "start"):
-                session.start()
+        @property
+        def can_disable_internet(self) -> bool:
+            return False
 
-            if self.logging_dir is not None:
-                self.logging_dir.mkdir(parents=True, exist_ok=True)
+        async def start(self, force_build: bool = False) -> None:
+            return None
 
-            with _temporary_env(env_updates):
-                agent = Terminus2(
-                    model_name=self.model,
-                    max_episodes=self.max_episodes,
-                    parser_name=self.parser_name,
-                    api_base=api_base,
-                    temperature=self.temperature,
+        async def stop(self, delete: bool = False) -> None:
+            return None
+
+        async def exec(
+            self,
+            command: str,
+            cwd: str | None = None,
+            env: dict[str, str] | None = None,
+            timeout_sec: int | None = None,
+            user: str | int | None = None,
+        ) -> ExecResult:
+            merged_env = os.environ.copy()
+            merged = self._merge_env(env)
+            if merged:
+                merged_env.update(merged)
+
+            proc = await asyncio.create_subprocess_shell(
+                command,
+                cwd=cwd or self._workspace,
+                env=merged_env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                if timeout_sec is not None and timeout_sec > 0:
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_sec)
+                else:
+                    stdout, stderr = await proc.communicate()
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+                return ExecResult(
+                    stdout="",
+                    stderr=f"command timed out after {timeout_sec}s: {command}",
+                    return_code=124,
                 )
-                result = agent.perform_task(
-                    instruction=instruction,
-                    session=session,
-                    logging_dir=self.logging_dir,
-                    time_limit_seconds=self.timeout,
-                )
-
-            self._last_result = result
-            self._last_result_dict = _json_safe(_object_to_dict(result))
-            return self._format_result(result)
-        finally:
-            if hasattr(session, "stop"):
-                session.stop()
-
-    def _build_session(self):
-        self._last_session_name = (
-            self.session_name if self._explicit_session_name else f"{self.session_name}-{self._run_index}"
-        )
-        self._run_index += 1
-
-        if self.terminal_backend == "local":
-            return _LocalTerminusSession(
-                self._last_session_name,
-                pane_width=self.pane_width,
-                pane_height=self.pane_height,
-                working_dir=self.working_dir,
-                extra_env=self.env_vars,
-                kill_on_finish=self.kill_session_on_finish,
+            return ExecResult(
+                stdout=(stdout or b"").decode("utf-8", errors="replace"),
+                stderr=(stderr or b"").decode("utf-8", errors="replace"),
+                return_code=proc.returncode if proc.returncode is not None else -1,
             )
 
-        import docker
-        from terminal_bench.terminal.tmux_session import TmuxSession
+        async def upload_file(self, source_path: Path | str, target_path: str) -> None:
+            src = Path(source_path).resolve()
+            dst = Path(target_path)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(shutil.copy2, src, dst)
 
-        container = docker.from_env().containers.get(self.container_name)
-        return TmuxSession(
-            session_name=self._last_session_name,
-            container=container,
-            commands_path=self.commands_path,
-            disable_recording=self.disable_recording,
-            user=self.user,
-        )
+        async def upload_dir(self, source_dir: Path | str, target_dir: str) -> None:
+            src = Path(source_dir).resolve()
+            if not src.is_dir():
+                raise NotADirectoryError(f"source is not a directory: {src}")
+            dst = Path(target_dir)
+            await asyncio.to_thread(shutil.copytree, src, dst, dirs_exist_ok=True)
 
-    @staticmethod
-    def _format_result(result: Any) -> str:
-        result_dict = _object_to_dict(result)
-        if isinstance(result_dict, dict):
-            failure_mode = result_dict.get("failure_mode")
-            if isinstance(failure_mode, dict):
-                failure_mode = failure_mode.get("value") or failure_mode.get("name") or str(failure_mode)
-            return f"Terminus2 finished. failure_mode={failure_mode}"
-        return "Terminus2 finished."
+        async def download_file(self, source_path: str, target_path: Path | str) -> None:
+            src = Path(source_path)
+            dst = Path(target_path)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(shutil.copy2, src, dst)
 
-    def state_dict(self, prefix="", destination=None) -> Dict[str, Any]:
-        dest = Agent.state_dict(self, prefix=prefix, destination=destination)
-        if self.proxy is not None and hasattr(self.proxy, "get_messages"):
-            try:
-                dest[prefix + "llm_trace"] = _json_safe(self.proxy.get_messages())
-            except Exception:
-                pass
-        dest[prefix + "terminus2.result"] = _json_safe(self._last_result_dict)
-        dest[prefix + "terminus2.session_name"] = self._last_session_name
-        return dest
+        async def download_dir(self, source_dir: str, target_dir: Path | str) -> None:
+            src = Path(source_dir)
+            if not src.is_dir():
+                raise NotADirectoryError(f"source is not a directory: {src}")
+            dst = Path(target_dir)
+            await asyncio.to_thread(shutil.copytree, src, dst, dirs_exist_ok=True)
 
-    def get_messages(self, prefix="", destination=None) -> Dict[str, Any]:
-        dest = super().get_messages(prefix=prefix, destination=destination)
-        dest[prefix + "terminus2.result"] = _json_safe(self._last_result_dict)
-        dest[prefix + "terminus2.session_name"] = self._last_session_name
-        return dest
+        def _validate_definition(self) -> None:
+            return None
+
+    _LOCAL_SANDBOX_ENVIRONMENT_CLS = LocalSandboxEnvironment
+    return LocalSandboxEnvironment
