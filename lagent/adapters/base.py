@@ -157,24 +157,18 @@ class BaseExternalAgent(Agent):
         )
 
     def state_dict(self, prefix='', destination=None) -> Dict:
-        dest = super().state_dict(prefix=prefix, destination=destination)
-        if self.proxy:
-            dest[prefix + 'llm_trace'] = self.proxy.get_messages()
-        return dest
+        raise NotImplementedError(
+            "BaseExternalAgent does not implement state_dict. Subclasses should override if needed."
+        )
 
     def load_state_dict(self, state_dict: Dict):
-        # Filter out llm_trace keys before passing to parent
-        filtered = {k: v for k, v in state_dict.items() if not k.endswith('llm_trace')}
-        # Parent expects exact key match, add missing memory key if needed
-        if not any(k.endswith('memory') for k in filtered):
-            filtered['' + 'memory'] = []
-        super().load_state_dict(filtered)
+        raise NotImplementedError(
+            "BaseExternalAgent does not implement load_state_dict. Subclasses should override if needed."
+        )
 
     def get_messages(self) -> List[dict]:
         """Get the LLM trace from the proxy, if available."""
-        if self.proxy:
-            return self.proxy.get_messages()
-        return []
+        return self.proxy.get_messages()
 
 
 class AsyncExternalAgent(AsyncAgentMixin, BaseExternalAgent):
