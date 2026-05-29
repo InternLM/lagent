@@ -83,22 +83,6 @@ class AsyncAPIClient(AsyncGPTAPI):
 
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
 
-        # def _error_completion(content: str) -> dict:
-        #     return {
-        #         "id": "error",
-        #         "object": "chat.completion",
-        #         "created": 0,
-        #         "model": self.model_name,
-        #         "choices": [
-        #             {
-        #                 "index": 0,
-        #                 "message": {"role": "assistant", "content": content},
-        #                 "finish_reason": "failed",
-        #             }
-        #         ],
-        #         "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-        #     }
-
         connector = aiohttp.TCPConnector(ssl=False)
         timeout = aiohttp.ClientTimeout(total=self.timeout)
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
@@ -119,11 +103,13 @@ class AsyncAPIClient(AsyncGPTAPI):
                     tool_calls_map = {}
                     function_call_data = None
                     usage = {}
+                    saw_choice = False
+                    last_event = None
 
                     async with session.post(url, json=payload, headers=headers, proxy=self.proxy) as resp:
                         if resp.status != 200:
                             text = await resp.text()
-                            raise RuntimeError(f"HTTP {resp.status}: {text}")
+                            raise RuntimeError(f"LLM HTTP {resp.status} from {url}: {text}")
 
                         async for line in resp.content:
                             if line:
@@ -136,6 +122,15 @@ class AsyncAPIClient(AsyncGPTAPI):
                                         break
                                     try:
                                         data = json.loads(data_str)
+                                        last_event = data
+                                        if (
+                                            data.get("error") is not None
+                                            or data.get("type") == "error"
+                                            or data.get("object") == "error"
+                                        ):
+                                            raise RuntimeError(
+                                                f"LLM stream error from {url}: {json.dumps(data, ensure_ascii=False)}"
+                                            )
                                         if "id" in data and not message_data["id"]:
                                             message_data["id"] = data["id"]
                                         if "created" in data and not message_data["created"]:
@@ -143,7 +138,11 @@ class AsyncAPIClient(AsyncGPTAPI):
                                         if "model" in data:
                                             message_data["model"] = data["model"]
 
-                                        for choice in data.get("choices", []):
+                                        choices = data.get("choices", [])
+                                        if choices:
+                                            saw_choice = True
+
+                                        for choice in choices:
                                             delta = choice.get("delta", {})
 
                                             if "content" in delta and delta["content"]:
@@ -183,8 +182,16 @@ class AsyncAPIClient(AsyncGPTAPI):
 
                                         if "usage" in data and data["usage"]:
                                             usage = data["usage"]
-                                    except json.JSONDecodeError:
-                                        pass
+                                    except json.JSONDecodeError as exc:
+                                        raise RuntimeError(
+                                            f"Invalid LLM SSE JSON from {url}: {data_str}"
+                                        ) from exc
+
+                    if not saw_choice:
+                        raise RuntimeError(
+                            f"LLM stream ended without choices from {url}: "
+                            f"{json.dumps(last_event, ensure_ascii=False) if last_event is not None else None}"
+                        )
 
                     msg = message_data["choices"][0]["message"]
                     msg["content"] = "".join(content_parts)
@@ -199,8 +206,11 @@ class AsyncAPIClient(AsyncGPTAPI):
                             if isinstance(args, str):
                                 try:
                                     tc["function"]["arguments"] = json.loads(args)
-                                except json.JSONDecodeError:
-                                    pass
+                                except json.JSONDecodeError as exc:
+                                    raise RuntimeError(
+                                        "Invalid tool call arguments JSON "
+                                        f"from {url}: tool_name={tc['function'].get('name')!r}, arguments={args!r}"
+                                    ) from exc
                             tool_calls.append(tc)
                         msg["tool_calls"] = tool_calls
 
@@ -209,8 +219,11 @@ class AsyncAPIClient(AsyncGPTAPI):
                         if isinstance(args, str):
                             try:
                                 function_call_data["arguments"] = json.loads(args)
-                            except json.JSONDecodeError:
-                                pass
+                            except json.JSONDecodeError as exc:
+                                raise RuntimeError(
+                                    "Invalid function_call arguments JSON "
+                                    f"from {url}: function_name={function_call_data.get('name')!r}, arguments={args!r}"
+                                ) from exc
                         msg["function_call"] = function_call_data
 
                     if usage:

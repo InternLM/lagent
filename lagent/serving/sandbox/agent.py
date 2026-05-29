@@ -89,7 +89,7 @@ class SandboxAgent:
             stdout = result.get("stdout", "")
             # If stdout is empty but stderr has content, raise so caller can debug
             if not stdout.strip() and result.get("stderr", "").strip():
-                raise RuntimeError(f"Command stderr: {result['stderr'][:500]}")
+                raise RuntimeError(f"Command stderr: {result['stderr']}")
             return stdout
         return result
 

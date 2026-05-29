@@ -327,7 +327,7 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
         elif self.server_type == "http":
             from mcp.client.streamable_http import streamablehttp_client
 
-            logger.info(f"Connecting to StreamableHTTP MCP server at: {self.server_params['url']}")
+            # logger.debug(f"Connecting to StreamableHTTP MCP server at: {self.server_params['url']}")
 
             url = self.server_params["url"]
             target_url = random.choice(url) if isinstance(url, list) else url

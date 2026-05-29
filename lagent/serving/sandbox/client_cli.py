@@ -32,7 +32,7 @@ def _call_json(sock: str, payload: dict[str, Any]) -> dict[str, Any] | list:
     try:
         obj = json.loads(raw or "{}")
     except json.JSONDecodeError as exc:
-        raise DaemonCallError(f"invalid daemon response: {exc}: {raw[:500]}") from exc
+        raise DaemonCallError(f"invalid daemon response: {exc}: {raw}") from exc
     if isinstance(obj, dict) and obj.get("error"):
         raise DaemonCallError(str(obj["error"]))
     if not isinstance(obj, (dict, list)):

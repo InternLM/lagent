@@ -196,7 +196,7 @@ class SandboxActionExecutor:
         if isinstance(result, dict):
             stdout = result.get("stdout", "")
             if not stdout.strip() and result.get("stderr", "").strip():
-                raise RuntimeError(f"Command stderr: {result['stderr'][:500]}")
+                raise RuntimeError(f"Command stderr: {result['stderr']}")
             return stdout
         return result
 
