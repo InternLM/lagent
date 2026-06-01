@@ -167,7 +167,11 @@ class SessionClient:
                 proxy=self.http_proxy,
             ) as resp:
                 if is_stream:
-                    # Stream response: collect chunks, forward as-is
+                    # Stream response: collect chunks, forward as-is.
+                    # If the downstream client disconnects mid-stream (e.g. an
+                    # AsyncAPIClient bails out on a finish_reason=='error' chunk
+                    # after the prompt overflowed the session), keep draining
+                    # the upstream so the trace is still recorded in full.
                     response_chunks = []
                     response = web.StreamResponse(
                         status=resp.status,
@@ -178,10 +182,19 @@ class SessionClient:
                         },
                     )
                     await response.prepare(request)
+                    client_alive = True
                     async for chunk in resp.content.iter_any():
                         response_chunks.append(chunk)
-                        await response.write(chunk)
-                    await response.write_eof()
+                        if client_alive:
+                            try:
+                                await response.write(chunk)
+                            except (ConnectionError, aiohttp.ClientConnectionResetError):
+                                client_alive = False
+                    if client_alive:
+                        try:
+                            await response.write_eof()
+                        except (ConnectionError, aiohttp.ClientConnectionResetError):
+                            pass
                     raw_response = b''.join(response_chunks)
                 else:
                     raw_response = await resp.read()
@@ -206,15 +219,15 @@ class SessionClient:
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
 
-            # Additional fallback for Anthropic HTTP API error responses wrapped in proper JSON
+            # Upstream returned an error body — forward it to the client
+            # untouched (so the agent sees the real error), but treat
+            # response as invalid so we don't record garbage.
             if response_data and response_data.get('type') == 'error':
-                logger.error(f"Received error from provider: {response_data}")
-                raise RuntimeError(f"Provider returned error: {response_data}")
-
-            # Additional fallback for OpenAI HTTP API error responses
-            if response_data and 'error' in response_data and isinstance(response_data['error'], dict):
-                logger.error(f"Received error from provider: {response_data}")
-                raise RuntimeError(f"Provider returned error: {response_data}")
+                logger.warning(f"Anthropic-format error from upstream: {response_data}")
+                response_data = None
+            elif response_data and isinstance(response_data.get('error'), dict):
+                logger.warning(f"OpenAI-format error from upstream: {response_data}")
+                response_data = None
 
         # 7. Record
         has_messages = isinstance(request_data, dict) and 'messages' in request_data
@@ -290,6 +303,15 @@ class SessionClient:
                 messages.extend(response_items)
             elif assistant_msg:
                 messages.append(assistant_msg)
+            else:
+                # Response invalid (parser returned None, error body, no
+                # assistant content, etc.). Mirror model.py: drop the
+                # whole input+output rather than recording an orphaned
+                # user-only turn.
+                logger.debug(
+                    f"Skipping record for session {self.session_id}: no valid response"
+                )
+                return response
 
             # Convention: function_call.arguments stored as dict (not JSON
             # string). Applied to all items uniformly — including input items
@@ -321,17 +343,29 @@ class SessionClient:
     def _parse_stream_response(raw: bytes) -> Optional[dict]:
         """Parse SSE stream response to reconstruct the complete message.
 
-        Supports both Anthropic and OpenAI streaming formats.
+        Supports both Anthropic and OpenAI streaming formats. Returns
+        ``None`` if the stream is invalid (malformed SSE JSON, no
+        events, or format-specific failure modes detected by the
+        per-format parsers).
         """
         text = raw.decode('utf-8', errors='replace')
-        events = []
+        events: list = []
+        saw_done = False
+
         for line in text.split('\n'):
             line = line.strip()
-            if line.startswith('data: ') and line != 'data: [DONE]':
-                try:
-                    events.append(json.loads(line[6:]))
-                except json.JSONDecodeError:
-                    pass
+            if not line.startswith('data: '):
+                continue
+            if line == 'data: [DONE]':
+                saw_done = True
+                continue
+            try:
+                events.append(json.loads(line[6:]))
+            except json.JSONDecodeError:
+                # Mirrors model.py: malformed SSE JSON invalidates the
+                # whole stream rather than getting silently skipped.
+                logger.warning(f"Invalid SSE JSON in stream: {line[6:][:200]}")
+                return None
 
         if not events:
             return None
@@ -343,49 +377,68 @@ class SessionClient:
         if evt_type.startswith('response.') or first.get('object') == 'response':
             return SessionClient._parse_responses_stream(events)
         if 'choices' in first or first.get('object') == 'chat.completion.chunk':
-            return SessionClient._parse_openai_stream(events)
+            return SessionClient._parse_openai_stream(events, saw_done=saw_done)
         return SessionClient._parse_anthropic_stream(events)
 
     @staticmethod
-    def _parse_openai_stream(events: list) -> Optional[dict]:
-        """Reconstruct OpenAI chat completion from stream chunks."""
-        message = {
-            'choices': [{'message': {'role': 'assistant', 'content': ''}}],
+    def _parse_openai_stream(events: list, saw_done: bool = False) -> Optional[dict]:
+        """Reconstruct OpenAI chat completion from stream chunks.
+
+        Validation mirrors ``AsyncAPIClient.chat`` in ``model.py``:
+        returns ``None`` if any of these signals an invalid stream:
+
+        - mid-stream error event (``error`` field, ``type=='error'``,
+          ``object=='error'``)
+        - ``finish_reason == 'error'`` (except input-length errors,
+          which carry useful trailing content and are kept)
+        - no ``choices`` ever observed (``saw_choice``)
+        - no ``data: [DONE]`` terminator (``saw_done``)
+        - no terminal ``finish_reason`` on choices[0]
+        """
+        message: Dict = {
+            'choices': [{'message': {'role': 'assistant', 'content': ''}, 'finish_reason': None}],
         }
-        content_parts = []
-        reasoning_content_parts = []
-        tool_calls_map: Dict[int, dict] = {}  # index → {id, type, function}
-        usage = {}
+        content_parts: List[str] = []
+        reasoning_content_parts: List[str] = []
+        tool_calls_map: Dict[int, dict] = {}
+        function_call_data: Optional[dict] = None
+        usage: dict = {}
+        saw_choice = False
 
         for event in events:
+            # In-stream error event — invalidate the whole trace.
+            if (
+                event.get('error') is not None
+                or event.get('type') == 'error'
+                or event.get('object') == 'error'
+            ):
+                logger.warning(f"OpenAI stream error event: {event}")
+                return None
+
             if event.get('id') and 'id' not in message:
                 message['id'] = event['id']
             if event.get('model'):
                 message['model'] = event['model']
 
             choices = event.get('choices', [])
+            if choices:
+                saw_choice = True
+
             for choice in choices:
                 delta = choice.get('delta', {})
 
-                # Content
                 if delta.get('content'):
                     content_parts.append(delta['content'])
-
-                # Reasoning Content
                 if delta.get('reasoning_content'):
                     reasoning_content_parts.append(delta['reasoning_content'])
 
-                # Tool calls
                 for tc_delta in delta.get('tool_calls') or []:
                     idx = tc_delta.get('index', 0)
                     if idx not in tool_calls_map:
                         tool_calls_map[idx] = {
                             'id': tc_delta.get('id', ''),
                             'type': tc_delta.get('type', 'function'),
-                            'function': {
-                                'name': '',
-                                'arguments': '',
-                            },
+                            'function': {'name': '', 'arguments': ''},
                         }
                     tc = tool_calls_map[idx]
                     fn = tc_delta.get('function', {})
@@ -396,18 +449,46 @@ class SessionClient:
                     if tc_delta.get('id'):
                         tc['id'] = tc_delta['id']
 
+                fc_delta = delta.get('function_call')
+                if fc_delta:
+                    if function_call_data is None:
+                        function_call_data = {'name': '', 'arguments': ''}
+                    if fc_delta.get('name'):
+                        function_call_data['name'] += fc_delta['name']
+                    if fc_delta.get('arguments'):
+                        function_call_data['arguments'] += fc_delta['arguments']
+
                 if choice.get('finish_reason'):
                     message['choices'][0]['finish_reason'] = choice['finish_reason']
+                    if choice['finish_reason'] == 'error':
+                        logger.warning(f"OpenAI finish_reason=error: {event}")
+                        return None
 
             if event.get('usage'):
                 usage = event['usage']
+
+        # Stream completeness checks (mirror model.py).
+        if not saw_choice:
+            logger.warning("OpenAI stream ended without any choices")
+            return None
+        if not saw_done:
+            logger.warning("OpenAI stream ended without [DONE] terminator")
+            return None
+        if not message['choices'][0].get('finish_reason'):
+            logger.warning("OpenAI stream ended without terminal finish_reason")
+            return None
 
         msg = message['choices'][0]['message']
         msg['content'] = ''.join(content_parts)
         if reasoning_content_parts:
             msg['reasoning_content'] = ''.join(reasoning_content_parts)
         if tool_calls_map:
-            msg['tool_calls'] = [tool_calls_map[i] for i in sorted(tool_calls_map)]
+            # Keep arguments as-string here (matching the non-stream raw
+            # API shape). _handle_request does the single point of
+            # JSON-deserialization for both stream and non-stream paths.
+            msg['tool_calls'] = [tool_calls_map[idx] for idx in sorted(tool_calls_map)]
+        if function_call_data:
+            msg['function_call'] = function_call_data
         if usage:
             message['usage'] = usage
         return message
@@ -416,15 +497,21 @@ class SessionClient:
     def _parse_responses_stream(events: list) -> Optional[dict]:
         """Reconstruct an OpenAI Responses API result from stream events.
 
-        Prefers the terminal ``response.completed`` / ``response.failed`` /
-        ``response.incomplete`` event, which carries the full response object.
-        Falls back to incremental reconstruction from delta events when no
-        terminal event was seen (e.g. truncated stream).
+        Prefers the terminal ``response.completed`` event (carries the
+        full response object). ``response.failed`` / ``response.incomplete``
+        and any ``error`` event invalidate the trace — returns ``None``
+        so the caller skips recording.
         """
-        # Fast path: terminal events embed the full response object
-        for event in reversed(events):
+        # Reject explicit failure / incomplete terminals.
+        for event in events:
             evt_type = event.get('type', '')
-            if evt_type in ('response.completed', 'response.failed', 'response.incomplete'):
+            if evt_type in ('response.failed', 'response.incomplete', 'error'):
+                logger.warning(f"Responses stream terminal failure: {evt_type}")
+                return None
+
+        # Fast path: completed event embeds the full response object
+        for event in reversed(events):
+            if event.get('type') == 'response.completed':
                 resp = event.get('response')
                 if resp is not None:
                     return resp
@@ -543,13 +630,22 @@ class SessionClient:
 
     @staticmethod
     def _parse_anthropic_stream(events: list) -> Optional[dict]:
-        """Reconstruct Anthropic message from stream events."""
-        message = {}
-        content_blocks = []
-        current_block = {}
+        """Reconstruct Anthropic message from stream events.
+
+        Returns ``None`` if an ``error`` event is observed mid-stream
+        or no ``message_stop`` is seen.
+        """
+        message: Dict = {}
+        content_blocks: List[dict] = []
+        current_block: dict = {}
+        saw_message_stop = False
 
         for event in events:
             event_type = event.get('type', '')
+
+            if event_type == 'error':
+                logger.warning(f"Anthropic stream error event: {event}")
+                return None
 
             if event_type == 'message_start':
                 # Initial message metadata
@@ -609,6 +705,13 @@ class SessionClient:
                             message['usage'][k] = message['usage'].get(k, 0) + v
                         else:
                             message['usage'][k] = v
+
+            elif event_type == 'message_stop':
+                saw_message_stop = True
+
+        if not saw_message_stop:
+            logger.warning("Anthropic stream ended without message_stop")
+            return None
 
         # Assemble final message
         message['content'] = content_blocks
