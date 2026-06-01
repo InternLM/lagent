@@ -51,6 +51,49 @@ class AsyncAPIClient(AsyncGPTAPI):
         self.extra_body = extra_body
         self.session_id = session_id or ctx_session_id.get()
 
+    @staticmethod
+    def _is_input_length_error_text(text: str) -> bool:
+        input_length_markers = [
+            "INPUT_LENGTH_ERROR",
+            "input length",
+            "prompt length",
+            "session out of limit",
+            "SESSION_OUT_OF_LIMIT",
+        ]
+        return any(marker in text for marker in input_length_markers)
+
+    @staticmethod
+    def _is_retryable_error(exc: Exception) -> bool:
+        if isinstance(exc, aiohttp.ClientError):
+            return True
+
+        msg = str(exc)
+        if AsyncAPIClient._is_input_length_error_text(msg):
+            return False
+        if msg.startswith("LLM HTTP "):
+            try:
+                status = int(msg.split("LLM HTTP ", 1)[1].split()[0])
+            except (IndexError, ValueError):
+                return False
+            return status >= 500
+
+        retryable_markers = [
+            "LLM stream error",
+            "LLM stream ended without",
+            "LLM finish_reason=error",
+            "Invalid LLM SSE JSON",
+            "Internal error",
+            "Backend error",
+            '"code": 500',
+            '"code": 503',
+            "'code': 500",
+            "'code': 503",
+            "TimeoutError",
+            "Connection reset",
+            "Server disconnected",
+        ]
+        return any(marker in msg for marker in retryable_markers)
+
     async def chat(self, messages: List[dict], tools=None, **gen_params) -> dict:
         """Generate completion from a list of templates.
 
@@ -104,6 +147,7 @@ class AsyncAPIClient(AsyncGPTAPI):
                     function_call_data = None
                     usage = {}
                     saw_choice = False
+                    saw_done = False
                     last_event = None
 
                     async with session.post(url, json=payload, headers=headers, proxy=self.proxy) as resp:
@@ -119,6 +163,7 @@ class AsyncAPIClient(AsyncGPTAPI):
                                 if decoded.startswith("data: "):
                                     data_str = decoded[6:]
                                     if data_str == "[DONE]":
+                                        saw_done = True
                                         break
                                     try:
                                         data = json.loads(data_str)
@@ -179,17 +224,41 @@ class AsyncAPIClient(AsyncGPTAPI):
 
                                             if "finish_reason" in choice and choice["finish_reason"]:
                                                 message_data["choices"][0]["finish_reason"] = choice["finish_reason"]
+                                                if choice["finish_reason"] == "error":
+                                                    error_text = " ".join(
+                                                        part
+                                                        for part in [
+                                                            "".join(content_parts),
+                                                            json.dumps(data, ensure_ascii=False),
+                                                        ]
+                                                        if part
+                                                    )
+                                                    if self._is_input_length_error_text(error_text):
+                                                        message_data["choices"][0]["message"].update(delta)
+                                                        return message_data
+                                                    raise RuntimeError(
+                                                        f"LLM finish_reason=error from {url}: "
+                                                        f"{json.dumps(data, ensure_ascii=False)}"
+                                                    )
 
                                         if "usage" in data and data["usage"]:
                                             usage = data["usage"]
                                     except json.JSONDecodeError as exc:
-                                        raise RuntimeError(
-                                            f"Invalid LLM SSE JSON from {url}: {data_str}"
-                                        ) from exc
+                                        raise RuntimeError(f"Invalid LLM SSE JSON from {url}: {data_str}") from exc
 
                     if not saw_choice:
                         raise RuntimeError(
                             f"LLM stream ended without choices from {url}: "
+                            f"{json.dumps(last_event, ensure_ascii=False) if last_event is not None else None}"
+                        )
+                    if not saw_done:
+                        raise RuntimeError(
+                            f"LLM stream ended without [DONE] from {url}: "
+                            f"{json.dumps(last_event, ensure_ascii=False) if last_event is not None else None}"
+                        )
+                    if not message_data["choices"][0].get("finish_reason"):
+                        raise RuntimeError(
+                            f"LLM stream ended without terminal finish_reason from {url}: "
                             f"{json.dumps(last_event, ensure_ascii=False) if last_event is not None else None}"
                         )
 
@@ -206,11 +275,8 @@ class AsyncAPIClient(AsyncGPTAPI):
                             if isinstance(args, str):
                                 try:
                                     tc["function"]["arguments"] = json.loads(args)
-                                except json.JSONDecodeError as exc:
-                                    raise RuntimeError(
-                                        "Invalid tool call arguments JSON "
-                                        f"from {url}: tool_name={tc['function'].get('name')!r}, arguments={args!r}"
-                                    ) from exc
+                                except json.JSONDecodeError:
+                                    pass
                             tool_calls.append(tc)
                         msg["tool_calls"] = tool_calls
 
@@ -219,11 +285,8 @@ class AsyncAPIClient(AsyncGPTAPI):
                         if isinstance(args, str):
                             try:
                                 function_call_data["arguments"] = json.loads(args)
-                            except json.JSONDecodeError as exc:
-                                raise RuntimeError(
-                                    "Invalid function_call arguments JSON "
-                                    f"from {url}: function_name={function_call_data.get('name')!r}, arguments={args!r}"
-                                ) from exc
+                            except json.JSONDecodeError:
+                                pass
                         msg["function_call"] = function_call_data
 
                     if usage:
@@ -238,23 +301,24 @@ class AsyncAPIClient(AsyncGPTAPI):
                         raise e
                     await asyncio.sleep(self.sleep_interval)
                 except Exception as e:
-                    for val in [
-                        "用户额度不足",
-                        "剩余额度",
-                        "TimeoutError",
-                        "litellm.BadRequestError",
-                        "litellm.APIError: APIError",
-                        "Failed to parse fc related info to json format!",
-                        "Error code",
-                    ]:
-                        if val in str(e):
-                            traceback.print_exc()
-                            logger.error(f"[Retry] {attempt} LLM Call Error: {e}")
-                            if attempt == self.max_retry - 1:
-                                logger.error(f"LLM Call Error: {e}{traceback.format_exc()}")
-                                raise e
-                            await asyncio.sleep(self.sleep_interval)
-                            break
+                    should_retry = self._is_retryable_error(e) or any(
+                        val in str(e)
+                        for val in [
+                            "用户额度不足",
+                            "剩余额度",
+                            "litellm.BadRequestError",
+                            "litellm.APIError: APIError",
+                            "Failed to parse fc related info to json format!",
+                            "Error code",
+                        ]
+                    )
+                    if should_retry:
+                        traceback.print_exc()
+                        logger.error(f"[Retry] {attempt} LLM Call Error: {e}")
+                        if attempt == self.max_retry - 1:
+                            logger.error(f"LLM Call Error: {e}{traceback.format_exc()}")
+                            raise e
+                        await asyncio.sleep(self.sleep_interval + random.random())
                     else:
                         logger.error(f"LLM Call Error: {e}{traceback.format_exc()}")
                         raise e

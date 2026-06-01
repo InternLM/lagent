@@ -52,9 +52,7 @@ class FunctionCallAgent(AsyncAgent):
             self.max_turn is None or current_turn < self.max_turn
         ):
             policy_message = await self.policy_agent(env_message, **kwargs)
-            if policy_message.stream_state == AgentStatusCode.SERVER_ERR:
-                raise ValueError("Rollout response error: state is neither completed nor aborted!")
-            if policy_message.stream_state == AgentStatusCode.SESSION_OUT_OF_LIMIT:
+            if policy_message.finish_reason == 'error':
                 for _ in range(2):  # remove the last two messages
                     self.policy_agent.memory.delete(-1)
                 return AgentMessage(

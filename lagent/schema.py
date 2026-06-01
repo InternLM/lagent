@@ -135,8 +135,7 @@ class AgentMessage(BaseModel):
             reasoning_content=msg.get('reasoning_content'),
             tool_calls=msg.get('tool_calls'),
             extra_info=msg.get('extra_info') or {},
-            stream_state=choice.get('stream_state')
-            or (ModelStatusCode.SESSION_OUT_OF_LIMIT if finish_reason == 'length' else AgentStatusCode.END),
+            stream_state=choice.get('stream_state', AgentStatusCode.END),
             finish_reason=finish_reason,
         )
 
