@@ -1,4 +1,5 @@
 from .anthropic_llm import AsyncClaudeAPI, ClaudeAPI
+from .litellm_llm import AsyncLiteLLMAPI, LiteLLMAPI
 from .base_api import AsyncBaseAPILLM, BaseAPILLM
 from .base_llm import AsyncBaseLLM, BaseLLM
 from .huggingface import HFTransformer, HFTransformerCasualLM, HFTransformerChat
@@ -37,4 +38,6 @@ __all__ = [
     'SensenovaAPI',
     'AsyncClaudeAPI',
     'ClaudeAPI',
+    'LiteLLMAPI',
+    'AsyncLiteLLMAPI',
 ]
