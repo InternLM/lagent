@@ -1,4 +1,5 @@
 duckduckgo_search==5.3.1b1
+litellm>=1.80,<1.87
 google-search-results
 lmdeploy>=0.2.5
 pillow
