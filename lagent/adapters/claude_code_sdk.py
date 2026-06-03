@@ -19,11 +19,9 @@ Usage::
     trace = agent.state_dict()['sdk_trace']
 """
 
-import asyncio
-import os
 from dataclasses import asdict
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from .base import AsyncExternalAgent
 
@@ -40,6 +38,7 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         permission_mode: Permission mode. Default: "default".
         model: Model name override.
         system_prompt: Custom system prompt.
+        tools: List of built-in tools to enable (None = SDK default, [] = disable all).
         allowed_tools: List of allowed tool names.
         disallowed_tools: List of disallowed tool names.
         mcp_servers: Dict of MCP server configs.
@@ -55,6 +54,7 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         permission_mode: str = 'default',
         model: Optional[str] = None,
         system_prompt: Optional[str] = None,
+        tools: Optional[List[str]] = None,
         allowed_tools: Optional[List[str]] = None,
         disallowed_tools: Optional[List[str]] = None,
         mcp_servers: Optional[Dict[str, dict]] = None,
@@ -71,6 +71,7 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         self.permission_mode = permission_mode
         self.model = model
         self.system_prompt = system_prompt
+        self.tools = tools
         self.allowed_tools = allowed_tools or []
         self.disallowed_tools = disallowed_tools or []
         self.mcp_servers = mcp_servers or {}
@@ -86,7 +87,7 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         try:
             import claude_agent_sdk
         except ImportError:
-            raise RuntimeError("claude-agent-sdk is required. " "Install with: pip install claude-agent-sdk")
+            raise RuntimeError("claude-agent-sdk is required. Install with: pip install claude-agent-sdk")
 
     async def run_external_async(self, task: str, **kwargs) -> str:
         from claude_agent_sdk import (
@@ -108,6 +109,8 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
             options.model = self.model
         if self.system_prompt:
             options.system_prompt = self.system_prompt
+        if self.tools is not None:
+            options.tools = self.tools
         if self.allowed_tools:
             options.allowed_tools = self.allowed_tools
         if self.disallowed_tools:
