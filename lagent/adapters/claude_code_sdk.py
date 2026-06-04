@@ -21,7 +21,7 @@ Usage::
 
 from dataclasses import asdict
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from .base import AsyncExternalAgent
 
@@ -59,8 +59,11 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         disallowed_tools: Optional[List[str]] = None,
         mcp_servers: Optional[Dict[str, dict]] = None,
         cwd: Optional[str] = None,
+        setting_sources: Optional[List[Literal["user", "project", "local"]]] = None,
+        skills: Optional[List[str]] = None,
         effort: Optional[str] = None,
         thinking: Optional[dict] = None,
+        extra_options: Optional[dict] = None,
         **kwargs,
     ):
         kwargs.setdefault('name', 'claude-code-sdk')
@@ -76,9 +79,11 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         self.disallowed_tools = disallowed_tools or []
         self.mcp_servers = mcp_servers or {}
         self.cwd = cwd or self.working_dir
+        self.setting_sources = setting_sources
+        self.skills = skills
         self.effort = effort
         self.thinking = thinking
-
+        self.extra_options = extra_options or {}
         self._session_id: Optional[str] = None
         self._sdk_trace: List[dict] = []
         self._call_count = 0
@@ -94,17 +99,12 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
             AssistantMessage,
             ClaudeAgentOptions,
             ResultMessage,
-            StreamEvent,
             SystemMessage,
             UserMessage,
             query,
         )
 
-        options = ClaudeAgentOptions(
-            permission_mode=self.permission_mode,
-            max_turns=self.max_turns,
-        )
-
+        options = ClaudeAgentOptions(permission_mode=self.permission_mode, max_turns=self.max_turns)
         if self.model:
             options.model = self.model
         if self.system_prompt:
@@ -119,6 +119,10 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
             options.mcp_servers = self.mcp_servers
         if self.cwd:
             options.cwd = self.cwd
+        if self.setting_sources is not None:
+            options.setting_sources = self.setting_sources
+        if self.skills is not None:
+            options.skills = self.skills
         if self.effort:
             options.effort = self.effort
         if self.thinking:
@@ -128,13 +132,16 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         if self._session_id:
             options.resume = self._session_id
 
+        if self.extra_options:
+            for key, value in self.extra_options.items():
+                setattr(options, key, value)
+
         # Inject proxy env if present
         if self.proxy:
             session_key = f"sk-proxy-{self.session_id}"
-            options.env = {
-                'ANTHROPIC_BASE_URL': self.proxy.url,
-                'ANTHROPIC_API_KEY': session_key,
-            }
+            env = options.env or {}
+            env.update({'ANTHROPIC_BASE_URL': self.proxy.url, 'ANTHROPIC_API_KEY': session_key})
+            options.env = env
 
         # Collect messages
         messages = []
