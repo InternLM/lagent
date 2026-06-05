@@ -33,7 +33,7 @@ import json
 import os
 import uuid
 from collections import defaultdict
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import aiohttp
@@ -42,6 +42,108 @@ from aiohttp import web
 from lagent.utils import ctx_session_id, get_logger
 
 logger = get_logger(__name__, 'info')
+
+
+def _anthropic_response_to_assistant_message(response: dict[str, Any]) -> dict[str, Any]:
+    content_blocks: list[dict[str, Any]] = response.get("content", [])
+
+    if not content_blocks:
+        raise ValueError("MessagesResponse.content is empty; nothing to append as assistant turn.")
+
+    normalized: list[dict[str, Any]] = []
+
+    for block in content_blocks:
+        block_type = block.get("type")
+
+        if block_type == "text":
+            text = block.get("text", "")
+            normalized.append({"type": "text", "text": text})
+
+        elif block_type == "thinking":
+            # Anthropic API 要求原样回传 thinking block（含 signature）
+            normalized_block: dict[str, Any] = {"type": "thinking", "thinking": block.get("thinking", "")}
+            # 若 API 返回了 signature 字段（真实 Anthropic 云端会附带），保留它
+            if "signature" in block:
+                normalized_block["signature"] = block["signature"]
+            normalized.append(normalized_block)
+
+        elif block_type == "tool_use":
+            # 必须原样回传，id/name/input 缺一不可
+            tool_id = block.get("id")
+            name = block.get("name")
+            input_ = block.get("input", {})
+
+            if not tool_id:
+                raise ValueError(f"tool_use block is missing 'id': {block}")
+            if not name:
+                raise ValueError(f"tool_use block is missing 'name': {block}")
+
+            normalized.append({"type": "tool_use", "id": tool_id, "name": name, "input": input_})
+
+        else:
+            raise ValueError(f"Unrecognized content block type '{block_type}' in MessagesResponse.")
+
+    return {"role": "assistant", "content": normalized}
+
+
+def _maybe_json_loads(value):
+    """Return ``json.loads(value)`` for str input, falling back to the original on error.
+
+    Used to enforce the convention that tool-call ``arguments`` are stored as a
+    dict (driving ``get_messages()`` prefix dedup). Non-string values pass through.
+    """
+    if not isinstance(value, str):
+        return value
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return value
+
+
+def _normalize_tool_call_arguments(messages) -> None:
+    """In-place: parse ``tool_calls[].function.arguments`` strings into dicts.
+
+    lmdeploy serializes them as JSON strings; the standard OpenAI path stores
+    them as dicts. Normalize so both paths share one shape.
+    """
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        for tc in msg.get('tool_calls') or []:
+            if not isinstance(tc, dict):
+                continue
+            fn = tc.get('function')
+            if isinstance(fn, dict) and 'arguments' in fn:
+                fn['arguments'] = _maybe_json_loads(fn['arguments'])
+
+
+def responses_tools_to_openai(tools) -> Optional[list]:
+    """Convert OpenAI Responses-API tools to Chat Completions ``tools`` shape.
+
+    Responses uses a flat ``{type: "function", name, description, parameters}``
+    for function tools; Chat Completions nests them under ``function``. Non-
+    function tool types (``web_search``, ``file_search``, ...) are kept as-is.
+    """
+    if not tools:
+        return None
+    out = []
+    for t in tools:
+        if not isinstance(t, dict):
+            continue
+        if t.get('type') == 'function' and 'function' not in t:
+            out.append(
+                {
+                    'type': 'function',
+                    'function': {
+                        'name': t.get('name', ''),
+                        'description': t.get('description', ''),
+                        'parameters': t.get('parameters', {}) or {},
+                    },
+                }
+            )
+        else:
+            out.append(t)
+    return out
 
 
 class SessionClient:
@@ -115,15 +217,17 @@ class SessionClient:
         except (json.JSONDecodeError, UnicodeDecodeError):
             pass
 
-        # 2. Inject session_id into request body
-        if isinstance(request_data, dict):
-            request_data['session_id'] = self.session_id
-            request_body = json.dumps(request_data).encode('utf-8')
-
         # Detect provider format by inspecting the requested endpoint
         req_path = request.match_info['path']
         is_anthropic = req_path.endswith('/messages') or '/v1/messages' in req_path
         is_responses = req_path.endswith('/responses') or '/v1/responses' in req_path
+
+        # 2. Inject session_id into request body
+        if isinstance(request_data, dict):
+            request_data['session_id'] = self.session_id
+            if is_anthropic:
+                request_data['provider'] = 'anthropic'
+            request_body = json.dumps(request_data).encode('utf-8')
 
         # By default we assume the incoming request is already in the target format
         provider_request_data = copy.deepcopy(request_data) if request_data else {}
@@ -141,6 +245,8 @@ class SessionClient:
             forward_headers['Authorization'] = f'Bearer {self.real_api_key}'
         if 'x-api-key' in forward_headers:
             forward_headers['x-api-key'] = self.real_api_key
+        if is_anthropic:
+            forward_headers['anthropic-version'] = '2023-06-01'
 
         # 5. Forward to real LLM
         # Build target URL, avoiding path duplication
@@ -228,116 +334,118 @@ class SessionClient:
             elif response_data and isinstance(response_data.get('error'), dict):
                 logger.warning(f"OpenAI-format error from upstream: {response_data}")
                 response_data = None
+            elif (
+                response_data
+                and isinstance(response_data.get('choices'), list)
+                and response_data['choices']
+                and response_data['choices'][0].get('finish_reason') == 'error'
+            ):
+                logger.warning(f"OpenAI finish_reason=error from upstream: {response_data}")
+                response_data = None
+
+        if not response_data:
+            return response
 
         # 7. Record
-        has_messages = isinstance(request_data, dict) and 'messages' in request_data
-        has_input = isinstance(request_data, dict) and 'input' in request_data
-        if has_messages or has_input:
-            assistant_msg = None
-            response_items: Optional[list] = None  # for Responses API: flat output items
-
+        if isinstance(request_data, dict) and ('messages' in request_data or 'input' in request_data):
+            request_data = copy.deepcopy(request_data)
             if is_anthropic:
-                # Handle Anthropic trace format
-                if response_data:
-                    assistant_msg = {"role": response_data.get("role", "assistant")}
-                    allowed_anthropic_fields = ["content"]
-                    for field in allowed_anthropic_fields:
-                        if response_data.get(field) is not None:
-                            assistant_msg[field] = response_data[field]
+                built = self._build_anthropic_record(request_data, response_data)
             elif is_responses:
-                # OpenAI Responses API: the conversation is a flat list of output
-                # items (message / function_call / reasoning / ...). Store them
-                # flattened so the client's next-turn `input` (which echoes them)
-                # prefix-matches under get_messages() dedup. Convention:
-                # `function_call.arguments` is stored as a dict, applied uniformly
-                # to input- and output-side items below.
-                if response_data and response_data.get('output') is not None:
-                    response_items = copy.deepcopy(response_data.get('output', []))
+                built = self._build_responses_record(request_data, response_data)
             else:
-                # Handle standard OpenAI trace format
-                if response_data and response_data.get('choices'):
-                    raw_msg = response_data['choices'][0].get('message')
-                    if raw_msg:
-                        assistant_msg = {"role": raw_msg.get("role", "assistant")}
-                        # Only keep pure standard OpenAI fields to prevent contamination
-                        allowed_fields = ["content", "tool_calls", "function_call", "refusal"]
-                        # Support for o1 and future reasoning models natively
-                        if "reasoning_content" in raw_msg:
-                            allowed_fields.append("reasoning_content")
+                built = self._build_openai_record(request_data, response_data)
 
-                        for field in allowed_fields:
-                            if raw_msg.get(field) is not None:
-                                val = copy.deepcopy(raw_msg[field])
-                                if field == "tool_calls":
-                                    for tc in val:
-                                        if tc.get("type") == "function" and "function" in tc:
-                                            args = tc["function"].get("arguments")
-                                            if isinstance(args, str):
-                                                try:
-                                                    tc["function"]["arguments"] = json.loads(args)
-                                                except json.JSONDecodeError:
-                                                    pass
-                                elif field == "function_call":
-                                    args = val.get("arguments")
-                                    if isinstance(args, str):
-                                        try:
-                                            val["arguments"] = json.loads(args)
-                                        except json.JSONDecodeError:
-                                            pass
-
-                                assistant_msg[field] = val
-
-            # Build the request side message list
-            if has_messages:
-                messages = list(request_data['messages'])
-            else:
-                raw_input = request_data['input']
-                if isinstance(raw_input, str):
-                    messages = [{"role": "user", "content": raw_input}]
-                elif isinstance(raw_input, list):
-                    messages = list(raw_input)
-                else:
-                    messages = []
-
-            if response_items:
-                messages.extend(response_items)
-            elif assistant_msg:
-                messages.append(assistant_msg)
-            else:
-                # Response invalid (parser returned None, error body, no
-                # assistant content, etc.). Mirror model.py: drop the
-                # whole input+output rather than recording an orphaned
-                # user-only turn.
-                logger.debug(
-                    f"Skipping record for session {self.session_id}: no valid response"
-                )
+            if built is None:
                 return response
 
-            # Convention: function_call.arguments stored as dict (not JSON
-            # string). Applied to all items uniformly — including input items
-            # echoed from prior turns — so multi-turn prefix dedup in
-            # get_messages() still works.
-            if is_responses:
-                for idx, item in enumerate(messages):
-                    if isinstance(item, dict) and item.get('type') == 'function_call':
-                        args = item.get('arguments')
-                        if isinstance(args, str):
-                            try:
-                                parsed = json.loads(args)
-                            except json.JSONDecodeError:
-                                continue
-                            # Avoid mutating dicts shared with request_data['input']
-                            messages[idx] = {**item, 'arguments': parsed}
-
-            record_item = {"messages": messages, "tools": request_data.get("tools")}
-
-            self._records[self.session_id].append(record_item)
-
+            messages, tools = built
+            self._records[self.session_id].append({"messages": messages, "tools": tools})
             logger.debug(
                 f"Updated messages for session {self.session_id}: {len(self._records[self.session_id])} traces total"
             )
-
         return response
+
+    def _build_anthropic_record(self, request_data, response_data):
+        try:
+            from lmdeploy.serve.anthropic.adapter import to_openai_messages, to_openai_tools
+            from lmdeploy.serve.anthropic.protocol import MessagesRequest
+        except ImportError:
+            from lagent.utils.lmdeploy import MessagesRequest, to_openai_messages, to_openai_tools
+
+        try:
+            resp_msg = _anthropic_response_to_assistant_message(response_data)
+        except Exception as exc:
+            logger.warning(f"Failed to parse Anthropic response: {exc}")
+            return None
+
+        request_data['messages'].append(resp_msg)
+        req = MessagesRequest.model_validate(request_data)
+        messages = to_openai_messages(req)
+        tools = [tool.model_dump() for tool in to_openai_tools(req.tools)]
+        # lmdeploy serializes tool_calls[].function.arguments as a JSON string;
+        # normalize to dict so it matches the standard OpenAI path's convention
+        # (required by get_messages() prefix dedup).
+        _normalize_tool_call_arguments(messages)
+        return messages, tools
+
+    def _build_responses_record(self, request_data, response_data):
+        # OpenAI Responses API: the conversation is a flat list of output items
+        # (message / function_call / reasoning / ...). Store them flattened so
+        # the client's next-turn `input` (which echoes them) prefix-matches
+        # under get_messages() dedup. Convention: `function_call.arguments` is
+        # stored as a dict, applied uniformly to input- and output-side items.
+        if not response_data.get('output'):
+            logger.debug(f"Skipping record for session {self.session_id}: no valid response")
+            return None
+
+        raw_input = request_data['input']
+        if isinstance(raw_input, str):
+            messages = [{"role": "user", "content": raw_input}]
+        elif isinstance(raw_input, list):
+            messages = raw_input
+        else:
+            messages = []
+        messages.extend(response_data['output'])
+        tools = responses_tools_to_openai(request_data.get('tools'))
+
+        for item in messages:
+            if (
+                isinstance(item, dict)
+                and item.get('type') == 'function_call'
+                and isinstance(item.get('arguments'), str)
+            ):
+                item['arguments'] = _maybe_json_loads(item['arguments'])
+        return messages, tools
+
+    def _build_openai_record(self, request_data, response_data):
+        # Standard OpenAI chat completions trace format.
+        if not (response_data.get('choices') and response_data['choices'][0].get('message')):
+            logger.debug(f"Skipping record for session {self.session_id}: no valid response")
+            return None
+
+        messages = request_data.get('messages', [])
+        raw_msg = response_data['choices'][0]['message']
+        assistant_msg = {"role": raw_msg.get("role", "assistant")}
+        # Only keep pure standard OpenAI fields to prevent contamination.
+        # ``reasoning_content`` supports o1 and future reasoning models natively.
+        allowed_fields = ["content", "tool_calls", "function_call", "refusal"]
+        if "reasoning_content" in raw_msg:
+            allowed_fields.append("reasoning_content")
+
+        for field in allowed_fields:
+            if raw_msg.get(field) is None:
+                continue
+            val = copy.deepcopy(raw_msg[field])
+            if field == "tool_calls":
+                for tc in val:
+                    if tc.get("type") == "function" and "function" in tc:
+                        tc["function"]["arguments"] = _maybe_json_loads(tc["function"].get("arguments"))
+            elif field == "function_call":
+                val["arguments"] = _maybe_json_loads(val.get("arguments"))
+            assistant_msg[field] = val
+        messages.append(assistant_msg)
+        return messages, request_data.get('tools')
 
     @staticmethod
     def _parse_stream_response(raw: bytes) -> Optional[dict]:
@@ -407,11 +515,7 @@ class SessionClient:
 
         for event in events:
             # In-stream error event — invalidate the whole trace.
-            if (
-                event.get('error') is not None
-                or event.get('type') == 'error'
-                or event.get('object') == 'error'
-            ):
+            if event.get('error') is not None or event.get('type') == 'error' or event.get('object') == 'error':
                 logger.warning(f"OpenAI stream error event: {event}")
                 return None
 
