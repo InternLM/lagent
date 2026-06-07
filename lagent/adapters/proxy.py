@@ -53,6 +53,9 @@ def _anthropic_response_to_assistant_message(response: dict[str, Any]) -> dict[s
     normalized: list[dict[str, Any]] = []
 
     for block in content_blocks:
+        if not isinstance(block, dict):
+            raise ValueError(f"Anthropic content block must be a dict: {block}")
+
         block_type = block.get("type")
 
         if block_type == "text":
@@ -81,7 +84,10 @@ def _anthropic_response_to_assistant_message(response: dict[str, Any]) -> dict[s
             normalized.append({"type": "tool_use", "id": tool_id, "name": name, "input": input_})
 
         else:
-            raise ValueError(f"Unrecognized content block type '{block_type}' in MessagesResponse.")
+            # Anthropic server-side tools and beta features may introduce blocks
+            # that are valid for the upstream API but unknown to this recorder.
+            # Preserve them so tracing remains best-effort and non-disruptive.
+            normalized.append(copy.deepcopy(block))
 
     return {"role": "assistant", "content": normalized}
 
@@ -349,12 +355,16 @@ class SessionClient:
         # 7. Record
         if isinstance(request_data, dict) and ('messages' in request_data or 'input' in request_data):
             request_data = copy.deepcopy(request_data)
-            if is_anthropic:
-                built = self._build_anthropic_record(request_data, response_data)
-            elif is_responses:
-                built = self._build_responses_record(request_data, response_data)
-            else:
-                built = self._build_openai_record(request_data, response_data)
+            try:
+                if is_anthropic:
+                    built = self._build_anthropic_record(request_data, response_data)
+                elif is_responses:
+                    built = self._build_responses_record(request_data, response_data)
+                else:
+                    built = self._build_openai_record(request_data, response_data)
+            except Exception:
+                logger.exception("Failed to build session record; returning upstream response unchanged")
+                return response
 
             if built is None:
                 return response
@@ -382,7 +392,8 @@ class SessionClient:
         request_data['messages'].append(resp_msg)
         req = MessagesRequest.model_validate(request_data)
         messages = to_openai_messages(req)
-        tools = [tool.model_dump() for tool in to_openai_tools(req.tools)]
+        openai_tools = to_openai_tools(req.tools)
+        tools = [tool.model_dump() for tool in openai_tools] if openai_tools else None
         # lmdeploy serializes tool_calls[].function.arguments as a JSON string;
         # normalize to dict so it matches the standard OpenAI path's convention
         # (required by get_messages() prefix dedup).

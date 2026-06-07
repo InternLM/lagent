@@ -70,9 +70,12 @@ class MessageParam(BaseModel):
 class ToolParam(BaseModel):
     """Anthropic tool definition in request body."""
 
-    name: str
+    model_config = ConfigDict(extra='allow')
+
+    type: str | None = None
+    name: str | None = None
     description: str | None = None
-    input_schema: dict[str, Any]
+    input_schema: dict[str, Any] | None = None
 
 
 class ToolChoiceAutoParam(BaseModel):
@@ -88,7 +91,11 @@ class ToolChoiceToolParam(BaseModel):
     name: str
 
 
-ToolChoiceParam = ToolChoiceAutoParam | ToolChoiceAnyParam | ToolChoiceToolParam
+class ToolChoiceNoneParam(BaseModel):
+    type: Literal['none'] = 'none'
+
+
+ToolChoiceParam = ToolChoiceAutoParam | ToolChoiceAnyParam | ToolChoiceToolParam | ToolChoiceNoneParam
 
 
 class MessagesRequest(BaseModel):
@@ -112,7 +119,7 @@ class MessagesRequest(BaseModel):
     top_k: int | None = None
     metadata: dict[str, Any] | None = None
     tools: list[ToolParam] | None = None
-    tool_choice: ToolChoiceParam | Literal['auto', 'any'] | None = None
+    tool_choice: ToolChoiceParam | Literal['auto', 'any', 'none'] | None = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -149,6 +156,8 @@ def _stringify_block_value(value: Any) -> str:
         return value
     if hasattr(value, 'model_dump'):
         value = value.model_dump()
+    elif not isinstance(value, (dict, list, tuple, str, int, float, bool)):
+        value = getattr(value, '__dict__', repr(value))
     return json.dumps(value, ensure_ascii=False)
 
 
@@ -264,21 +273,31 @@ def _convert_user_tool_result(block: ContentBlockParam | dict[str, Any]) -> list
 
 
 def to_openai_tools(tools: list[ToolParam] | None) -> list[Tool] | None:
-    """Convert Anthropic tools into OpenAI protocol tool entries."""
+    """Convert Anthropic client tools into OpenAI protocol tool entries.
+
+    Anthropic also accepts server-side tools such as web search and code
+    execution. Those are valid request tools, but they are not client function
+    tools and cannot be represented as OpenAI Chat Completions ``function``
+    tools, so tracing skips them.
+    """
 
     if not tools:
         return None
-    return [
-        Tool(
-            type='function',
-            function=Function(
-                name=tool.name,
-                description=tool.description,
-                parameters=tool.input_schema,
-            ),
+    openai_tools = []
+    for tool in tools:
+        if not tool.name or tool.input_schema is None:
+            continue
+        openai_tools.append(
+            Tool(
+                type='function',
+                function=Function(
+                    name=tool.name,
+                    description=tool.description,
+                    parameters=tool.input_schema,
+                ),
+            )
         )
-        for tool in tools
-    ]
+    return openai_tools or None
 
 
 def to_openai_messages(request: MessagesRequest) -> list[dict[str, Any]]:
