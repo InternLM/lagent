@@ -70,12 +70,9 @@ class MessageParam(BaseModel):
 class ToolParam(BaseModel):
     """Anthropic tool definition in request body."""
 
-    model_config = ConfigDict(extra='allow')
-
-    type: str | None = None
-    name: str | None = None
+    name: str
     description: str | None = None
-    input_schema: dict[str, Any] | None = None
+    input_schema: dict[str, Any]
 
 
 class ToolChoiceAutoParam(BaseModel):
@@ -91,11 +88,7 @@ class ToolChoiceToolParam(BaseModel):
     name: str
 
 
-class ToolChoiceNoneParam(BaseModel):
-    type: Literal['none'] = 'none'
-
-
-ToolChoiceParam = ToolChoiceAutoParam | ToolChoiceAnyParam | ToolChoiceToolParam | ToolChoiceNoneParam
+ToolChoiceParam = ToolChoiceAutoParam | ToolChoiceAnyParam | ToolChoiceToolParam
 
 
 class MessagesRequest(BaseModel):
@@ -119,7 +112,7 @@ class MessagesRequest(BaseModel):
     top_k: int | None = None
     metadata: dict[str, Any] | None = None
     tools: list[ToolParam] | None = None
-    tool_choice: ToolChoiceParam | Literal['auto', 'any', 'none'] | None = None
+    tool_choice: ToolChoiceParam | Literal['auto', 'any'] | None = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -156,8 +149,6 @@ def _stringify_block_value(value: Any) -> str:
         return value
     if hasattr(value, 'model_dump'):
         value = value.model_dump()
-    elif not isinstance(value, (dict, list, tuple, str, int, float, bool)):
-        value = getattr(value, '__dict__', repr(value))
     return json.dumps(value, ensure_ascii=False)
 
 
@@ -273,31 +264,21 @@ def _convert_user_tool_result(block: ContentBlockParam | dict[str, Any]) -> list
 
 
 def to_openai_tools(tools: list[ToolParam] | None) -> list[Tool] | None:
-    """Convert Anthropic client tools into OpenAI protocol tool entries.
-
-    Anthropic also accepts server-side tools such as web search and code
-    execution. Those are valid request tools, but they are not client function
-    tools and cannot be represented as OpenAI Chat Completions ``function``
-    tools, so tracing skips them.
-    """
+    """Convert Anthropic tools into OpenAI protocol tool entries."""
 
     if not tools:
         return None
-    openai_tools = []
-    for tool in tools:
-        if not tool.name or tool.input_schema is None:
-            continue
-        openai_tools.append(
-            Tool(
-                type='function',
-                function=Function(
-                    name=tool.name,
-                    description=tool.description,
-                    parameters=tool.input_schema,
-                ),
-            )
+    return [
+        Tool(
+            type='function',
+            function=Function(
+                name=tool.name,
+                description=tool.description,
+                parameters=tool.input_schema,
+            ),
         )
-    return openai_tools or None
+        for tool in tools
+    ]
 
 
 def to_openai_messages(request: MessagesRequest) -> list[dict[str, Any]]:
