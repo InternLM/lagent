@@ -161,6 +161,7 @@ class SessionClient:
         real_base_url: str,
         port: int = 0,
         session_id: Optional[str] = None,
+        extra_body: Optional[dict] = None,
         http_proxy: Optional[str] = None,
     ):
         self.real_api_key = real_api_key
@@ -168,6 +169,7 @@ class SessionClient:
         self.port = port
         self.http_proxy = http_proxy
         self.session_id = session_id or ctx_session_id.get() or os.getenv('XTUNER_SESSION_ID') or str(uuid.uuid4().int)
+        self.extra_body = extra_body or {}
         self._records: Dict[str, List[Dict[str, list]]] = defaultdict(list)
         self._app: Optional[web.Application] = None
         self._runner: Optional[web.AppRunner] = None
@@ -224,6 +226,7 @@ class SessionClient:
 
         # 2. Inject session_id into request body
         if isinstance(request_data, dict):
+            request_data.update(self.extra_body)
             request_data['session_id'] = self.session_id
             if is_anthropic:
                 request_data['provider'] = 'anthropic'
