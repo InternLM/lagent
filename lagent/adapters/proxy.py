@@ -379,13 +379,29 @@ class SessionClient:
             logger.warning(f"Failed to parse Anthropic response: {exc}")
             return None
 
+        # Anthropic server-side built-ins (web_search_*, computer_*, bash_*,
+        # text_editor_*) only carry ``type`` + ``name`` and lack the
+        # ``input_schema`` that ``ToolParam`` requires. They're handled by
+        # Anthropic's own infra so the trace-side conversion can't model them
+        # — drop them here (the wire-forwarded body upstream is untouched, so
+        # the real provider still gets the original list).
+        tools_in = request_data.get('tools')
+        if isinstance(tools_in, list):
+            kept = [t for t in tools_in if isinstance(t, dict) and 'input_schema' in t]
+            if len(kept) != len(tools_in):
+                dropped = [t.get('type') or t.get('name') for t in tools_in if t not in kept]
+                logger.debug(
+                    f"Dropping {len(tools_in) - len(kept)} anthropic server-side tool(s) from trace record: {dropped}"
+                )
+            if kept:
+                request_data['tools'] = kept
+            else:
+                request_data.pop('tools', None)
+
         request_data['messages'].append(resp_msg)
         req = MessagesRequest.model_validate(request_data)
         messages = to_openai_messages(req)
-        tools = [tool.model_dump() for tool in to_openai_tools(req.tools)]
-        # lmdeploy serializes tool_calls[].function.arguments as a JSON string;
-        # normalize to dict so it matches the standard OpenAI path's convention
-        # (required by get_messages() prefix dedup).
+        tools = [tool.model_dump() for tool in to_openai_tools(req.tools)] if req.tools else None
         _normalize_tool_call_arguments(messages)
         return messages, tools
 
