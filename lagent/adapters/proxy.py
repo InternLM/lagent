@@ -345,6 +345,11 @@ class SessionClient:
             ):
                 logger.warning(f"OpenAI finish_reason=error from upstream: {response_data}")
                 response_data = None
+            elif response_data and response_data.get('stop_reason') == 'error':
+                # Anthropic counterpart: HTTP 200 with stop_reason=error
+                # (lmdeploy returns this for INPUT_LENGTH_ERROR).
+                logger.warning(f"Anthropic stop_reason=error from upstream: {response_data}")
+                response_data = None
 
         if not response_data:
             return response
@@ -820,6 +825,11 @@ class SessionClient:
                 # Final metadata (stop_reason, usage delta)
                 delta = event.get('delta', {})
                 message['stop_reason'] = delta.get('stop_reason')
+                if message['stop_reason'] == 'error':
+                    # lmdeploy reports INPUT_LENGTH_ERROR via stop_reason=error.
+                    # Mirror the OpenAI finish_reason=error short-circuit.
+                    logger.warning(f"Anthropic stream stop_reason=error: {event}")
+                    return None
                 # Merge usage delta
                 usage_delta = event.get('usage', {})
                 if usage_delta:
