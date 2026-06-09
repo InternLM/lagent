@@ -44,6 +44,20 @@ from lagent.utils import ctx_session_id, get_logger
 logger = get_logger(__name__, 'info')
 
 
+def _is_lmdeploy_input_length_error(response_data: dict[str, Any]) -> bool:
+    """Detect lmdeploy's INPUT_LENGTH_ERROR sentinel in an Anthropic response."""
+    for block in response_data.get('content') or []:
+        if not isinstance(block, dict):
+            continue
+        text = block.get('text') or block.get('thinking') or ''
+        if (
+            isinstance(text, str)
+            and 'internal error happened, status code ResponseType.INPUT_LENGTH_ERROR' in text.strip()
+        ):
+            return True
+    return False
+
+
 def _anthropic_response_to_assistant_message(response: dict[str, Any]) -> dict[str, Any]:
     content_blocks: list[dict[str, Any]] = response.get("content", [])
 
@@ -345,10 +359,11 @@ class SessionClient:
             ):
                 logger.warning(f"OpenAI finish_reason=error from upstream: {response_data}")
                 response_data = None
-            elif response_data and response_data.get('stop_reason') == 'error':
-                # Anthropic counterpart: HTTP 200 with stop_reason=error
-                # (lmdeploy returns this for INPUT_LENGTH_ERROR).
-                logger.warning(f"Anthropic stop_reason=error from upstream: {response_data}")
+            elif response_data and _is_lmdeploy_input_length_error(response_data):
+                # Anthropic counterpart of finish_reason=error: lmdeploy returns
+                # HTTP 200 with the error text in content (stop_reason is remapped
+                # to stop_sequence, so we can't key on it).
+                logger.warning(f"lmdeploy INPUT_LENGTH_ERROR from upstream: {response_data}")
                 response_data = None
 
         if not response_data:
@@ -825,11 +840,6 @@ class SessionClient:
                 # Final metadata (stop_reason, usage delta)
                 delta = event.get('delta', {})
                 message['stop_reason'] = delta.get('stop_reason')
-                if message['stop_reason'] == 'error':
-                    # lmdeploy reports INPUT_LENGTH_ERROR via stop_reason=error.
-                    # Mirror the OpenAI finish_reason=error short-circuit.
-                    logger.warning(f"Anthropic stream stop_reason=error: {event}")
-                    return None
                 # Merge usage delta
                 usage_delta = event.get('usage', {})
                 if usage_delta:
@@ -848,6 +858,12 @@ class SessionClient:
 
         # Assemble final message
         message['content'] = content_blocks
+        if _is_lmdeploy_input_length_error(message):
+            # lmdeploy streams its INPUT_LENGTH_ERROR sentinel as ordinary
+            # text/thinking deltas with stop_reason=stop_sequence; mirror the
+            # non-stream drop.
+            logger.warning(f"lmdeploy INPUT_LENGTH_ERROR in Anthropic stream: {message}")
+            return None
         return message
 
     def get_messages(self) -> List[Dict[str, list]]:
