@@ -41,9 +41,9 @@ class AsyncAPIClient(AsyncGPTAPI):
             url.rstrip('/') + '/chat/completions'
             for url in (model['base_url'] if isinstance(model['base_url'], list) else [model['base_url']])
         ]
-        self.api_key = model.get("api_key", "")
-        self.proxy = model.get("proxy")
-        self.model_name = model["model"]
+        self.api_key = model.get('api_key', '')
+        self.proxy = model.get('proxy')
+        self.model_name = model['model']
         self.sample_params = sample_params
         self.max_retry = max_retry
         self.timeout = timeout
@@ -54,11 +54,11 @@ class AsyncAPIClient(AsyncGPTAPI):
     @staticmethod
     def _is_input_length_error_text(text: str) -> bool:
         input_length_markers = [
-            "INPUT_LENGTH_ERROR",
-            "input length",
-            "prompt length",
-            "session out of limit",
-            "SESSION_OUT_OF_LIMIT",
+            'INPUT_LENGTH_ERROR',
+            'input length',
+            'prompt length',
+            'session out of limit',
+            'SESSION_OUT_OF_LIMIT',
         ]
         return any(marker in text for marker in input_length_markers)
 
@@ -70,27 +70,27 @@ class AsyncAPIClient(AsyncGPTAPI):
         msg = str(exc)
         if AsyncAPIClient._is_input_length_error_text(msg):
             return False
-        if msg.startswith("LLM HTTP "):
+        if msg.startswith('LLM HTTP '):
             try:
-                status = int(msg.split("LLM HTTP ", 1)[1].split()[0])
+                status = int(msg.split('LLM HTTP ', 1)[1].split()[0])
             except (IndexError, ValueError):
                 return False
             return status >= 500
 
         retryable_markers = [
-            "LLM stream error",
-            "LLM stream ended without",
-            "LLM finish_reason=error",
-            "Invalid LLM SSE JSON",
-            "Internal error",
-            "Backend error",
+            'LLM stream error',
+            'LLM stream ended without',
+            'LLM finish_reason=error',
+            'Invalid LLM SSE JSON',
+            'Internal error',
+            'Backend error',
             '"code": 500',
             '"code": 503',
             "'code': 500",
             "'code': 503",
-            "TimeoutError",
-            "Connection reset",
-            "Server disconnected",
+            'TimeoutError',
+            'Connection reset',
+            'Server disconnected',
         ]
         return any(marker in msg for marker in retryable_markers)
 
@@ -106,25 +106,25 @@ class AsyncAPIClient(AsyncGPTAPI):
         """
         assert isinstance(messages, list)
 
-        reasoning_effort = self.sample_params.get("reasoning_effort")
+        reasoning_effort = self.sample_params.get('reasoning_effort')
         payload: Dict = dict(
             model=self.model_name,
             messages=messages,
             stream=True,
-            temperature=self.sample_params.get("temperature", 0.7),
-            top_p=self.sample_params.get("top_p", 1.0),
-            max_tokens=self.sample_params.get("max_tokens", 64 * 1024),
+            temperature=self.sample_params.get('temperature', 0.7),
+            top_p=self.sample_params.get('top_p', 1.0),
+            max_tokens=self.sample_params.get('max_tokens', 64 * 1024),
         )
         if tools is not None:
-            payload["tools"] = tools
+            payload['tools'] = tools
         if reasoning_effort is not None:
-            payload["reasoning_effort"] = reasoning_effort
+            payload['reasoning_effort'] = reasoning_effort
         if self.extra_body:
             payload.update(self.extra_body)
         if self.session_id is not None:
-            payload["session_id"] = self.session_id
+            payload['session_id'] = self.session_id
 
-        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
+        headers = {'Content-Type': 'application/json', 'Authorization': f"Bearer {self.api_key}"}
 
         connector = aiohttp.TCPConnector(ssl=False)
         timeout = aiohttp.ClientTimeout(total=self.timeout)
@@ -133,12 +133,12 @@ class AsyncAPIClient(AsyncGPTAPI):
                 url = random.choice(self.base_urls)
                 try:
                     message_data = {
-                        "id": "",
-                        "object": "chat.completion",
-                        "created": 0,
-                        "model": self.model_name,
-                        "choices": [
-                            {"index": 0, "message": {"role": "assistant", "content": ""}, "finish_reason": None}
+                        'id': '',
+                        'object': 'chat.completion',
+                        'created': 0,
+                        'model': self.model_name,
+                        'choices': [
+                            {'index': 0, 'message': {'role': 'assistant', 'content': ''}, 'finish_reason': None}
                         ],
                     }
                     content_parts = []
@@ -157,92 +157,97 @@ class AsyncAPIClient(AsyncGPTAPI):
 
                         async for line in resp.content:
                             if line:
-                                decoded = line.decode("utf-8").strip()
+                                decoded = line.decode('utf-8').strip()
                                 if not decoded:
                                     continue
-                                if decoded.startswith("data: "):
+                                if decoded.startswith('data: '):
                                     data_str = decoded[6:]
-                                    if data_str == "[DONE]":
+                                    if data_str == '[DONE]':
                                         saw_done = True
                                         break
                                     try:
                                         data = json.loads(data_str)
                                         last_event = data
                                         if (
-                                            data.get("error") is not None
-                                            or data.get("type") == "error"
-                                            or data.get("object") == "error"
+                                            data.get('error') is not None
+                                            or data.get('type') == 'error'
+                                            or data.get('object') == 'error'
                                         ):
                                             raise RuntimeError(
                                                 f"LLM stream error from {url}: {json.dumps(data, ensure_ascii=False)}"
                                             )
-                                        if "id" in data and not message_data["id"]:
-                                            message_data["id"] = data["id"]
-                                        if "created" in data and not message_data["created"]:
-                                            message_data["created"] = data["created"]
-                                        if "model" in data:
-                                            message_data["model"] = data["model"]
+                                        if 'id' in data and not message_data['id']:
+                                            message_data['id'] = data['id']
+                                        if 'created' in data and not message_data['created']:
+                                            message_data['created'] = data['created']
+                                        if 'model' in data:
+                                            message_data['model'] = data['model']
 
-                                        choices = data.get("choices", [])
+                                        choices = data.get('choices', [])
                                         if choices:
                                             saw_choice = True
 
                                         for choice in choices:
-                                            delta = choice.get("delta", {})
+                                            delta = choice.get('delta', {})
 
-                                            if "content" in delta and delta["content"]:
-                                                content_parts.append(delta["content"])
+                                            if 'content' in delta and delta['content']:
+                                                content_parts.append(delta['content'])
 
-                                            if "reasoning_content" in delta and delta["reasoning_content"]:
-                                                reasoning_content_parts.append(delta["reasoning_content"])
+                                            if 'reasoning_content' in delta and delta['reasoning_content']:
+                                                reasoning_content_parts.append(delta['reasoning_content'])
 
-                                            for tc_delta in delta.get("tool_calls") or []:
-                                                idx = tc_delta.get("index", 0)
+                                            for tc_delta in delta.get('tool_calls') or []:
+                                                idx = tc_delta.get('index', 0)
                                                 if idx not in tool_calls_map:
                                                     tool_calls_map[idx] = {
-                                                        "id": tc_delta.get("id", ""),
-                                                        "type": tc_delta.get("type", "function"),
-                                                        "function": {"name": "", "arguments": ""},
+                                                        'id': tc_delta.get('id', ''),
+                                                        'type': tc_delta.get('type', 'function'),
+                                                        'function': {'name': '', 'arguments': ''},
                                                     }
                                                 tc = tool_calls_map[idx]
-                                                fn = tc_delta.get("function", {})
-                                                if fn.get("name"):
-                                                    tc["function"]["name"] += fn["name"]
-                                                if fn.get("arguments"):
-                                                    tc["function"]["arguments"] += fn["arguments"]
-                                                if tc_delta.get("id"):
-                                                    tc["id"] = tc_delta["id"]
+                                                fn = tc_delta.get('function', {})
+                                                if fn.get('name'):
+                                                    tc['function']['name'] += fn['name']
+                                                if fn.get('arguments'):
+                                                    tc['function']['arguments'] += fn['arguments']
+                                                if tc_delta.get('id'):
+                                                    tc['id'] = tc_delta['id']
 
-                                            fc_delta = delta.get("function_call")
+                                            fc_delta = delta.get('function_call')
                                             if fc_delta:
                                                 if function_call_data is None:
-                                                    function_call_data = {"name": "", "arguments": ""}
-                                                if fc_delta.get("name"):
-                                                    function_call_data["name"] += fc_delta["name"]
-                                                if fc_delta.get("arguments"):
-                                                    function_call_data["arguments"] += fc_delta["arguments"]
+                                                    function_call_data = {'name': '', 'arguments': ''}
+                                                if fc_delta.get('name'):
+                                                    function_call_data['name'] += fc_delta['name']
+                                                if fc_delta.get('arguments'):
+                                                    function_call_data['arguments'] += fc_delta['arguments']
 
-                                            if "finish_reason" in choice and choice["finish_reason"]:
-                                                message_data["choices"][0]["finish_reason"] = choice["finish_reason"]
-                                                if choice["finish_reason"] == "error":
-                                                    error_text = " ".join(
+                                            if 'finish_reason' in choice and choice['finish_reason']:
+                                                message_data['choices'][0]['finish_reason'] = choice['finish_reason']
+                                                if choice['finish_reason'] == 'error':
+                                                    error_text = ' '.join(
                                                         part
                                                         for part in [
-                                                            "".join(content_parts),
+                                                            ''.join(content_parts),
                                                             json.dumps(data, ensure_ascii=False),
                                                         ]
                                                         if part
                                                     )
                                                     if self._is_input_length_error_text(error_text):
-                                                        message_data["choices"][0]["message"].update(delta)
+                                                        message = message_data['choices'][0]['message']
+                                                        message.update(delta)
+                                                        extra_info = dict(message.get('extra_info') or {})
+                                                        extra_info.setdefault('error_type', 'input_length_error')
+                                                        extra_info.setdefault('error_text', error_text)
+                                                        message['extra_info'] = extra_info
                                                         return message_data
                                                     raise RuntimeError(
                                                         f"LLM finish_reason=error from {url}: "
                                                         f"{json.dumps(data, ensure_ascii=False)}"
                                                     )
 
-                                        if "usage" in data and data["usage"]:
-                                            usage = data["usage"]
+                                        if 'usage' in data and data['usage']:
+                                            usage = data['usage']
                                     except json.JSONDecodeError as exc:
                                         raise RuntimeError(f"Invalid LLM SSE JSON from {url}: {data_str}") from exc
 
@@ -256,41 +261,41 @@ class AsyncAPIClient(AsyncGPTAPI):
                             f"LLM stream ended without [DONE] from {url}: "
                             f"{json.dumps(last_event, ensure_ascii=False) if last_event is not None else None}"
                         )
-                    if not message_data["choices"][0].get("finish_reason"):
+                    if not message_data['choices'][0].get('finish_reason'):
                         raise RuntimeError(
                             f"LLM stream ended without terminal finish_reason from {url}: "
                             f"{json.dumps(last_event, ensure_ascii=False) if last_event is not None else None}"
                         )
 
-                    msg = message_data["choices"][0]["message"]
-                    msg["content"] = "".join(content_parts)
+                    msg = message_data['choices'][0]['message']
+                    msg['content'] = ''.join(content_parts)
                     if reasoning_content_parts:
-                        msg["reasoning_content"] = "".join(reasoning_content_parts)
+                        msg['reasoning_content'] = ''.join(reasoning_content_parts)
 
                     if tool_calls_map:
                         tool_calls = []
                         for idx in sorted(tool_calls_map.keys()):
                             tc = tool_calls_map[idx]
-                            args = tc["function"].get("arguments")
+                            args = tc['function'].get('arguments')
                             if isinstance(args, str):
                                 try:
-                                    tc["function"]["arguments"] = json.loads(args)
+                                    tc['function']['arguments'] = json.loads(args)
                                 except json.JSONDecodeError:
                                     pass
                             tool_calls.append(tc)
-                        msg["tool_calls"] = tool_calls
+                        msg['tool_calls'] = tool_calls
 
                     if function_call_data:
-                        args = function_call_data.get("arguments")
+                        args = function_call_data.get('arguments')
                         if isinstance(args, str):
                             try:
-                                function_call_data["arguments"] = json.loads(args)
+                                function_call_data['arguments'] = json.loads(args)
                             except json.JSONDecodeError:
                                 pass
-                        msg["function_call"] = function_call_data
+                        msg['function_call'] = function_call_data
 
                     if usage:
-                        message_data["usage"] = usage
+                        message_data['usage'] = usage
 
                     return message_data
 
@@ -304,12 +309,12 @@ class AsyncAPIClient(AsyncGPTAPI):
                     should_retry = self._is_retryable_error(e) or any(
                         val in str(e)
                         for val in [
-                            "用户额度不足",
-                            "剩余额度",
-                            "litellm.BadRequestError",
-                            "litellm.APIError: APIError",
-                            "Failed to parse fc related info to json format!",
-                            "Error code",
+                            '用户额度不足',
+                            '剩余额度',
+                            'litellm.BadRequestError',
+                            'litellm.APIError: APIError',
+                            'Failed to parse fc related info to json format!',
+                            'Error code',
                         ]
                     )
                     if should_retry:
@@ -390,9 +395,9 @@ if __name__ == '__main__':
     # extra_body = {}
 
     extra_body = {'enable_thinking': True, 'spaces_between_special_tokens': False}
-    model_name = "/mnt/shared-storage-user/llmit1/user/liujiangning/exp/s2_preview/agent_rl/s2-preview-thinker_sft_0228b_rl0312rc1_fix_klmismatch/20260331212858/hf-15"
-    api_base = "http://10.102.252.171:23333/v1"
-    api_key = "sk-admin"
+    model_name = '/mnt/shared-storage-user/llmit1/user/liujiangning/exp/s2_preview/agent_rl/s2-preview-thinker_sft_0228b_rl0312rc1_fix_klmismatch/20260331212858/hf-15'
+    api_base = 'http://10.102.252.171:23333/v1'
+    api_key = 'sk-admin'
     proxy = None
 
     async def main():
@@ -407,6 +412,6 @@ if __name__ == '__main__':
             extra_body=extra_body,
         )
         response = await model.chat(messages, tools=tools)
-        print("Response:", response)
+        print('Response:', response)
 
     asyncio.run(main())

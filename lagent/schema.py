@@ -121,7 +121,7 @@ class AgentMessage(BaseModel):
             self.role = self.sender
 
     @classmethod
-    def from_model_response(cls, response: Union[ChatCompletion, dict], sender: str) -> "AgentMessage":
+    def from_model_response(cls, response: Union[ChatCompletion, dict], sender: str) -> 'AgentMessage':
         """Convert model response (ChatCompletion object or model_dump dict) to AgentMessage."""
         if not isinstance(response, dict):
             response = response.model_dump()
@@ -129,12 +129,25 @@ class AgentMessage(BaseModel):
         choice = response['choices'][0]
         msg = choice.get('message', {})
         finish_reason = choice.get('finish_reason')
+        extra_info = dict(msg.get('extra_info') or {})
+        if finish_reason is not None:
+            extra_info.setdefault('finish_reason', finish_reason)
+
+        meta_info = dict(extra_info.get('meta_info') or {})
+        for key in ('id', 'model', 'created', 'usage'):
+            if response.get(key) is not None:
+                meta_info[key] = response[key]
+        if choice.get('index') is not None:
+            meta_info['choice_index'] = choice['index']
+        if meta_info:
+            extra_info['meta_info'] = meta_info
+
         return cls(
             sender=sender,
-            content=msg.get('content') or "",
+            content=msg.get('content') or '',
             reasoning_content=msg.get('reasoning_content'),
             tool_calls=msg.get('tool_calls'),
-            extra_info=msg.get('extra_info') or {},
+            extra_info=extra_info,
             stream_state=choice.get('stream_state', AgentStatusCode.END),
             finish_reason=finish_reason,
         )
@@ -161,8 +174,12 @@ class AgentMessage(BaseModel):
             return res
 
         msg = {'role': final_role, 'content': self.content}
-        if final_role != 'assistant':
-            msg['extra_info'] = self.extra_info
+        extra_info = self.extra_info
+        if self.finish_reason is not None:
+            extra_info = dict(extra_info)
+            extra_info.setdefault('finish_reason', self.finish_reason)
+        if final_role != 'assistant' or extra_info:
+            msg['extra_info'] = extra_info
         if self.reasoning_content is not None:
             msg['reasoning_content'] = self.reasoning_content
         if self.tool_calls is not None:
