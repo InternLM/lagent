@@ -394,7 +394,7 @@ class SessionClient:
             from lmdeploy.serve.anthropic.adapter import to_openai_messages, to_openai_tools
             from lmdeploy.serve.anthropic.protocol import MessagesRequest
         except ImportError:
-            from lagent.utils.lmdeploy import MessagesRequest, to_openai_messages, to_openai_tools
+            from lagent.utils.adapter import MessagesRequest, to_openai_messages, to_openai_tools
 
         try:
             resp_msg = _anthropic_response_to_assistant_message(response_data)

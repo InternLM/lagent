@@ -10,8 +10,8 @@ inference engine through ``lmdeploy/__init__.py``'s
 the tiny pure-Python conversion routines and shouldn't carry the multi-GB
 inference dep.
 
-This module copies the strict minimum needed by lagent's proxy and xtuner's
-SessionServer:
+This module copies the strict minimum needed by lagent's proxy
+(``SessionClient``):
 
   - ``MessagesRequest`` + supporting input models (``MessageParam``,
     ``ContentBlockParam``, ``ToolParam``, ``ToolChoiceParam``)
