@@ -3,18 +3,57 @@ import logging
 import random
 import threading
 import time
-from collections import deque
+import warnings
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from contextlib import AsyncExitStack, nullcontext
-from typing import Deque, Literal, Optional, TypeAlias
+from typing import Literal, Optional, TypeAlias
 
 from lagent.actions.base_action import AsyncActionMixin, BaseAction
 from lagent.actions.parser import JsonParser, ParseError
 from lagent.schema import ActionReturn, ActionStatusCode
+from lagent.utils.rate_limiter import FairAsyncTokenBucket, get_shared_async_token_bucket
 
-ServerType: TypeAlias = Literal["stdio", "sse", "http"]
+ServerType: TypeAlias = Literal['stdio', 'sse', 'http']
 
 logger = logging.getLogger(__name__)
 _loop = None
+
+warnings.filterwarnings('ignore', category=ResourceWarning, module=r'aiohttp\.client')
+warnings.filterwarnings('ignore', category=ResourceWarning, module=r'anyio\._backends\._asyncio')
+
+_failure_log_lock = threading.Lock()
+_failure_log_last: dict[tuple[str, str, str], float] = {}
+_FAILURE_LOG_INTERVAL_S = 60.0
+
+
+def _warning_without_resource_warning(msg: str, *args) -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', ResourceWarning)
+        logger.warning(msg, *args)
+
+
+def _log_action_failure(action_name: str, exc: Exception) -> None:
+    parts = [f"{type(exc).__name__}: {exc}"]
+    # Unwrap ExceptionGroup so the actual sub-exception is visible (anyio TaskGroup
+    # wraps connect/read errors into ExceptionGroup which str()s to a useless summary).
+    pending = list(getattr(exc, 'exceptions', ()) or ())
+    while pending:
+        sub = pending.pop(0)
+        parts.append(f"  -> {type(sub).__name__}: {sub}")
+        pending.extend(getattr(sub, 'exceptions', ()) or ())
+    cause = exc.__cause__ or exc.__context__
+    if cause is not None and cause is not exc:
+        parts.append(f"  caused by {type(cause).__name__}: {cause}")
+    detail = '\n'.join(parts)
+
+    key = (action_name, type(exc).__name__, detail[:256])
+    now = time.monotonic()
+    with _failure_log_lock:
+        last = _failure_log_last.get(key, 0.0)
+        if now - last < _FAILURE_LOG_INTERVAL_S:
+            return
+        _failure_log_last[key] = now
+    _warning_without_resource_warning('MCP Action %s failed:\n%s', action_name, detail)
 
 
 def _get_event_loop():
@@ -42,186 +81,6 @@ def _get_event_loop():
     return event_loop
 
 
-class TokenBucket:
-    def __init__(self, rate_limit: float):
-        self.rate_limit = rate_limit  # tokens per second
-        self.tokens = rate_limit
-        self.last_update = time.time()
-        self.lock = threading.Lock()
-
-    def acquire(self) -> bool:
-        with self.lock:
-            now = time.time()
-            # Add new tokens based on time elapsed
-            new_tokens = (now - self.last_update) * self.rate_limit
-            self.tokens = min(self.rate_limit, self.tokens + new_tokens)
-            self.last_update = now
-
-            if self.tokens >= 1:
-                self.tokens -= 1
-                return True
-            return False
-
-
-class AsyncTokenBucket:
-    def __init__(self, rate_limit: float):
-        self.rate_limit = rate_limit
-        self.capacity = rate_limit
-        self.tokens = rate_limit
-        self.last_update = time.monotonic()
-        self._lock = asyncio.Lock()
-
-    def _refill(self):
-        now = time.monotonic()
-        elapsed = now - self.last_update
-        if elapsed <= 0:
-            return
-        self.tokens = min(self.capacity, self.tokens + elapsed * self.rate_limit)
-        self.last_update = now
-
-    async def acquire(self):
-        while True:
-            async with self._lock:
-                self._refill()
-                if self.tokens >= 1:
-                    self.tokens -= 1
-                    return
-                missing = 1 - self.tokens
-                wait_time = missing / self.rate_limit
-            await asyncio.sleep(wait_time)
-
-
-class FairAsyncTokenBucket:
-    def __init__(self, rate_limit: float, capacity: Optional[float] = None):
-        """
-        rate_limit: 每秒生成多少个 token
-        capacity: 桶容量（最大可累积多少 token），默认和 rate_limit 一样
-        """
-        self.rate_limit = float(rate_limit)
-        self.capacity = float(capacity) if capacity is not None else float(rate_limit)
-
-        self.tokens = self.capacity
-        self.last_update = time.monotonic()
-
-        self._lock = asyncio.Lock()
-        self._waiters: Deque[asyncio.Future] = deque()
-        self._drainer_running = False  # 是否已有后台协程在发 token
-
-    # ---------- 内部工具方法 ----------
-
-    def _refill_unlocked(self) -> None:
-        """
-        在不持锁的前提下不要调用。
-        根据时间流逝计算当前 token 数。
-        """
-        now = time.monotonic()
-        elapsed = now - self.last_update
-        if elapsed <= 0:
-            return
-        self.tokens = min(self.capacity, self.tokens + elapsed * self.rate_limit)
-        self.last_update = now
-
-    async def _drain_waiters(self) -> None:
-        """
-        后台协程：按 FIFO 顺序给排队的协程发 token。
-        - 没 token 时，就 sleep 到下一个 token 产生的时间点。
-        - 有 token 且有排队，就唤醒队头的一个，再继续循环。
-        """
-        try:
-            while True:
-                fut_to_wake: Optional[asyncio.Future] = None
-                sleep_time: Optional[float] = None
-
-                async with self._lock:
-                    self._refill_unlocked()
-
-                    # 队列空了，没什么好做的了，退出 drainer
-                    if not self._waiters:
-                        self._drainer_running = False
-                        return
-
-                    if self.tokens >= 1:
-                        # 有 token，按 FIFO 唤醒一个排队的协程
-                        self.tokens -= 1
-                        fut_to_wake = self._waiters.popleft()
-                        sleep_time = 0.0
-                    else:
-                        # 没 token，算一下距离下一个 token 的时间
-                        missing = 1.0 - self.tokens  # 还差多少 token 才能发下一枚
-                        sleep_time = max(0.0, missing / self.rate_limit)
-
-                # 出锁之后再唤醒，避免在锁里执行用户代码 / 回调
-                if fut_to_wake is not None and not fut_to_wake.done():
-                    fut_to_wake.set_result(None)
-
-                # 如果刚刚唤醒了一个协程，立刻回到循环，看是否还能继续发
-                if sleep_time == 0.0:
-                    continue
-
-                # 没 token，就等到有 token 再继续
-                await asyncio.sleep(sleep_time)
-        finally:
-            # 兜底，避免异常时 drainer_running 一直是 True 导致无法重启
-            async with self._lock:
-                self._drainer_running = False
-
-    # ---------- 对外接口 ----------
-
-    async def acquire(self) -> None:
-        """
-        获取一个 token（公平：排队 FIFO）
-        """
-        loop = asyncio.get_running_loop()
-
-        # 先尝试直接拿 token（快速路径）
-        async with self._lock:
-            self._refill_unlocked()
-
-            # 如果有 token 且没有历史排队的协程，直接拿走返回
-            if self.tokens >= 1 and not self._waiters:
-                self.tokens -= 1
-                return
-
-            # 否则需要排队
-            fut = loop.create_future()
-            self._waiters.append(fut)
-
-            # 启动 drainer（只要一个就够了）
-            if not self._drainer_running:
-                self._drainer_running = True
-                asyncio.create_task(self._drain_waiters())
-
-        # 等待被 drainer 唤醒，唤醒后说明自己拿到了 token
-        await fut
-
-
-# --- 复用你原本的辅助工具 ---
-_loop = None
-
-
-def _get_event_loop():
-    try:
-        event_loop = asyncio.get_event_loop()
-    except Exception:
-        event_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(event_loop)
-
-    if event_loop.is_running():
-        global _loop
-        if _loop:
-            return _loop
-        from threading import Thread
-
-        def _start_loop(loop):
-            asyncio.set_event_loop(loop)
-            loop.run_forever()
-
-        event_loop = asyncio.new_event_loop()
-        Thread(target=_start_loop, args=(event_loop,), daemon=True).start()
-        _loop = event_loop
-    return event_loop
-
-
 class AsyncMCPClient(AsyncActionMixin, BaseAction):
     """
     Standard Lagent Action that wraps a SINGLE tool from an MCP Server.
@@ -231,13 +90,17 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
     This prevents connection leaks and 'ConnectTimeout' in high-concurrency RL environments.
     """
 
-
     def __init__(
         self,
         server_type: ServerType,
         rate_limit: float = None,
+        rate_limit_key: Optional[str] = None,
+        rate_limit_burst: Optional[float] = None,
         max_concurrency: int = None,
-        # 注意：这里的 name 主要用于 Lagent 注册，但工具的实际元数据来自 MCP Server
+        metadata_timeout: Optional[float] = 60.0,
+        call_timeout: Optional[float] = 300.0,
+        description: Optional[dict] = None,
+        # name 保留给旧配置；实际工具名优先来自 description 或 MCP metadata
         name: Optional[str] = None,
         extra_args: Optional[dict] = None,
         **server_params,
@@ -246,34 +109,48 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
         self.server_type = server_type
         self.server_params = server_params
         self.extra_args = extra_args or {}
+        self.metadata_timeout = (
+            float(metadata_timeout) if metadata_timeout is not None and metadata_timeout > 0 else None
+        )
+        self.call_timeout = float(call_timeout) if call_timeout is not None and call_timeout > 0 else None
 
         # 并发控制组件
-        self.rate_limiter = FairAsyncTokenBucket(rate_limit) if rate_limit is not None else None
+        if rate_limit is None:
+            self.rate_limiter = None
+        elif rate_limit_key:
+            self.rate_limiter = get_shared_async_token_bucket(rate_limit_key, rate_limit, rate_limit_burst)
+        else:
+            self.rate_limiter = FairAsyncTokenBucket(rate_limit, capacity=rate_limit_burst)
         self._sem = asyncio.Semaphore(max_concurrency) if max_concurrency is not None else nullcontext()
 
-        # 1. 临时连接获取工具元数据 (Metadata)
-        # 必须在 __init__ 完成，因为 Lagent 需要 self.description
-        loop = _get_event_loop()
-        if loop.is_running():
-            fut = asyncio.run_coroutine_threadsafe(self._fetch_tool_metadata(), loop)
-            tools = fut.result()
-        else:
-            tools = loop.run_until_complete(self._fetch_tool_metadata())
+        if description is None:
+            # 临时连接获取工具元数据 (Metadata)。必须在 __init__ 完成，因为 Lagent 需要 self.description。
+            loop = _get_event_loop()
+            if loop.is_running():
+                fut = asyncio.run_coroutine_threadsafe(self._fetch_tool_metadata(), loop)
+                try:
+                    tools = fut.result(timeout=self.metadata_timeout)
+                except FutureTimeoutError as exc:
+                    fut.cancel()
+                    raise TimeoutError(f"Timed out fetching MCP tool metadata after {self.metadata_timeout}s") from exc
+            else:
+                metadata_task = self._fetch_tool_metadata()
+                if self.metadata_timeout is not None:
+                    metadata_task = asyncio.wait_for(metadata_task, timeout=self.metadata_timeout)
+                tools = loop.run_until_complete(metadata_task)
 
-        # Single Action 约束：一个 Action 实例对应一个 MCP 工具
-        if len(tools) != 1:
-            logger.warning(
-                f"MCP Server returned {len(tools)} tools, but AsyncMCPAction is designed for a Single Action. "
-                f"Using the first one: {tools[0].name}"
-            )
+            # Single Action 约束：一个 Action 实例对应一个 MCP 工具
+            if not tools:
+                raise RuntimeError('MCP Server returned no tools.')
+            if len(tools) != 1:
+                logger.warning(
+                    f"MCP Server returned {len(tools)} tools, but AsyncMCPAction is designed for a Single Action. "
+                    f"Using the first one: {tools[0].name}"
+                )
 
-        self.tool_info = tools[0]
-        tool_name = self.tool_info.name
-
-        # 2. 初始化父类 BaseAction
-        super().__init__(
-            description={
-                'name': tool_name,
+            self.tool_info = tools[0]
+            description = {
+                'name': self.tool_info.name,
                 'description': self.tool_info.description,
                 'parameters': [
                     {'name': k, 'type': v['type'].upper(), 'description': v.get('description', '')}
@@ -281,7 +158,28 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
                     if k not in self.extra_args
                 ],
                 'required': self.tool_info.inputSchema.get('required', []),
-            },
+            }
+        else:
+            description = dict(description)
+            if 'name' not in description:
+                if name is None:
+                    raise ValueError('Static MCP action description must include a tool name.')
+                description['name'] = name
+            self.tool_info = None
+
+        self.tool_name = description['name']
+        if self.extra_args:
+            description = {
+                **description,
+                'parameters': [
+                    param for param in description.get('parameters', []) if param.get('name') not in self.extra_args
+                ],
+                'required': [item for item in description.get('required', []) if item not in self.extra_args],
+            }
+
+        # 2. 初始化父类 BaseAction
+        super().__init__(
+            description=description,
             parser=JsonParser,
         )
         self._is_toolkit = False
@@ -294,46 +192,46 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
         from mcp import ClientSession, StdioServerParameters
 
         # --- Transport Layer ---
-        if self.server_type == "stdio":
+        if self.server_type == 'stdio':
             from mcp.client.stdio import stdio_client
 
             logger.info(
                 f"Connecting to stdio MCP server with command: {self.server_params['command']} "
                 f"{self.server_params.get('args', [])}"
             )
-            client_kwargs = {"command": self.server_params["command"]}
-            for key in ["args", "env", "cwd"]:
+            client_kwargs = {'command': self.server_params['command']}
+            for key in ['args', 'env', 'cwd']:
                 if self.server_params.get(key) is not None:
                     client_kwargs[key] = self.server_params[key]
 
             server_params_obj = StdioServerParameters(**client_kwargs)
             read, write = await stack.enter_async_context(stdio_client(server_params_obj))
 
-        elif self.server_type == "sse":
+        elif self.server_type == 'sse':
             from mcp.client.sse import sse_client
 
             logger.info(f"Connecting to SSE MCP server at: {self.server_params['url']}")
 
-            url = self.server_params["url"]
+            url = self.server_params['url']
             target_url = random.choice(url) if isinstance(url, list) else url
 
-            client_kwargs = {"url": target_url}
-            for key in ["headers", "timeout", "sse_read_timeout"]:
+            client_kwargs = {'url': target_url}
+            for key in ['headers', 'timeout', 'sse_read_timeout']:
                 if self.server_params.get(key) is not None:
                     client_kwargs[key] = self.server_params[key]
 
             read, write = await stack.enter_async_context(sse_client(**client_kwargs))
 
-        elif self.server_type == "http":
+        elif self.server_type == 'http':
             from mcp.client.streamable_http import streamablehttp_client
 
             # logger.debug(f"Connecting to StreamableHTTP MCP server at: {self.server_params['url']}")
 
-            url = self.server_params["url"]
+            url = self.server_params['url']
             target_url = random.choice(url) if isinstance(url, list) else url
 
-            client_kwargs = {"url": target_url}
-            for key in ["headers", "timeout", "sse_read_timeout", "terminate_on_close"]:
+            client_kwargs = {'url': target_url}
+            for key in ['headers', 'timeout', 'sse_read_timeout', 'terminate_on_close']:
                 if self.server_params.get(key) is not None:
                     client_kwargs[key] = self.server_params[key]
 
@@ -354,6 +252,15 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
             result = await session.list_tools()
             return result.tools
 
+    async def _call_tool_once(self, kwargs: dict):
+        async with AsyncExitStack() as stack:
+            session = await self._connect(stack)
+            outputs_obj = await session.call_tool(self.tool_name, {**kwargs, **self.extra_args})
+
+            if outputs_obj.content and hasattr(outputs_obj.content[0], 'text'):
+                return outputs_obj.content[0].text
+            return str(outputs_obj)
+
     async def run(self, **kwargs) -> ActionReturn:
         """
         Standard Lagent Action Entrypoint.
@@ -366,26 +273,15 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
                 if self.rate_limiter is not None:
                     await self.rate_limiter.acquire()
 
-                # 2. 执行逻辑 (Critical Resource Scope)
-                # 使用 AsyncExitStack 确保本次请求结束后，HTTP连接/进程管道被彻底关闭
-                async with AsyncExitStack() as stack:
-                    session = await self._connect(stack)
-
-                    # 调用 MCP 工具
-                    # 注意：Lagent 传入的是 kwargs 字典，MCP call_tool 正好接受字典
-                    outputs_obj = await session.call_tool(self.tool_info.name, {**kwargs, **self.extra_args})
-
-                    # 提取文本结果
-                    if outputs_obj.content and hasattr(outputs_obj.content[0], 'text'):
-                        outputs = outputs_obj.content[0].text
-                    else:
-                        outputs = str(outputs_obj)
+                call_task = self._call_tool_once(kwargs)
+                if self.call_timeout is not None:
+                    call_task = asyncio.wait_for(call_task, timeout=self.call_timeout)
+                outputs = await call_task
 
         except ParseError as exc:
             return ActionReturn(fallback_args, type=self.name, errmsg=exc.err_msg, state=ActionStatusCode.ARGS_ERROR)
         except Exception as exc:
-            # 记录详细堆栈以便调试 RL 过程中的错误
-            logger.warning(f"MCP Action {self.name} failed: {exc}")
+            _log_action_failure(self.name, exc)
             return ActionReturn(fallback_args, type=self.name, errmsg=str(exc), state=ActionStatusCode.API_ERROR)
 
         # 3. 结果封装

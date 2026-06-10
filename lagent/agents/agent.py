@@ -1,4 +1,5 @@
 import copy
+import inspect
 import warnings
 from collections import OrderedDict, UserDict, UserList, abc
 from functools import wraps
@@ -13,6 +14,20 @@ from lagent.prompts.parsers import StrParser
 from lagent.prompts.prompt_template import PromptTemplate
 from lagent.schema import AgentMessage, ModelStatusCode
 from lagent.utils import create_object
+
+
+async def _maybe_close(obj) -> None:
+    """Best-effort close: invoke ``aclose`` / ``close`` on any object that has one."""
+    if obj is None:
+        return
+    for name in ('aclose', 'close'):
+        method = getattr(obj, name, None)
+        if method is None:
+            continue
+        result = method()
+        if inspect.isawaitable(result):
+            await result
+        return
 
 
 class Agent:
@@ -105,7 +120,7 @@ class Agent:
             destination.update({prefix + 'memory': saved_memory})
         for name, agent in getattr(self, '_agents', {}).items():
             if isinstance(agent, Agent):
-                agent.state_dict(destination=destination, prefix=prefix + name + ".")
+                agent.state_dict(destination=destination, prefix=prefix + name + '.')
         return destination
 
     def load_state_dict(self, state_dict: Dict):
@@ -150,6 +165,18 @@ class Agent:
             if recursive:
                 for agent in getattr(self, '_agents', {}).values():
                     agent.reset(recursive=True)
+
+    async def close(self, recursive: bool = True) -> None:
+        """Release resources held by this agent.
+
+        The default implementation closes all sub-agents collected in
+        ``self._agents``. Subclasses that own their own resources (actions,
+        sessions, connection pools, ...) should override this, do their cleanup,
+        and finish with ``await super().close(recursive=recursive)``.
+        """
+        if recursive:
+            for agent in getattr(self, '_agents', {}).values():
+                await _maybe_close(agent)
 
     def get_messages(self, prefix='', destination=None) -> Dict[str, List[dict]]:
         """Get OpenAI format messages from all agents recursively, similar to state_dict.
@@ -241,7 +268,7 @@ class StreamingAgentMixin:
             if result:
                 message = result
         self.memory.add(message)
-        response_message = AgentMessage(sender=self.name, content="")
+        response_message = AgentMessage(sender=self.name, content='')
         for response_message in self.forward(*message, **kwargs):
             if not isinstance(response_message, AgentMessage):
                 model_state, response = response_message
@@ -282,7 +309,7 @@ class AsyncStreamingAgentMixin:
             if result:
                 message = result
         self.memory.add(message)
-        response_message = AgentMessage(sender=self.name, content="")
+        response_message = AgentMessage(sender=self.name, content='')
         async for response_message in self.forward(*message, **kwargs):
             if not isinstance(response_message, AgentMessage):
                 model_state, response = response_message

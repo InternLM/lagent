@@ -13,7 +13,7 @@ from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
 from lagent.schema import ActionReturn, ActionStatusCode, ActionValidCode, AgentMessage
 from lagent.skills.skills import SkillsLoader
 from lagent.utils import create_object, load_class_from_string, truncate_text
-from .agent import AsyncAgent
+from .agent import AsyncAgent, _maybe_close
 
 logger = logging.getLogger('lagent.agents.fc_agent')
 
@@ -85,9 +85,8 @@ class FunctionCallAgent(AsyncAgent):
 
         final_message = deepcopy(policy_message if policy_message is not None else env_message)
         final_message.sender = self.name
-        final_message.extra_info = dict(final_message.extra_info or {})
         if finish_info:
-            final_message.extra_info['finish_info'] = finish_info
+            final_message.finish_info = finish_info
         return final_message
 
     def _check_finish_condition(
@@ -147,21 +146,15 @@ class FunctionCallAgent(AsyncAgent):
 
     def get_messages(self, prefix='', destination=None) -> List[Dict[str, list]]:
         message_dict = super().get_messages(prefix, destination)
-        segment = {'messages': message_dict['policy_agent.messages'], 'tools': message_dict['policy_agent.tools']}
-        finish_info = None
-        if self.memory is not None:
-            for message in reversed(self.memory.get_memory()):
-                if isinstance(message, AgentMessage) and message.sender == self.name:
-                    finish_info = (message.extra_info or {}).get('finish_info')
-                    break
-        if finish_info:
-            segment['finish_info'] = finish_info
-        return [segment]
+        return [{'messages': message_dict['policy_agent.messages'], 'tools': message_dict['policy_agent.tools']}]
 
 
 class MemoryProvider(Protocol):
     async def get_info(self) -> dict:
-        """Return long-term memory info for EnvAgent's env_info. The content and format are flexible, but should be concise."""
+        """Return long-term memory info for EnvAgent's env_info.
+
+        The content and format are flexible, but should be concise.
+        """
         ...
 
 
@@ -264,3 +257,15 @@ class EnvAgent(AsyncAgent):
         if tool_response.tool_response_truncate_side is None:
             tool_response.tool_response_truncate_side = self.tool_response_truncate_side
         return tool_response
+
+    async def close(self, recursive: bool = True) -> None:
+        seen = set()
+        for action in self.actions.values():
+            action_id = id(action)
+            if action_id in seen:
+                continue
+            seen.add(action_id)
+            await _maybe_close(action)
+        await _maybe_close(self.skills)
+        await _maybe_close(self.long_term_memory)
+        await super().close(recursive=recursive)
