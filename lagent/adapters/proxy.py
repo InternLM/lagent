@@ -58,11 +58,61 @@ def _is_lmdeploy_input_length_error(response_data: dict[str, Any]) -> bool:
     return False
 
 
-def _anthropic_response_to_assistant_message(response: dict[str, Any]) -> dict[str, Any]:
-    content_blocks: list[dict[str, Any]] = response.get("content", [])
+_NON_TOKENIZED_KEYS = ('cache_control',)
+_TOKENIZED_MSG_KEYS = ('tool_call_id', 'name', 'reasoning_content', 'function_call', 'refusal')
 
-    if not content_blocks:
-        raise ValueError("MessagesResponse.content is empty; nothing to append as assistant turn.")
+
+def _canonical_content(content: Any) -> Any:
+    """Token-equivalence projection of a message ``content`` value."""
+    if content is None:
+        return None
+    if isinstance(content, str):
+        # Whitespace-only content is a serialization artifact: a freshly
+        # generated assistant turn may carry an empty text block (e.g. '\n\n')
+        # alongside its tool_calls, but the client drops it when replaying the
+        # turn as history. Treat it as absent so the prefix chain collapses.
+        return content if content.strip() else None
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict):
+                block = {k: v for k, v in block.items() if k not in _NON_TOKENIZED_KEYS}
+            parts.append(json.dumps(block, sort_keys=True, ensure_ascii=False))
+        return tuple(parts) or None
+    return json.dumps(content, sort_keys=True, ensure_ascii=False)
+
+
+def _canonical_msg(msg: Any) -> tuple:
+    """Project a message onto the fields the model actually conditions on.
+
+    Used as the comparison basis for prefix dedup so that volatile, non-tokenized
+    metadata (cache breakpoints, etc.) does not stop a true prefix from matching.
+    Fields that DO reach the tokenizer (tool-call ids, arguments, reasoning) are
+    deliberately retained.
+    """
+    if not isinstance(msg, dict):
+        return ('raw', json.dumps(msg, sort_keys=True, ensure_ascii=False))
+    key: list = [('role', msg.get('role')), ('content', _canonical_content(msg.get('content')))]
+    tool_calls = msg.get('tool_calls')
+    if tool_calls:
+        norm = []
+        for tc in tool_calls:
+            fn = (tc.get('function') or {}) if isinstance(tc, dict) else {}
+            args = fn.get('arguments')
+            if isinstance(args, (dict, list)):
+                args = json.dumps(args, sort_keys=True, ensure_ascii=False)
+            # Keep the id: it is serialized into the prompt the model conditions on.
+            norm.append((tc.get('id') if isinstance(tc, dict) else None, fn.get('name'), args))
+        key.append(('tool_calls', tuple(norm)))
+    for field in _TOKENIZED_MSG_KEYS:
+        val = msg.get(field)
+        if val:
+            key.append((field, val if isinstance(val, str) else json.dumps(val, sort_keys=True, ensure_ascii=False)))
+    return tuple(key)
+
+
+def _anthropic_response_to_assistant_message(response: dict[str, Any]) -> dict[str, Any]:
+    content_blocks: list[dict[str, Any]] = response.get("content") or []
 
     normalized: list[dict[str, Any]] = []
 
@@ -93,9 +143,9 @@ def _anthropic_response_to_assistant_message(response: dict[str, Any]) -> dict[s
                 raise ValueError(f"tool_use block is missing 'name': {block}")
 
             normalized.append({"type": "tool_use", "id": tool_id, "name": name, "input": input_})
-
         else:
-            raise ValueError(f"Unrecognized content block type '{block_type}' in MessagesResponse.")
+            logger.warning(f"Skipping unmodeled response content block type '{block_type}'")
+            continue
 
     return {"role": "assistant", "content": normalized}
 
@@ -424,6 +474,9 @@ class SessionClient:
         request_data['messages'].append(resp_msg)
         req = MessagesRequest.model_validate(request_data)
         messages = to_openai_messages(req)
+        if not messages or messages[-1].get('role') != 'assistant':
+            logger.debug(f"Skipping record for session {self.session_id}: assistant turn dropped in conversion")
+            return None
         tools = [tool.model_dump() for tool in to_openai_tools(req.tools)] if req.tools else None
         _normalize_tool_call_arguments(messages)
         return messages, tools
@@ -870,6 +923,12 @@ class SessionClient:
         """Get the latest conversation messages for this session.
         If a sequence of messages is a prefix of another sequence and tools match, it will be filtered out.
 
+        Prefix matching compares messages on a token-equivalence projection
+        (``_canonical_msg``) rather than raw dicts, so non-tokenized metadata
+        (e.g. cache breakpoints that the client moves each turn) does not stop a
+        true prefix from matching. ``tools`` is still compared verbatim: it is
+        rendered into the prompt, so different tools mean a different trajectory.
+
         Returns:
             List of message sequences.
         """
@@ -877,30 +936,29 @@ class SessionClient:
         if not records:
             return []
 
-        filtered = []
-        for i, rec_i in enumerate(records):
-            is_prefix = False
-            seq_i = rec_i.get("messages", [])
-            tools_i = rec_i.get("tools")
+        # Precompute one canonical key per record; comparing hashable tuples is
+        # both cheaper and robust to volatile fields.
+        keyed = [(rec, tuple(_canonical_msg(m) for m in rec.get("messages", []))) for rec in records]
 
-            for j, rec_j in enumerate(records):
+        filtered = []
+        for i, (rec_i, key_i) in enumerate(keyed):
+            is_prefix = False
+            for j, (rec_j, key_j) in enumerate(keyed):
                 if i == j:
                     continue
 
-                seq_j = rec_j.get("messages", [])
-                tools_j = rec_j.get("tools")
-
-                # Check if tools are completely identical
-                if tools_i != tools_j:
+                # Tools are rendered into the prompt: different tools => different
+                # trajectory, never a prefix.
+                if rec_i.get("tools") != rec_j.get("tools"):
                     continue
 
-                # If they are exactly identical, keep the one with the higher index
-                if len(seq_i) == len(seq_j) and seq_i == seq_j:
+                # Exactly identical (canonically): keep the one with the higher index.
+                if len(key_i) == len(key_j) and key_i == key_j:
                     if i < j:
                         is_prefix = True
                         break
-                # If one is a strict prefix of the other, skip it
-                elif len(seq_i) < len(seq_j) and seq_j[: len(seq_i)] == seq_i:
+                # Strict prefix: drop the shorter one.
+                elif len(key_i) < len(key_j) and key_j[: len(key_i)] == key_i:
                     is_prefix = True
                     break
 

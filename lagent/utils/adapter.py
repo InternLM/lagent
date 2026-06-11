@@ -28,8 +28,8 @@ lmdeploy/serve/openai/protocol.py. Re-sync if those drift.
 """
 
 from __future__ import annotations
+import hashlib
 import json
-import uuid
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -317,14 +317,21 @@ def to_openai_messages(request: MessagesRequest) -> list[dict[str, Any]]:
                 continue
 
             if block_type == 'tool_use':
+                name = _block_get(block, 'name') or ''
+                arguments = json.dumps(_block_get(block, 'input') or {})
+                # Anthropic responses always carry a ``toolu_`` id; fall back to a
+                # deterministic content hash (never a random uuid) so converting
+                # the same block twice yields a stable id and records stay faithful
+                # to the upstream tokens.
+                tool_id = _block_get(block, 'id')
+                if not tool_id:
+                    digest = hashlib.sha1(f'{name}:{arguments}'.encode('utf-8')).hexdigest()[:8]
+                    tool_id = f'call_{digest}'
                 tool_calls.append(
                     dict(
-                        id=_block_get(block, 'id') or f'call_{uuid.uuid4().hex[:8]}',
+                        id=tool_id,
                         type='function',
-                        function=dict(
-                            name=_block_get(block, 'name') or '',
-                            arguments=json.dumps(_block_get(block, 'input') or {}),
-                        ),
+                        function=dict(name=name, arguments=arguments),
                     )
                 )
                 continue
