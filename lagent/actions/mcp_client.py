@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import random
 import threading
 import time
@@ -11,11 +10,12 @@ from typing import Literal, Optional, TypeAlias
 from lagent.actions.base_action import AsyncActionMixin, BaseAction
 from lagent.actions.parser import JsonParser, ParseError
 from lagent.schema import ActionReturn, ActionStatusCode
+from lagent.utils import get_logger
 from lagent.utils.rate_limiter import FairAsyncTokenBucket, get_shared_async_token_bucket
 
 ServerType: TypeAlias = Literal['stdio', 'sse', 'http']
 
-logger = logging.getLogger(__name__)
+logger = get_logger()
 _loop = None
 
 warnings.filterwarnings('ignore', category=ResourceWarning, module=r'aiohttp\.client')
@@ -24,12 +24,6 @@ warnings.filterwarnings('ignore', category=ResourceWarning, module=r'anyio\._bac
 _failure_log_lock = threading.Lock()
 _failure_log_last: dict[tuple[str, str, str], float] = {}
 _FAILURE_LOG_INTERVAL_S = 60.0
-
-
-def _warning_without_resource_warning(msg: str, *args) -> None:
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore', ResourceWarning)
-        logger.warning(msg, *args)
 
 
 def _log_action_failure(action_name: str, exc: Exception) -> None:
@@ -53,7 +47,7 @@ def _log_action_failure(action_name: str, exc: Exception) -> None:
         if now - last < _FAILURE_LOG_INTERVAL_S:
             return
         _failure_log_last[key] = now
-    _warning_without_resource_warning('MCP Action %s failed:\n%s', action_name, detail)
+    logger.warning('MCP Action %s failed:\n%s', action_name, detail)
 
 
 def _get_event_loop():
