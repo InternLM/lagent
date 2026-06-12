@@ -36,11 +36,6 @@ class Terminus2Adapter(AsyncExternalAgent):
     Args:
         model (str | None): LiteLLM model name. Defaults to ``RL_LLM_MODEL`` or
             ``OPENAI_MODEL``.
-        base_url (str | None): LiteLLM ``api_base``.  Defaults to
-            ``RL_LLM_BASE_URL`` or ``OPENAI_BASE_URL``.  When ``proxy`` is set,
-            the proxy's URL takes precedence.
-        api_key (str | None): API key exposed to LiteLLM through env vars.  When
-            ``proxy`` is set, a synthetic ``sk-proxy-<session>`` key is used.
         max_episodes (int | None): Max agent loop iterations.  Forwarded to
             harbor as ``max_turns``.
         parser_name (str): ``"json"`` or ``"xml"``.
@@ -69,8 +64,6 @@ class Terminus2Adapter(AsyncExternalAgent):
     def __init__(
         self,
         model: Optional[str] = None,
-        base_url: Optional[str] = None,
-        api_key: Optional[str] = None,
         max_episodes: Optional[int] = 100,
         parser_name: str = "json",
         temperature: float = 0.7,
@@ -94,8 +87,6 @@ class Terminus2Adapter(AsyncExternalAgent):
         super().__init__(**kwargs)
 
         self.model = model or os.environ.get("RL_LLM_MODEL") or os.environ.get("OPENAI_MODEL", "")
-        self.base_url = base_url or os.environ.get("RL_LLM_BASE_URL") or os.environ.get("OPENAI_BASE_URL", "")
-        self.api_key = api_key or os.environ.get("RL_LLM_API_KEY") or os.environ.get("OPENAI_API_KEY", "")
         self.max_episodes = max_episodes
         self.parser_name = parser_name
         self.temperature = temperature
@@ -130,6 +121,12 @@ class Terminus2Adapter(AsyncExternalAgent):
         if not self.model:
             raise RuntimeError("Terminus2Adapter requires model or RL_LLM_MODEL.")
 
+        if self.proxy is None:
+            raise RuntimeError(
+                "Terminus2Adapter requires a SessionClient proxy: all LLM calls are "
+                "routed through it for token-level attribution. Pass `proxy=`."
+            )
+
         if shutil.which("tmux") is None:
             raise RuntimeError("tmux is required by Terminus2Adapter but was not found on PATH.")
 
@@ -139,8 +136,8 @@ class Terminus2Adapter(AsyncExternalAgent):
 
         local_env_cls = _get_local_sandbox_environment_cls()
 
-        api_base = self.proxy.url if self.proxy is not None else (self.base_url or None)
-        api_key = f"sk-proxy-{self.session_id}" if self.proxy is not None else (self.api_key or None)
+        api_base = self.proxy.url
+        api_key = f"sk-proxy-{self.session_id}"
 
         owns_logging_dir = self.logging_dir is None
         logs_dir = self.logging_dir or Path(tempfile.mkdtemp(prefix="harbor-terminus2-"))
@@ -191,9 +188,8 @@ class Terminus2Adapter(AsyncExternalAgent):
                     else:
                         await run_coro
                 finally:
-                    # Capture state even on timeout/exception so whitebox runs
-                    # (no SessionClient proxy to fall back on) still surface a
-                    # partial trajectory in ``state_dict`` / ``get_messages``.
+                    # Capture state even on timeout/exception so a partial
+                    # trajectory still surfaces in ``state_dict`` / ``get_messages``.
                     self._capture_state(agent, context)
                 return self._format_result(agent)
         finally:
@@ -253,16 +249,7 @@ class Terminus2Adapter(AsyncExternalAgent):
         Returns:
             List of message sequences.
         """
-        # Whitebox mode (proxy disabled): no per-turn records exist, so fall
-        # back to the agent's own final ``_chat.messages`` snapshot captured by
-        # ``_capture_state``.  Wrapped as a single record to keep the on-disk
-        # ``message.json`` schema consistent with the proxied path.
-        if self.proxy is None:
-            if not self._last_messages:
-                return []
-            return [{"messages": list(self._last_messages), "tools": None}]
-
-        records = self.proxy.get_records(self.session_id)
+        records = list(self.proxy._records.get(self.session_id, []))
         if not records:
             return []
 
