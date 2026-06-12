@@ -33,7 +33,7 @@ import json
 import os
 import uuid
 from collections import defaultdict
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import aiohttp
@@ -759,6 +759,23 @@ class SessionClient:
                 filtered.append(rec_i)
 
         return filtered
+
+    def get_records(self, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Return raw per-turn records for ``session_id`` (defaults to current).
+
+        Each record is ``{"messages": [...], "tools": ...}`` exactly as appended
+        by ``record_messages``. No prefix dedup is applied — callers that want
+        deduplication should use :meth:`get_messages` or implement their own.
+
+        Args:
+            session_id (Optional[str]): Session identifier. Defaults to the
+                current ``self.session_id``.
+
+        Returns:
+            List[Dict[str, Any]]: Shallow copy of the internal record list.
+        """
+        sid = session_id if session_id is not None else self.session_id
+        return list(self._records.get(sid, []))
 
     def release_trace(self):
         """Clear recorded data for this session."""

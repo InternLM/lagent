@@ -15,13 +15,14 @@ keeps ``import lagent.adapters`` working.
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import os
 import shutil
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from lagent.agents.agent import Agent
 from lagent.utils import create_object
@@ -183,13 +184,17 @@ class Terminus2Adapter(AsyncExternalAgent):
                 await agent.setup(env)
 
                 context = AgentContext()
-                run_coro = agent.run(task, env, context)
-                if self.timeout is not None:
-                    await asyncio.wait_for(run_coro, timeout=self.timeout)
-                else:
-                    await run_coro
-
-                self._capture_state(agent, context)
+                try:
+                    run_coro = agent.run(task, env, context)
+                    if self.timeout is not None:
+                        await asyncio.wait_for(run_coro, timeout=self.timeout)
+                    else:
+                        await run_coro
+                finally:
+                    # Capture state even on timeout/exception so whitebox runs
+                    # (no SessionClient proxy to fall back on) still surface a
+                    # partial trajectory in ``state_dict`` / ``get_messages``.
+                    self._capture_state(agent, context)
                 return self._format_result(agent)
         finally:
             try:
@@ -201,11 +206,10 @@ class Terminus2Adapter(AsyncExternalAgent):
 
     def state_dict(self, prefix: str = "", destination=None) -> Dict[str, Any]:
         dest = Agent.state_dict(self, prefix=prefix, destination=destination)
-        if self.proxy is not None and hasattr(self.proxy, "get_messages"):
-            try:
-                dest[prefix + "llm_trace"] = _json_safe(self.proxy.get_messages())
-            except Exception:
-                pass
+        try:
+            dest[prefix + "llm_trace"] = _json_safe(self.get_messages())
+        except Exception:
+            pass
         dest[prefix + "terminus2.messages"] = _json_safe(self._last_messages)
         dest[prefix + "terminus2.trajectory_steps"] = _json_safe(self._last_trajectory_steps)
         dest[prefix + "terminus2.context_metadata"] = _json_safe(self._last_context_metadata)
@@ -249,7 +253,16 @@ class Terminus2Adapter(AsyncExternalAgent):
         Returns:
             List of message sequences.
         """
-        records = self._records.get(self.session_id, [])
+        # Whitebox mode (proxy disabled): no per-turn records exist, so fall
+        # back to the agent's own final ``_chat.messages`` snapshot captured by
+        # ``_capture_state``.  Wrapped as a single record to keep the on-disk
+        # ``message.json`` schema consistent with the proxied path.
+        if self.proxy is None:
+            if not self._last_messages:
+                return []
+            return [{"messages": list(self._last_messages), "tools": None}]
+
+        records = self.proxy.get_records(self.session_id)
         if not records:
             return []
 
