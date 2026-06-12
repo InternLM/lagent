@@ -34,6 +34,7 @@ class AsyncAPIClient(AsyncGPTAPI):
         sleep_interval: int = 5,
         extra_body: Optional[dict] = None,
         session_id: str | None = None,
+        read_bufsize: int = 2**26,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -50,6 +51,7 @@ class AsyncAPIClient(AsyncGPTAPI):
         self.sleep_interval = sleep_interval
         self.extra_body = extra_body
         self.session_id = session_id or ctx_session_id.get()
+        self.read_bufsize = read_bufsize
 
     @staticmethod
     def _is_input_length_error_text(text: str) -> bool:
@@ -128,7 +130,9 @@ class AsyncAPIClient(AsyncGPTAPI):
 
         connector = aiohttp.TCPConnector(ssl=False)
         timeout = aiohttp.ClientTimeout(total=self.timeout)
-        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+        async with aiohttp.ClientSession(
+            connector=connector, timeout=timeout, read_bufsize=self.read_bufsize
+        ) as session:
             for attempt in range(self.max_retry):
                 url = random.choice(self.base_urls)
                 try:
