@@ -10,9 +10,8 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import time
 from typing import Tuple
-
-from .base import SandboxClient
 
 
 class LocalClient:
@@ -24,17 +23,42 @@ class LocalClient:
 
     def __init__(self, working_dir: str = "/tmp/lagent_sandbox"):
         self.working_dir = working_dir
+        self._processes = {}
         os.makedirs(working_dir, exist_ok=True)
 
-    def execute(self, command: str, cwd: str = None, timeout_sec: int = 60) -> dict:
+    def execute(
+        self,
+        command: str,
+        cwd: str = None,
+        timeout_sec: int = 60,
+        detach: bool = False,
+    ) -> dict:
+        timeout_sec = int(timeout_sec)
         cwd = cwd or self.working_dir
         try:
+            if detach:
+                proc = subprocess.Popen(
+                    command,
+                    shell=True,
+                    cwd=cwd,
+                    start_new_session=True,
+                    stdin=subprocess.DEVNULL,
+                )
+                self._processes[proc.pid] = proc
+                return {
+                    "ok": True,
+                    "stdout": "",
+                    "stderr": "",
+                    "return_code": 0,
+                    "pid": proc.pid,
+                }
             # Background commands (ending with &): use Popen so the
             # background process survives after the shell exits.
             if command.rstrip().endswith("&"):
                 subprocess.Popen(
                     ["bash", "-c", command],
-                    cwd=cwd, start_new_session=True,
+                    cwd=cwd,
+                    start_new_session=True,
                     stdin=subprocess.DEVNULL,
                 )
                 return {
@@ -44,8 +68,12 @@ class LocalClient:
                     "return_code": 0,
                 }
             result = subprocess.run(
-                command, shell=True, capture_output=True, text=True,
-                cwd=cwd, timeout=timeout_sec,
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                cwd=cwd,
+                timeout=timeout_sec,
             )
             return {
                 "ok": result.returncode == 0,
@@ -72,6 +100,39 @@ class LocalClient:
 
     def health_check(self) -> dict:
         return {"ok": True}
+
+    def is_pid_running(self, pid: int) -> bool:
+        pid = int(pid)
+        proc = self._processes.get(pid)
+        if proc is not None and proc.poll() is not None:
+            return False
+        result = self.execute(f"kill -0 {pid} >/dev/null 2>&1", cwd="/tmp", timeout_sec=5)
+        return result.get("return_code") == 0
+
+    def wait_pid_exit(
+        self,
+        pid: int,
+        timeout: int | float = 600,
+        interval: int | float = 1.0,
+    ) -> dict:
+        pid = int(pid)
+        timeout_value = float(timeout)
+        interval_value = float(interval)
+        proc = self._processes.get(pid)
+        if proc is not None:
+            try:
+                return_code = proc.wait(timeout=timeout_value)
+                return {"ok": True, "pid": pid, "exited": True, "return_code": return_code}
+            except subprocess.TimeoutExpired:
+                return {"ok": False, "pid": pid, "exited": False, "timeout": timeout_value}
+
+        deadline = time.monotonic() + timeout_value
+        poll = max(0.05, interval_value)
+        while time.monotonic() <= deadline:
+            if not self.is_pid_running(pid):
+                return {"ok": True, "pid": pid, "exited": True}
+            time.sleep(poll)
+        return {"ok": False, "pid": pid, "exited": False, "timeout": timeout_value}
 
     def close(self):
         pass
@@ -109,7 +170,4 @@ class LocalProvider:
             shutil.rmtree(client.working_dir, ignore_errors=True)
 
     def list(self):
-        return [
-            {"sandbox_id": sid, "working_dir": c.working_dir}
-            for sid, c in self._sandboxes.items()
-        ]
+        return [{"sandbox_id": sid, "working_dir": c.working_dir} for sid, c in self._sandboxes.items()]

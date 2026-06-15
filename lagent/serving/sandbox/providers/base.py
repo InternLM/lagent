@@ -12,8 +12,10 @@ themselves when they need readiness.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
+import time
 from pathlib import Path
 from typing import Protocol, Tuple, runtime_checkable
 
@@ -55,13 +57,20 @@ class SandboxClient:
             ),
         )
 
-    async def execute(self, command: str, cwd: str = "/root", timeout_sec: int = 60, detach: bool=False) -> dict:
+    async def execute(
+        self,
+        command: str,
+        cwd: str = "/root",
+        timeout_sec: int = 60,
+        detach: bool = False,
+    ) -> dict:
         """Execute a bash command inside the sandbox.
 
         Args:
             command (str): Shell command to run.
             cwd (str): Working directory. Defaults to ``"/root"``.
             timeout_sec (int): Command timeout inside the sandbox. Defaults to ``60``.
+            detach (bool): Whether to launch the command in background.
 
         Returns:
             dict: Server response with ``stdout`` / ``stderr`` / ``return_code``.
@@ -138,6 +147,30 @@ class SandboxClient:
             return resp.json()
         except Exception as e:
             return {"ok": False, "error": str(e)}
+
+    async def is_pid_running(self, pid: int) -> bool:
+        """Return whether ``pid`` is currently alive inside the sandbox."""
+        pid = int(pid)
+        result = await self.execute(f"kill -0 {pid} >/dev/null 2>&1", cwd="/tmp", timeout_sec=5)
+        return result.get("return_code") == 0
+
+    async def wait_pid_exit(
+        self,
+        pid: int,
+        timeout: int | float = 600,
+        interval: int | float = 1.0,
+    ) -> dict:
+        """Wait until ``pid`` exits inside the sandbox."""
+        timeout_value = float(timeout)
+        interval_value = float(interval)
+        pid = int(pid)
+        deadline = time.monotonic() + timeout_value
+        poll = max(0.05, interval_value)
+        while time.monotonic() <= deadline:
+            if not await self.is_pid_running(pid):
+                return {"ok": True, "pid": pid, "exited": True}
+            await asyncio.sleep(poll)
+        return {"ok": False, "pid": pid, "exited": False, "timeout": timeout_value}
 
     async def aclose(self) -> None:
         """Release the underlying HTTP connection pool."""
