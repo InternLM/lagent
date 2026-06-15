@@ -156,10 +156,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
     try:
         instruction = Path(args.instruction_file).read_text(encoding="utf-8")
         response = _call_json(args.sock, {"cmd": "chat", "messages": [instruction]})
-        content = response.get("content", "")
-        if not isinstance(content, str):
-            content = json.dumps(content, ensure_ascii=False, default=str)
-        Path(args.response_out).write_text(content or "", encoding="utf-8")
+        _write_json(args.response_out, response)
         _print_json(response)
         return 0
     except Exception as exc:
