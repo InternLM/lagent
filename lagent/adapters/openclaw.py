@@ -136,6 +136,8 @@ class OpenClawAdapter(CLIAgentAdapter):
             cli_args.extend(['--agent', self.agent_id])
         if self._cli_session_id:
             cli_args.extend(['--session-id', self._cli_session_id])
+        if self.timeout:
+            cli_args.extend(['--timeout', str(self.timeout)])
         cli_args.extend(self.extra_args)
 
         if self.nvm_dir:
@@ -187,25 +189,32 @@ class OpenClawAdapter(CLIAgentAdapter):
                 }
             ]
 
+        provider_config = {
+            'baseUrl': base_url,
+            'apiKey': '$OPENAI_API_KEY',
+            'api': os.environ.get('OPENCLAW_PROVIDER_API', 'openai-completions'),
+            'models': [
+                {
+                    'id': self.model,
+                    'name': self.model,
+                    'reasoning': True,
+                    'input': ['text'],
+                    'contextWindow': int(os.environ.get('OPENCLAW_CONTEXT_WINDOW', '128000')),
+                    'maxTokens': int(os.environ.get('OPENCLAW_MAX_TOKENS', '16384')),
+                }
+            ],
+        }
+        # OpenClaw aborts a model request when no response chunks arrive before the idle window.
+        # https://docs.openclaw.ai/concepts/agent-loop#timeouts
+        provider_timeout = os.environ.get('OPENCLAW_PROVIDER_TIMEOUT_SECONDS', "1200")
+        if provider_timeout:
+            provider_config['timeoutSeconds'] = int(provider_timeout)
+
         config = {
             'models': {
                 'mode': 'merge',
                 'providers': {
-                    self.provider: {
-                        'baseUrl': base_url,
-                        'apiKey': '$OPENAI_API_KEY',
-                        'api': os.environ.get('OPENCLAW_PROVIDER_API', 'openai-completions'),
-                        'models': [
-                            {
-                                'id': self.model,
-                                'name': self.model,
-                                'reasoning': True,
-                                'input': ['text'],
-                                'contextWindow': int(os.environ.get('OPENCLAW_CONTEXT_WINDOW', '128000')),
-                                'maxTokens': int(os.environ.get('OPENCLAW_MAX_TOKENS', '16384')),
-                            }
-                        ],
-                    }
+                    self.provider: provider_config,
                 },
             },
             'agents': agents,
