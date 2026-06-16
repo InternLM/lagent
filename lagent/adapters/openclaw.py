@@ -62,6 +62,7 @@ class OpenClawAdapter(CLIAgentAdapter):
 
     def __init__(
         self,
+        model: str,
         thinking: str = 'medium',
         agent_id: Optional[str] = 'main',
         json_output: bool = True,
@@ -73,12 +74,14 @@ class OpenClawAdapter(CLIAgentAdapter):
         kwargs.setdefault('name', 'openclaw')
         kwargs.setdefault('description', 'OpenClaw personal AI assistant')
         super().__init__(binary=binary, **kwargs)
+        self.model = model
         self.thinking = thinking
         self.agent_id = agent_id
         self.json_output = json_output
         self.nvm_dir = nvm_dir
         self.node_version = node_version
         self._cli_session_id: Optional[str] = None
+        self._write_openclaw_config()
 
     def setup(self) -> None:
         if self.nvm_dir:
