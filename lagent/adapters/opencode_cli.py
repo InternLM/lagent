@@ -35,11 +35,19 @@ class OpenCodeCLIAdapter(CLIAgentAdapter):
         share: str = "disabled",
         autoupdate: bool = False,
         opencode_home: str = "/tmp/opencode-home",
+        cwd: Optional[str] = None,
         binary: str = "opencode",
         **kwargs,
     ):
         kwargs.setdefault('name', 'opencode-cli')
         kwargs.setdefault('description', 'OpenCode (CLI mode)')
+        if cwd is not None:
+            working_dir = kwargs.get('working_dir')
+            if working_dir is not None and working_dir != cwd:
+                raise ValueError(
+                    'Specify only one of cwd and working_dir, or use the same value.'
+                )
+            kwargs['working_dir'] = cwd
         super().__init__(binary=binary, **kwargs)
         self.model = model
         self.provider = provider
