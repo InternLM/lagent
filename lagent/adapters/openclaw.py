@@ -25,9 +25,11 @@ into the subprocess env.
 
 Usage::
 
+    # Set OPENAI_BASE_URL / OPENAI_API_KEY, or pass ``proxy=...`` and let
+    # the adapter inject them into the OpenClaw subprocess.
     from lagent.adapters.openclaw import OpenClawAdapter
 
-    agent = OpenClawAdapter(thinking='medium', timeout=120)
+    agent = OpenClawAdapter(model='gpt-4o-mini', thinking='medium', timeout=120)
     r1 = await agent("What is 2+2?")
     r2 = await agent("Now multiply by 3")  # multi-turn via --session-id
 """
@@ -35,6 +37,8 @@ Usage::
 import json
 import os
 import shlex
+import shutil
+from pathlib import Path
 from typing import List, Optional
 
 from .cli_adapter import CLIAgentAdapter
@@ -44,12 +48,15 @@ class OpenClawAdapter(CLIAgentAdapter):
     """Wraps the ``openclaw`` CLI as an :class:`AsyncExternalAgent`.
 
     Args:
+        model: Model id exposed by the configured OpenAI-compatible backend.
         thinking: Thinking level (``off`` / ``minimal`` / ``low`` /
             ``medium`` / ``high`` / ``xhigh``).
         agent_id: OpenClaw agent id (``--agent``). Default: ``"main"``.
         json_output: Pass ``--json`` and parse the JSON envelope to
             extract ``sessionId`` (multi-turn) and the reply text.
             Default: True.
+        openclaw_home: OpenClaw state/config directory. Default:
+            ``OPENCLAW_HOME`` / ``OPENCLAW_STATE_DIR`` / ``~/.openclaw``.
         nvm_dir: If set, wrap the spawn in ``bash -lc`` and source
             ``$nvm_dir/nvm.sh`` before invoking ``openclaw``. Use this
             when the binary is provided by nvm and not on PATH.
@@ -66,6 +73,7 @@ class OpenClawAdapter(CLIAgentAdapter):
         thinking: str = 'medium',
         agent_id: Optional[str] = 'main',
         json_output: bool = True,
+        openclaw_home: Optional[str] = None,
         nvm_dir: Optional[str] = None,
         node_version: str = '22',
         binary: str = 'openclaw',
@@ -74,14 +82,34 @@ class OpenClawAdapter(CLIAgentAdapter):
         kwargs.setdefault('name', 'openclaw')
         kwargs.setdefault('description', 'OpenClaw personal AI assistant')
         super().__init__(binary=binary, **kwargs)
+        if not model:
+            raise ValueError('OpenClawAdapter requires `model`.')
         self.model = model
         self.thinking = thinking
         self.agent_id = agent_id
         self.json_output = json_output
         self.nvm_dir = nvm_dir
         self.node_version = node_version
+        self.provider = 'custom-openai'
+        self.openclaw_home = Path(
+            openclaw_home
+            or self.env_vars.get('OPENCLAW_HOME')
+            or self.env_vars.get('OPENCLAW_STATE_DIR')
+            or os.environ.get('OPENCLAW_HOME')
+            or os.environ.get('OPENCLAW_STATE_DIR')
+            or Path.home() / '.openclaw'
+        ).expanduser()
+        self.openclaw_config_path = Path(
+            self.env_vars.get('OPENCLAW_CONFIG_PATH')
+            or os.environ.get('OPENCLAW_CONFIG_PATH')
+            or self.openclaw_home / 'openclaw.json'
+        ).expanduser()
+        self.env_vars.setdefault('OPENCLAW_HOME', str(self.openclaw_home))
+        self.env_vars.setdefault('OPENCLAW_STATE_DIR', str(self.openclaw_home))
+        self.env_vars.setdefault('OPENCLAW_CONFIG_PATH', str(self.openclaw_config_path))
+        self.env_vars.setdefault('NO_COLOR', '1')
         self._cli_session_id: Optional[str] = None
-        self._write_openclaw_config()
+        self._runtime_config_written = False
 
     def setup(self) -> None:
         if self.nvm_dir:
@@ -94,6 +122,11 @@ class OpenClawAdapter(CLIAgentAdapter):
                 )
             return
         super().setup()
+
+    async def run_external_async(self, task: str, **kwargs) -> str:
+        # 关键点：SessionClient 的端口在 forward() 里启动后才确定，因此配置必须运行前写。
+        self._write_openclaw_config()
+        return await super().run_external_async(task, **kwargs)
 
     def _build_argv(self, task: str) -> List[str]:
         cli_args = ['agent', '--local', '--message', task, '--thinking', self.thinking]
@@ -122,6 +155,73 @@ class OpenClawAdapter(CLIAgentAdapter):
     def reset_session(self) -> None:
         """Forget the captured session id; the next call starts fresh."""
         self._cli_session_id = None
+
+    def _write_openclaw_config(self) -> None:
+        env = self._build_env()
+        base_url = (env.get('OPENAI_BASE_URL') or '').rstrip('/')
+        api_key = env.get('OPENAI_API_KEY')
+        if not base_url:
+            raise RuntimeError(
+                'OpenClawAdapter needs OPENAI_BASE_URL in subprocess env.'
+            )
+        if not api_key:
+            raise RuntimeError(
+                'OpenClawAdapter needs OPENAI_API_KEY in subprocess env.'
+            )
+
+        agent_id = self.agent_id or 'main'
+        model_ref = f'{self.provider}/{self.model}'
+        workspace = self.working_dir or os.environ.get('TASK_WORKSPACE') or os.getcwd()
+        agents = {
+            'defaults': {
+                'model': {'primary': model_ref},
+                'workspace': workspace,
+            }
+        }
+        if agent_id != 'main':
+            agents['list'] = [
+                {
+                    'id': agent_id,
+                    'model': {'primary': model_ref},
+                    'workspace': workspace,
+                }
+            ]
+
+        config = {
+            'models': {
+                'mode': 'merge',
+                'providers': {
+                    self.provider: {
+                        'baseUrl': base_url,
+                        'apiKey': '$OPENAI_API_KEY',
+                        'api': os.environ.get('OPENCLAW_PROVIDER_API', 'openai-completions'),
+                        'models': [
+                            {
+                                'id': self.model,
+                                'name': self.model,
+                                'reasoning': True,
+                                'input': ['text'],
+                                'contextWindow': int(os.environ.get('OPENCLAW_CONTEXT_WINDOW', '128000')),
+                                'maxTokens': int(os.environ.get('OPENCLAW_MAX_TOKENS', '16384')),
+                            }
+                        ],
+                    }
+                },
+            },
+            'agents': agents,
+        }
+
+        self.openclaw_config_path.parent.mkdir(parents=True, exist_ok=True)
+        self.openclaw_config_path.write_text(
+            json.dumps(config, indent=2, ensure_ascii=False),
+            encoding='utf-8',
+        )
+
+        if not self._runtime_config_written:
+            sessions_dir = self.openclaw_home / 'agents' / agent_id / 'sessions'
+            shutil.rmtree(sessions_dir, ignore_errors=True)
+            sessions_dir.mkdir(parents=True, exist_ok=True)
+            self._runtime_config_written = True
 
     def _default_parse(self, stdout: str, stderr: str) -> str:
         if not self.json_output:
