@@ -113,9 +113,9 @@ class BaseExternalAgent(Agent):
             session_key = f"sk-proxy-{self.session_id}"
             env.update(
                 {
-                    'OPENAI_BASE_URL': self.proxy.url,
+                    'OPENAI_BASE_URL': self.proxy.openai_base_url,
                     'OPENAI_API_KEY': session_key,
-                    'ANTHROPIC_BASE_URL': self.proxy.url,
+                    'ANTHROPIC_BASE_URL': self.proxy.anthropic_base_url,
                     'ANTHROPIC_API_KEY': session_key,
                 }
             )

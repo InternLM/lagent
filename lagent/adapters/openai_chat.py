@@ -104,7 +104,7 @@ class OpenAIChatAdapter(SDKAgentAdapter):
             session_key = f"sk-proxy-{self.session_id}"
             client = AsyncOpenAI(
                 api_key=session_key,
-                base_url=self.proxy.url + '/v1',
+                base_url=self.proxy.openai_base_url,
             )
         else:
             client = agent  # use the original client

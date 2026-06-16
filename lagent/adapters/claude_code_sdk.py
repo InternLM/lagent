@@ -140,7 +140,7 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         if self.proxy:
             session_key = f"sk-proxy-{self.session_id}"
             env = options.env or {}
-            env.update({'ANTHROPIC_BASE_URL': self.proxy.url, 'ANTHROPIC_API_KEY': session_key})
+            env.update({'ANTHROPIC_BASE_URL': self.proxy.anthropic_base_url, 'ANTHROPIC_API_KEY': session_key})
             options.env = env
 
         # Collect messages

@@ -111,7 +111,7 @@ class OpenAIAgentsAdapter(SDKAgentAdapter):
         if self.proxy:
             session_key = f"sk-proxy-{self.session_id}"
             client_kwargs['api_key'] = session_key
-            client_kwargs['base_url'] = self.proxy.url + '/v1'
+            client_kwargs['base_url'] = self.proxy.openai_base_url
             # No http_proxy needed for local proxy
             client_kwargs.pop('http_client', None)
 

@@ -20,7 +20,7 @@ Usage::
     await proxy.start()
 
     # Configure your agent's LLM client to hit the proxy:
-    # OPENAI_BASE_URL = proxy.url
+    # OPENAI_BASE_URL = proxy.openai_base_url
     #
     # Retrieve the deduplicated chat paths later:
     trajectories = proxy.get_messages()
@@ -265,8 +265,18 @@ class SessionClient:
 
     @property
     def url(self) -> str:
-        """The proxy base URL that external agents should use."""
+        """The raw proxy endpoint."""
         return f"http://127.0.0.1:{self.port}"
+
+    @property
+    def openai_base_url(self) -> str:
+        """OpenAI-compatible API base URL exposed by this proxy."""
+        return f"{self.url}/v1"
+
+    @property
+    def anthropic_base_url(self) -> str:
+        """Anthropic-compatible API base URL exposed by this proxy."""
+        return self.url
 
     @property
     def is_running(self) -> bool:
