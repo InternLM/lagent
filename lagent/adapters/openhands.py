@@ -37,7 +37,11 @@ import asyncio
 import os
 from typing import Any, Dict, List, Optional
 
+from lagent.utils import get_logger
+
 from .base import AsyncExternalAgent
+
+logger = get_logger(__name__, 'info')
 
 # Friendly tool name -> (module, attribute) for the built-in openhands-tools.
 # Anything not listed here is passed straight to ``Tool(name=...)`` as an
@@ -79,6 +83,14 @@ class OpenHandsAdapter(AsyncExternalAgent):
         usage_id: Identifier for LLM usage/metrics tracking. Default: name.
         max_iterations: Max agent iterations per ``run()``. Default: 500.
         stuck_detection: Enable OpenHands stuck detection. Default: True.
+        send_reasoning_content: Re-send ``reasoning_content`` on every assistant
+            *history* turn, not just the freshly generated one (interleaved
+            thinking). Default: True. Keeps a turn's reasoning consistent between
+            when it is generated and when it is replayed as history — which both
+            makes interleaved thinking effective and lets proxy trajectory dedup
+            recognize the prefix chain. No-op for models that never emit
+            ``reasoning_content``, and skipped for Anthropic extended-thinking
+            models (they carry reasoning as signed ``thinking_blocks`` instead).
         persistence_dir: Directory to persist the conversation event log.
         conversation_id: Fixed conversation id — a ``uuid.UUID`` or a uuid
             string (coerced for you). Default: auto.
@@ -100,6 +112,7 @@ class OpenHandsAdapter(AsyncExternalAgent):
         usage_id: Optional[str] = None,
         max_iterations: int = 500,
         stuck_detection: bool = True,
+        send_reasoning_content: bool = True,
         persistence_dir: Optional[str] = None,
         conversation_id: Optional[str] = None,
         verbose: bool = False,
@@ -120,6 +133,7 @@ class OpenHandsAdapter(AsyncExternalAgent):
         self.usage_id = usage_id or self.name
         self.max_iterations = max_iterations
         self.stuck_detection = stuck_detection
+        self.send_reasoning_content = send_reasoning_content
         self.persistence_dir = persistence_dir
         self.conversation_id = conversation_id
         self.verbose = verbose
@@ -178,7 +192,41 @@ class OpenHandsAdapter(AsyncExternalAgent):
             if self.base_url:
                 llm_args['base_url'] = self.base_url
 
-        return LLM(**llm_args)
+        llm = LLM(**llm_args)
+        if self.send_reasoning_content:
+            self._enable_reasoning_replay(llm)
+        return llm
+
+    @staticmethod
+    def _enable_reasoning_replay(llm) -> None:
+        """Make OpenHands re-send ``reasoning_content`` on every assistant *history*
+        turn (interleaved thinking), not only the freshly generated one.
+
+        OpenHands gates this on ``send_reasoning_content``, which it derives solely
+        from a built-in model allowlist (``SEND_REASONING_CONTENT_MODELS``) with no
+        LLM-level override. We register this model in that allowlist — the most
+        targeted lever (flips only this one capability, only for this model) — vs.
+        faking ``model_canonical_name``, which would also perturb unrelated
+        capability lookups (context window, string serializer, ...).
+
+        Skipped for Anthropic extended-thinking models: they carry reasoning as
+        signed ``thinking_blocks`` (preserved separately, with the
+        ``interleaved-thinking`` beta header), so forcing the ``reasoning_content``
+        field on them is wrong. Best-effort: never breaks LLM construction.
+        """
+        try:
+            from openhands.sdk.llm.utils import model_features as mf
+
+            name = getattr(llm, 'model_canonical_name', None) or getattr(llm, 'model', None)
+            if not name:
+                return
+            if mf.get_features(name).supports_extended_thinking:
+                return
+            if not mf.model_matches(name, mf.SEND_REASONING_CONTENT_MODELS):
+                mf.SEND_REASONING_CONTENT_MODELS.append(name)
+                logger.info(f"Enabled reasoning_content replay (interleaved thinking) for model {name!r}")
+        except Exception as exc:  # capability tweak is best-effort, never fatal
+            logger.warning(f"Could not enable reasoning_content replay: {type(exc).__name__}: {exc}")
 
     def _build_conversation(self):
         from openhands.sdk import Agent, Conversation, Event
