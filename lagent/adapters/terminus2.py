@@ -121,6 +121,8 @@ class Terminus2Adapter(AsyncExternalAgent):
         if not self.model:
             raise RuntimeError("Terminus2Adapter requires model or RL_LLM_MODEL.")
 
+        self.model = _ensure_provider_prefix(self.model)
+
         if self.proxy is None:
             raise RuntimeError(
                 "Terminus2Adapter requires a SessionClient proxy: all LLM calls are "
@@ -343,6 +345,33 @@ def _json_safe(value: Any) -> Any:
         return value
     except TypeError:
         return json.loads(json.dumps(value, ensure_ascii=False, default=str))
+
+
+def _ensure_provider_prefix(model: str) -> str:
+    """Prefix ``openai/`` when ``model`` carries no explicit LiteLLM provider route.
+
+    LiteLLM dispatches by a ``provider/model`` prefix. A bare name
+    (``deepseek-v4-flash``) or a HuggingFace-style id (``deepseek-ai/DeepSeek-V3``)
+    has no provider, so it is routed through the OpenAI-compatible path that
+    fronts the proxy. A model whose first ``/``-segment is already a known LiteLLM
+    provider (``openai/...``, ``anthropic/...``) is returned unchanged, making
+    this idempotent.
+
+    Args:
+        model (str): The configured model name.
+
+    Returns:
+        str: ``model`` unchanged when it already starts with a known LiteLLM
+            provider, else ``"openai/" + model``.
+    """
+    if not model:
+        return model
+    import litellm
+
+    providers = {str(getattr(p, "value", p)) for p in litellm.provider_list}
+    if model.split("/", 1)[0] in providers:
+        return model
+    return f"openai/{model}"
 
 
 @contextmanager
