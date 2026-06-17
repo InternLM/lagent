@@ -73,6 +73,21 @@ def _canonical_content(content: Any) -> Any:
         # turn as history. Treat it as absent so the prefix chain collapses.
         return content if content.strip() else None
     if isinstance(content, list):
+        # A list whose blocks are all plain text is token-equivalent to the
+        # concatenated string form: a freshly generated string ``content`` is
+        # replayed by the client as ``[{"type": "text", "text": ...}]`` history.
+        # Collapse to the joined text (and reuse the whitespace-as-absent rule)
+        # so the two shapes prefix-match.
+        texts = []
+        for block in content:
+            keys = (block.keys() - set(_NON_TOKENIZED_KEYS)) if isinstance(block, dict) else None
+            if keys is not None and block.get('type') == 'text' and keys <= {'type', 'text'}:
+                texts.append(block.get('text') or '')
+            else:
+                break
+        else:
+            joined = ''.join(texts)
+            return joined if joined.strip() else None
         parts = []
         for block in content:
             if isinstance(block, dict):
@@ -86,9 +101,9 @@ def _canonical_msg(msg: Any) -> tuple:
     """Project a message onto the fields the model actually conditions on.
 
     Used as the comparison basis for prefix dedup so that volatile, non-tokenized
-    metadata (cache breakpoints, etc.) does not stop a true prefix from matching.
-    Fields that DO reach the tokenizer (tool-call ids, arguments, reasoning) are
-    deliberately retained.
+    metadata (cache breakpoints, string-vs-text-block content shape, etc.) does not
+    stop a true prefix from matching. Fields that DO reach the tokenizer (tool-call
+    ids, arguments, reasoning) are deliberately retained.
     """
     if not isinstance(msg, dict):
         return ('raw', json.dumps(msg, sort_keys=True, ensure_ascii=False))
@@ -529,14 +544,11 @@ class SessionClient:
             if raw_msg.get(field) is None:
                 continue
             val = copy.deepcopy(raw_msg[field])
-            if field == "tool_calls":
-                for tc in val:
-                    if tc.get("type") == "function" and "function" in tc:
-                        tc["function"]["arguments"] = _maybe_json_loads(tc["function"].get("arguments"))
-            elif field == "function_call":
+            if field == "function_call":
                 val["arguments"] = _maybe_json_loads(val.get("arguments"))
             assistant_msg[field] = val
         messages.append(assistant_msg)
+        _normalize_tool_call_arguments(messages)
         return messages, request_data.get('tools')
 
     @staticmethod
