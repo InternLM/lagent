@@ -20,7 +20,6 @@ from typing import Any
 
 _HEADER_FMT = "!I"
 _HEADER_SIZE = struct.calcsize(_HEADER_FMT)
-_MAX_MSG_SIZE = 64 * 1024 * 1024
 
 
 class DaemonCallError(RuntimeError):
@@ -49,8 +48,6 @@ async def _async_call(sock: str, payload: bytes) -> str:
 
         header = await reader.readexactly(_HEADER_SIZE)
         (length,) = struct.unpack(_HEADER_FMT, header)
-        if length > _MAX_MSG_SIZE:
-            raise DaemonCallError(f"daemon response too large: {length} bytes")
         raw = await reader.readexactly(length)
         return raw.decode()
     finally:
