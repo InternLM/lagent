@@ -38,7 +38,6 @@ import os
 from typing import Any, Dict, List, Optional
 
 from lagent.utils import get_logger
-
 from .base import AsyncExternalAgent
 
 logger = get_logger(__name__, 'info')
@@ -68,8 +67,7 @@ class OpenHandsAdapter(AsyncExternalAgent):
     plays nicely inside an async event loop (and alongside the proxy server).
 
     Args:
-        model: LiteLLM model string (``provider/model``). Default:
-            ``$LLM_MODEL`` or ``"anthropic/claude-sonnet-4-5-20250929"``.
+        model: LiteLLM model string (``provider/model``). Default: ``$LLM_MODEL``.
         api_key: LLM API key. Default: ``$LLM_API_KEY``. Ignored when a
             ``proxy`` is attached (the session key is injected instead).
         base_url: Custom LLM base URL. Default: ``$LLM_BASE_URL``. Ignored
@@ -125,7 +123,10 @@ class OpenHandsAdapter(AsyncExternalAgent):
         kwargs.setdefault('description', 'OpenHands software agent')
         super().__init__(**kwargs)
 
-        self.model = model or os.getenv('LLM_MODEL', 'anthropic/claude-sonnet-4-5-20250929')
+        self.model = model or os.getenv('LLM_MODEL')
+        if isinstance(self.model, str) and not self.model.startswith(('openai/', 'anthropic/')):
+            logger.info(f"Model {self.model!r} missing provider prefix, assuming OpenAI")
+            self.model = f"openai/{self.model}"
         self.api_key = api_key or os.getenv('LLM_API_KEY')
         self.base_url = base_url or os.getenv('LLM_BASE_URL')
         self.tools = _DEFAULT_TOOLS if tools is None else tools
