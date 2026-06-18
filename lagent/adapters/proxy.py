@@ -60,6 +60,15 @@ def _is_lmdeploy_input_length_error(response_data: dict[str, Any]) -> bool:
 
 _NON_TOKENIZED_KEYS = ('cache_control',)
 _TOKENIZED_MSG_KEYS = ('tool_call_id', 'name', 'reasoning_content', 'function_call', 'refusal')
+_OPENAI_REASONING_DELTA_KEYS = ('reasoning_content', 'reasoning', 'thinking')
+
+
+def _extract_openai_reasoning_delta(delta: dict[str, Any]) -> Optional[str]:
+    for key in _OPENAI_REASONING_DELTA_KEYS:
+        value = delta.get(key)
+        if value:
+            return value if isinstance(value, str) else json.dumps(value, sort_keys=True, ensure_ascii=False)
+    return None
 
 
 def _canonical_content(content: Any) -> Any:
@@ -113,9 +122,7 @@ def _canonical_msg(msg: Any) -> tuple:
         norm = []
         for tc in tool_calls:
             fn = (tc.get('function') or {}) if isinstance(tc, dict) else {}
-            args = fn.get('arguments')
-            if isinstance(args, (dict, list)):
-                args = json.dumps(args, sort_keys=True, ensure_ascii=False)
+            args = _canonical_tool_arguments(fn.get('arguments'))
             # Keep the id: it is serialized into the prompt the model conditions on.
             norm.append((tc.get('id') if isinstance(tc, dict) else None, fn.get('name'), args))
         key.append(('tool_calls', tuple(norm)))
@@ -177,6 +184,13 @@ def _maybe_json_loads(value):
         return json.loads(value)
     except json.JSONDecodeError:
         return value
+
+
+def _canonical_tool_arguments(args):
+    parsed = _maybe_json_loads(args)
+    if isinstance(parsed, (dict, list)):
+        return json.dumps(parsed, sort_keys=True, ensure_ascii=False)
+    return args
 
 
 def _normalize_tool_call_arguments(messages) -> None:
@@ -535,10 +549,7 @@ class SessionClient:
         raw_msg = response_data['choices'][0]['message']
         assistant_msg = {"role": raw_msg.get("role", "assistant")}
         # Only keep pure standard OpenAI fields to prevent contamination.
-        # ``reasoning_content`` supports o1 and future reasoning models natively.
         allowed_fields = ["content", "tool_calls", "function_call", "refusal"]
-        if "reasoning_content" in raw_msg:
-            allowed_fields.append("reasoning_content")
 
         for field in allowed_fields:
             if raw_msg.get(field) is None:
@@ -547,6 +558,9 @@ class SessionClient:
             if field == "function_call":
                 val["arguments"] = _maybe_json_loads(val.get("arguments"))
             assistant_msg[field] = val
+        reasoning_content = _extract_openai_reasoning_delta(raw_msg)
+        if reasoning_content:
+            assistant_msg["reasoning_content"] = reasoning_content
         messages.append(assistant_msg)
         _normalize_tool_call_arguments(messages)
         return messages, request_data.get('tools')
@@ -637,8 +651,9 @@ class SessionClient:
 
                 if delta.get('content'):
                     content_parts.append(delta['content'])
-                if delta.get('reasoning_content'):
-                    reasoning_content_parts.append(delta['reasoning_content'])
+                reasoning_delta = _extract_openai_reasoning_delta(delta)
+                if reasoning_delta:
+                    reasoning_content_parts.append(reasoning_delta)
 
                 for tc_delta in delta.get('tool_calls') or []:
                     idx = tc_delta.get('index', 0)
