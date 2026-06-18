@@ -122,7 +122,9 @@ def _canonical_msg(msg: Any) -> tuple:
         norm = []
         for tc in tool_calls:
             fn = (tc.get('function') or {}) if isinstance(tc, dict) else {}
-            args = _canonical_tool_arguments(fn.get('arguments'))
+            args = fn.get('arguments')
+            if isinstance(args, (dict, list)):
+                args = json.dumps(args, sort_keys=True, ensure_ascii=False)
             # Keep the id: it is serialized into the prompt the model conditions on.
             norm.append((tc.get('id') if isinstance(tc, dict) else None, fn.get('name'), args))
         key.append(('tool_calls', tuple(norm)))
@@ -184,13 +186,6 @@ def _maybe_json_loads(value):
         return json.loads(value)
     except json.JSONDecodeError:
         return value
-
-
-def _canonical_tool_arguments(args):
-    parsed = _maybe_json_loads(args)
-    if isinstance(parsed, (dict, list)):
-        return json.dumps(parsed, sort_keys=True, ensure_ascii=False)
-    return args
 
 
 def _normalize_tool_call_arguments(messages) -> None:
