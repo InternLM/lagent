@@ -55,6 +55,10 @@ class OpenClawAdapter(CLIAgentAdapter):
         json_output: Pass ``--json`` and parse the JSON envelope to
             extract ``sessionId`` (multi-turn) and the reply text.
             Default: True.
+        skip_bootstrap: Skip OpenClaw's first-run identity ritual by
+            removing ``BOOTSTRAP.md`` and pre-seeding ``IDENTITY.md`` /
+            ``USER.md``. Default: True (recommended for headless /
+            programmatic use).
         openclaw_home: OpenClaw state/config directory. Default:
             ``OPENCLAW_HOME`` / ``OPENCLAW_STATE_DIR`` / ``~/.openclaw``.
         nvm_dir: If set, wrap the spawn in ``bash -lc`` and source
@@ -73,6 +77,7 @@ class OpenClawAdapter(CLIAgentAdapter):
         thinking: str = 'medium',
         agent_id: Optional[str] = 'main',
         json_output: bool = True,
+        skip_bootstrap: bool = True,
         openclaw_home: Optional[str] = None,
         nvm_dir: Optional[str] = None,
         node_version: str = '22',
@@ -88,6 +93,7 @@ class OpenClawAdapter(CLIAgentAdapter):
         self.thinking = thinking
         self.agent_id = agent_id
         self.json_output = json_output
+        self.skip_bootstrap = skip_bootstrap
         self.nvm_dir = nvm_dir
         self.node_version = node_version
         self.provider = 'custom-openai'
@@ -158,6 +164,49 @@ class OpenClawAdapter(CLIAgentAdapter):
         """Forget the captured session id; the next call starts fresh."""
         self._cli_session_id = None
 
+    _IDENTITY_TEMPLATE_MARKER = 'Fill this in during your first conversation'
+    _USER_TEMPLATE_MARKER = '_Learn about the person you'
+    _MINIMAL_IDENTITY = """\
+# IDENTITY.md - Who Am I?
+
+- **Name:** OpenClaw
+- **Creature:** AI assistant
+- **Vibe:** Helpful and direct
+- **Emoji:** 🤖
+"""
+    _MINIMAL_USER = """\
+# USER.md - About Your Human
+
+- **Name:** User
+- **What to call them:** User
+"""
+
+    def _prepare_workspace(self, workspace: str) -> None:
+        """Remove bootstrap ritual files so headless calls skip onboarding."""
+        if not self.skip_bootstrap:
+            return
+
+        root = Path(workspace).expanduser()
+        bootstrap = root / 'BOOTSTRAP.md'
+        if bootstrap.is_file():
+            bootstrap.unlink()
+
+        identity = root / 'IDENTITY.md'
+        if identity.is_file():
+            text = identity.read_text(encoding='utf-8')
+            if self._IDENTITY_TEMPLATE_MARKER in text:
+                identity.write_text(self._MINIMAL_IDENTITY, encoding='utf-8')
+        else:
+            identity.write_text(self._MINIMAL_IDENTITY, encoding='utf-8')
+
+        user = root / 'USER.md'
+        if user.is_file():
+            text = user.read_text(encoding='utf-8')
+            if self._USER_TEMPLATE_MARKER in text:
+                user.write_text(self._MINIMAL_USER, encoding='utf-8')
+        else:
+            user.write_text(self._MINIMAL_USER, encoding='utf-8')
+
     def _write_openclaw_config(self) -> None:
         env = self._build_env()
         base_url = (env.get('OPENAI_BASE_URL') or '').rstrip('/')
@@ -174,6 +223,7 @@ class OpenClawAdapter(CLIAgentAdapter):
         agent_id = self.agent_id or 'main'
         model_ref = f'{self.provider}/{self.model}'
         workspace = self.working_dir or os.environ.get('TASK_WORKSPACE') or os.getcwd()
+        self._prepare_workspace(workspace)
         agents = {
             'defaults': {
                 'model': {'primary': model_ref},
