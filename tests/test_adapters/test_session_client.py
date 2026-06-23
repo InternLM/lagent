@@ -9,6 +9,29 @@ import pytest
 from lagent.adapters.proxy import SessionClient
 
 
+def test_parse_openai_stream_after_initial_metadata_event():
+    chunks = [
+        {"id": "meta-only", "model": "test-model"},
+        {
+            "id": "chatcmpl-test",
+            "object": "chat.completion.chunk",
+            "choices": [{"delta": {"role": "assistant", "content": "ok"}, "finish_reason": None}],
+        },
+        {
+            "id": "chatcmpl-test",
+            "object": "chat.completion.chunk",
+            "choices": [{"delta": {}, "finish_reason": "stop"}],
+        },
+    ]
+    raw = b"".join(f"data: {json.dumps(chunk)}\n\n".encode() for chunk in chunks) + b"data: [DONE]\n\n"
+
+    parsed = SessionClient._parse_stream_response(raw)
+
+    assert parsed is not None
+    assert parsed["choices"][0]["message"]["content"] == "ok"
+    assert parsed["choices"][0]["finish_reason"] == "stop"
+
+
 @pytest.mark.asyncio
 async def test_session_client_openai():
     # 1. Start the proxy

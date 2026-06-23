@@ -601,13 +601,19 @@ class SessionClient:
         if not events:
             return None
 
-        # Detect format: Responses API events start with "response.";
-        # OpenAI ChatCompletion has "choices"; Anthropic uses message_start / content_block_*
-        first = events[0]
-        evt_type = first.get('type', '')
-        if evt_type.startswith('response.') or first.get('object') == 'response':
+        # Detect format across the whole stream. Some OpenAI-compatible
+        # clients/providers emit an initial metadata event before the first
+        # chunk with ``choices``; looking only at events[0] would misclassify
+        # those streams as Anthropic and drop the trace.
+        if any(
+            (event.get('type', '').startswith('response.') or event.get('object') == 'response')
+            for event in events
+        ):
             return SessionClient._parse_responses_stream(events)
-        if 'choices' in first or first.get('object') == 'chat.completion.chunk':
+        if any(
+            ('choices' in event or event.get('object') == 'chat.completion.chunk')
+            for event in events
+        ):
             return SessionClient._parse_openai_stream(events, saw_done=saw_done)
         return SessionClient._parse_anthropic_stream(events)
 
