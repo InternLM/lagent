@@ -32,10 +32,14 @@ def _call_json(sock: str, payload: dict[str, Any]) -> dict[str, Any] | list:
         obj = json.loads(raw or "{}")
     except json.JSONDecodeError as exc:
         raise DaemonCallError(f"invalid daemon response: {exc}: {raw}") from exc
-    if isinstance(obj, dict) and obj.get("error"):
-        raise DaemonCallError(str(obj["error"]))
     if not isinstance(obj, (dict, list)):
         raise DaemonCallError(f"daemon response must be a JSON object or array, got {type(obj).__name__}")
+    if isinstance(obj, dict):
+        if obj.get("error"):
+            raise DaemonCallError(str(obj["error"]))
+        extra_info = obj.get("extra_info")
+        if isinstance(extra_info, dict) and extra_info.get("error"):
+            raise DaemonCallError(str(extra_info["error"]))
     return obj
 
 
