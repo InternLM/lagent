@@ -31,6 +31,7 @@ Usage::
 import copy
 import json
 import os
+import re
 import uuid
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
@@ -61,6 +62,7 @@ def _is_lmdeploy_input_length_error(response_data: dict[str, Any]) -> bool:
 _NON_TOKENIZED_KEYS = ('cache_control',)
 _TOKENIZED_MSG_KEYS = ('tool_call_id', 'name', 'reasoning_content', 'function_call', 'refusal')
 _OPENAI_REASONING_DELTA_KEYS = ('reasoning_content', 'reasoning', 'thinking')
+_OPENCLAW_TOOL_CALL_ID_RE = re.compile(r'^call_?([0-9a-fA-F]{8,})$')
 
 
 def _extract_openai_reasoning_delta(delta: dict[str, Any]) -> Optional[str]:
@@ -106,6 +108,18 @@ def _canonical_content(content: Any) -> Any:
     return json.dumps(content, sort_keys=True, ensure_ascii=False)
 
 
+def _canonical_tool_call_id(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    # OpenClaw currently replays history with the underscore in OpenAI-style
+    # tool call ids stripped (`call_<hex>` -> `call<hex>`). Normalize only that
+    # narrow generated-id shape for prefix matching; do not drop the id.
+    match = _OPENCLAW_TOOL_CALL_ID_RE.fullmatch(value)
+    if match:
+        return f"call_{match.group(1).lower()}"
+    return value
+
+
 def _canonical_msg(msg: Any) -> tuple:
     """Project a message onto the fields the model actually conditions on.
 
@@ -126,11 +140,19 @@ def _canonical_msg(msg: Any) -> tuple:
             if isinstance(args, (dict, list)):
                 args = json.dumps(args, sort_keys=True, ensure_ascii=False)
             # Keep the id: it is serialized into the prompt the model conditions on.
-            norm.append((tc.get('id') if isinstance(tc, dict) else None, fn.get('name'), args))
+            norm.append(
+                (
+                    _canonical_tool_call_id(tc.get('id')) if isinstance(tc, dict) else None,
+                    fn.get('name'),
+                    args,
+                )
+            )
         key.append(('tool_calls', tuple(norm)))
     for field in _TOKENIZED_MSG_KEYS:
         val = msg.get(field)
         if val:
+            if field == 'tool_call_id':
+                val = _canonical_tool_call_id(val)
             key.append((field, val if isinstance(val, str) else json.dumps(val, sort_keys=True, ensure_ascii=False)))
     return tuple(key)
 

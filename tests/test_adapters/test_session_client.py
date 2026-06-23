@@ -9,6 +9,100 @@ import pytest
 from lagent.adapters.proxy import SessionClient
 
 
+def test_get_messages_normalizes_openclaw_tool_call_id_underscore_loss():
+    proxy = SessionClient(
+        real_api_key="EMPTY",
+        real_base_url="http://example.test/v1",
+        session_id="openclaw_id_replay",
+    )
+    short = {
+        "messages": [
+            {"role": "user", "content": "write files"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call_a45f453d817e4c0cbc5ec29d",
+                        "type": "function",
+                        "function": {"name": "bash", "arguments": {"cmd": "pwd"}},
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_a45f453d817e4c0cbc5ec29d", "content": "/app"},
+            {"role": "assistant", "content": "done"},
+        ],
+        "tools": None,
+    }
+    long = {
+        "messages": [
+            {"role": "user", "content": "write files"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "calla45f453d817e4c0cbc5ec29d",
+                        "type": "function",
+                        "function": {"name": "bash", "arguments": {"cmd": "pwd"}},
+                    }
+                ],
+            },
+            {"role": "tool", "tool_call_id": "calla45f453d817e4c0cbc5ec29d", "content": "/app"},
+            {"role": "assistant", "content": "done"},
+            {"role": "user", "content": "next"},
+        ],
+        "tools": None,
+    }
+    proxy._records[proxy.session_id] = [short, long]
+
+    assert proxy.get_messages() == [long]
+
+
+def test_get_messages_keeps_distinct_tool_call_ids_distinct():
+    proxy = SessionClient(
+        real_api_key="EMPTY",
+        real_base_url="http://example.test/v1",
+        session_id="distinct_tool_ids",
+    )
+    first = {
+        "messages": [
+            {"role": "user", "content": "write files"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "call_a45f453d817e4c0cbc5ec29d",
+                        "type": "function",
+                        "function": {"name": "bash", "arguments": {"cmd": "pwd"}},
+                    }
+                ],
+            },
+        ],
+        "tools": None,
+    }
+    second = {
+        "messages": [
+            {"role": "user", "content": "write files"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "call_b45f453d817e4c0cbc5ec29d",
+                        "type": "function",
+                        "function": {"name": "bash", "arguments": {"cmd": "pwd"}},
+                    }
+                ],
+            },
+            {"role": "user", "content": "next"},
+        ],
+        "tools": None,
+    }
+    proxy._records[proxy.session_id] = [first, second]
+
+    assert proxy.get_messages() == [first, second]
+
+
 @pytest.mark.asyncio
 async def test_session_client_openai():
     # 1. Start the proxy
