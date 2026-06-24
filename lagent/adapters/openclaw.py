@@ -36,10 +36,12 @@ Usage::
 
 import json
 import os
+import re
 import shlex
 import shutil
+import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .cli_adapter import CLIAgentAdapter
 
@@ -116,6 +118,36 @@ class OpenClawAdapter(CLIAgentAdapter):
         self.env_vars.setdefault('NO_COLOR', '1')
         self._cli_session_id: Optional[str] = None
         self._runtime_config_written = False
+        self._openclaw_version: Optional[Tuple[int, int, int]] = None
+
+    @staticmethod
+    def _parse_openclaw_version(text: str) -> Optional[Tuple[int, int, int]]:
+        match = re.search(r'OpenClaw\s+(\d+)\.(\d+)\.(\d+)', text)
+        if not match:
+            return None
+        return tuple(int(part) for part in match.groups())
+
+    def _detect_openclaw_version(self) -> Optional[Tuple[int, int, int]]:
+        if self._openclaw_version is not None:
+            return self._openclaw_version
+        try:
+            proc = subprocess.run(
+                [self.binary, '--version'],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            text = (proc.stdout or proc.stderr or '').strip()
+            self._openclaw_version = self._parse_openclaw_version(text)
+        except (OSError, subprocess.SubprocessError):
+            self._openclaw_version = None
+        return self._openclaw_version
+
+    def _supports_provider_timeout_seconds(self) -> bool:
+        """``models.providers.*.timeoutSeconds`` landed in 2026.4.26."""
+        version = self._detect_openclaw_version()
+        return version is not None and version >= (2026, 4, 26)
 
     def setup(self) -> None:
         if self.nvm_dir:
@@ -254,10 +286,10 @@ class OpenClawAdapter(CLIAgentAdapter):
                 }
             ],
         }
-        # OpenClaw aborts a model request when no response chunks arrive before the idle window.
-        # https://docs.openclaw.ai/concepts/agent-loop#timeouts
+        # Provider-scoped HTTP timeout is only valid on OpenClaw >= 2026.4.26.
+        # Agent run ceiling is handled separately via ``--timeout`` in _build_argv.
         provider_timeout = os.environ.get('OPENCLAW_PROVIDER_TIMEOUT_SECONDS', "1200")
-        if provider_timeout:
+        if provider_timeout and self._supports_provider_timeout_seconds():
             provider_config['timeoutSeconds'] = int(provider_timeout)
 
         config = {
