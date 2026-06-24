@@ -139,6 +139,7 @@ class OpenClawAdapter(CLIAgentAdapter):
                 check=False,
             )
             text = (proc.stdout or proc.stderr or '').strip()
+            print(f"openclaw version: {text}")
             self._openclaw_version = self._parse_openclaw_version(text)
         except (OSError, subprocess.SubprocessError):
             self._openclaw_version = None
@@ -195,6 +196,32 @@ class OpenClawAdapter(CLIAgentAdapter):
     def reset_session(self) -> None:
         """Forget the captured session id; the next call starts fresh."""
         self._cli_session_id = None
+
+    @staticmethod
+    def _load_openclaw_json(text: str) -> Optional[dict]:
+        """Load an OpenClaw JSON envelope from stdout or mixed stderr logs."""
+        stripped = text.strip()
+        if not stripped:
+            return None
+        try:
+            data = json.loads(stripped)
+            return data if isinstance(data, dict) else None
+        except json.JSONDecodeError:
+            pass
+
+        decoder = json.JSONDecoder()
+        fallback = None
+        for match in re.finditer(r'\{', stripped):
+            try:
+                data, _ = decoder.raw_decode(stripped[match.start():])
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(data, dict):
+                continue
+            if 'payloads' in data or 'meta' in data:
+                return data
+            fallback = data
+        return fallback
 
     _IDENTITY_TEMPLATE_MARKER = 'Fill this in during your first conversation'
     _USER_TEMPLATE_MARKER = '_Learn about the person you'
@@ -318,9 +345,14 @@ class OpenClawAdapter(CLIAgentAdapter):
         if not self.json_output:
             return stdout.strip()
 
-        try:
-            data = json.loads(stdout.strip())
-        except json.JSONDecodeError:
+        # 低版本 OpenClaw 在某些错误路径会 exit 0、stdout 为空，并把 JSON envelope
+        # 混在 stderr 日志后面；不能把这种情况静默解析成空字符串。
+        data = self._load_openclaw_json(stdout)
+        parsed_from_stderr = False
+        if data is None and not stdout.strip():
+            data = self._load_openclaw_json(stderr)
+            parsed_from_stderr = data is not None
+        if data is None:
             return stdout.strip()
 
         if not isinstance(data, dict):
@@ -352,11 +384,15 @@ class OpenClawAdapter(CLIAgentAdapter):
             ]
             joined = '\n'.join(p for p in parts if p)
             if joined:
+                if parsed_from_stderr and 'isError=true' in stderr:
+                    raise RuntimeError(f'OpenClaw error: {joined}')
                 return joined
 
         for key in ('reply', 'message', 'response', 'output', 'text', 'result', 'content'):
             value = data.get(key)
             if isinstance(value, str) and value:
+                if parsed_from_stderr and 'isError=true' in stderr:
+                    raise RuntimeError(f'OpenClaw error: {value}')
                 return value
             if isinstance(value, list):
                 blocks = [
@@ -365,5 +401,9 @@ class OpenClawAdapter(CLIAgentAdapter):
                 ]
                 joined = '\n'.join(b for b in blocks if b)
                 if joined:
+                    if parsed_from_stderr and 'isError=true' in stderr:
+                        raise RuntimeError(f'OpenClaw error: {joined}')
                     return joined
+        if parsed_from_stderr and stderr.strip():
+            raise RuntimeError(f'OpenClaw error: {stderr.strip()[:2000]}')
         return json.dumps(data, ensure_ascii=False)
