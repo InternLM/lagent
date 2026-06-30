@@ -13,7 +13,6 @@ keeps ``import lagent.adapters`` working.
 """
 
 from __future__ import annotations
-
 import asyncio
 import copy
 import json
@@ -26,7 +25,6 @@ from typing import Any, Dict, List, Optional
 
 from lagent.agents.agent import Agent
 from lagent.utils import create_object
-
 from .base import AsyncExternalAgent
 
 
@@ -245,94 +243,9 @@ class Terminus2Adapter(AsyncExternalAgent):
         return "Terminus2 finished."
 
     def get_messages(self) -> List[Dict[str, list]]:
-        """Get the latest conversation messages for this session.
-        If a sequence of messages is a prefix of another sequence and tools match, it will be filtered out.
+        """Return the LLM trace recorded by the proxy (empty if no proxy)."""
+        return self.proxy.get_messages() if self.proxy else []
 
-        Returns:
-            List of message sequences.
-        """
-        records = list(self.proxy._records.get(self.session_id, []))
-        if not records:
-            return []
-
-        # Volatile fields are written by the server on response (e.g.
-        # ``reasoning_content``) but the client strips them before echoing on
-        # the next turn.  Within a single record they appear only on the tail
-        # assistant message; in the (longer) record of the next turn the same
-        # position carries no volatile fields, since it now comes from the
-        # client's request side.  We therefore (1) compare records under a
-        # normalized form that ignores volatile fields, and (2) before
-        # discarding a prefix record, merge its tail volatile fields into the
-        # surviving longer record at the same index, so per-turn reasoning
-        # content is preserved.
-        _VOLATILE_FIELDS = ("reasoning_content",)
-
-        def _norm_msg(m):
-            if not isinstance(m, dict):
-                return m
-            if not any(f in m for f in _VOLATILE_FIELDS):
-                return m
-            return {k: v for k, v in m.items() if k not in _VOLATILE_FIELDS}
-
-        def _norm_seq(seq):
-            return [_norm_msg(m) for m in seq]
-
-        normalized = [_norm_seq(rec.get("messages", [])) for rec in records]
-
-        n = len(records)
-        is_prefix_of: List[Optional[int]] = [None] * n
-        for i in range(n):
-            seq_i = normalized[i]
-            tools_i = records[i].get("tools")
-            for j in range(n):
-                if i == j:
-                    continue
-                seq_j = normalized[j]
-                tools_j = records[j].get("tools")
-                if tools_i != tools_j:
-                    continue
-                if len(seq_i) == len(seq_j) and seq_i == seq_j:
-                    if i < j:
-                        is_prefix_of[i] = j
-                        break
-                elif len(seq_i) < len(seq_j) and seq_j[: len(seq_i)] == seq_i:
-                    is_prefix_of[i] = j
-                    break
-
-        kept_indices = [i for i in range(n) if is_prefix_of[i] is None]
-        kept_records = {i: copy.deepcopy(records[i]) for i in kept_indices}
-
-        # Merge volatile fields from each dropped prefix's tail into the kept
-        # ancestor at the same position.  Walk parent chain to skip over
-        # intermediate prefixes that are themselves dropped.
-        for i in range(n):
-            if is_prefix_of[i] is None:
-                continue
-            anc = is_prefix_of[i]
-            while anc is not None and is_prefix_of[anc] is not None:
-                anc = is_prefix_of[anc]
-            if anc is None:
-                continue
-            src_msgs = records[i].get("messages") or []
-            if not src_msgs:
-                continue
-            tail_idx = len(src_msgs) - 1
-            src_tail = src_msgs[tail_idx]
-            if not isinstance(src_tail, dict):
-                continue
-            volatile = {k: src_tail[k] for k in _VOLATILE_FIELDS if k in src_tail}
-            if not volatile:
-                continue
-            dst_msgs = kept_records[anc].get("messages") or []
-            if tail_idx >= len(dst_msgs):
-                continue
-            dst_msg = dst_msgs[tail_idx]
-            if not isinstance(dst_msg, dict):
-                continue
-            for field, value in volatile.items():
-                dst_msg.setdefault(field, copy.deepcopy(value))
-
-        return [kept_records[i] for i in kept_indices]
 
 # ─────────────────────────────────────────────────────────────────────
 # Module-private helpers
