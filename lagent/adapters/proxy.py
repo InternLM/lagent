@@ -136,42 +136,42 @@ def _canonical_msg(msg: Any) -> tuple:
 
 
 def _anthropic_response_to_assistant_message(response: dict[str, Any]) -> dict[str, Any]:
-    content_blocks: list[dict[str, Any]] = response.get("content") or []
+    content_blocks: list[dict[str, Any]] = response.get('content') or []
 
     normalized: list[dict[str, Any]] = []
 
     for block in content_blocks:
-        block_type = block.get("type")
+        block_type = block.get('type')
 
-        if block_type == "text":
-            text = block.get("text", "")
-            normalized.append({"type": "text", "text": text})
+        if block_type == 'text':
+            text = block.get('text', '')
+            normalized.append({'type': 'text', 'text': text})
 
-        elif block_type == "thinking":
+        elif block_type == 'thinking':
             # Anthropic API 要求原样回传 thinking block（含 signature）
-            normalized_block: dict[str, Any] = {"type": "thinking", "thinking": block.get("thinking", "")}
+            normalized_block: dict[str, Any] = {'type': 'thinking', 'thinking': block.get('thinking', '')}
             # 若 API 返回了 signature 字段（真实 Anthropic 云端会附带），保留它
-            if "signature" in block:
-                normalized_block["signature"] = block["signature"]
+            if 'signature' in block:
+                normalized_block['signature'] = block['signature']
             normalized.append(normalized_block)
 
-        elif block_type == "tool_use":
+        elif block_type == 'tool_use':
             # 必须原样回传，id/name/input 缺一不可
-            tool_id = block.get("id")
-            name = block.get("name")
-            input_ = block.get("input", {})
+            tool_id = block.get('id')
+            name = block.get('name')
+            input_ = block.get('input', {})
 
             if not tool_id:
                 raise ValueError(f"tool_use block is missing 'id': {block}")
             if not name:
                 raise ValueError(f"tool_use block is missing 'name': {block}")
 
-            normalized.append({"type": "tool_use", "id": tool_id, "name": name, "input": input_})
+            normalized.append({'type': 'tool_use', 'id': tool_id, 'name': name, 'input': input_})
         else:
             logger.warning(f"Skipping unmodeled response content block type '{block_type}'")
             continue
 
-    return {"role": "assistant", "content": normalized}
+    return {'role': 'assistant', 'content': normalized}
 
 
 def _maybe_json_loads(value):
@@ -305,7 +305,7 @@ class SessionClient:
         self._site = None
         self._runner = None
         self._app = None
-        logger.info("LLM proxy stopped")
+        logger.info('LLM proxy stopped')
 
     async def _handle_request(self, request: web.Request) -> web.Response:
         """Proxy handler: extract session, forward, record, return."""
@@ -467,7 +467,7 @@ class SessionClient:
                 return response
 
             messages, tools = built
-            self._records[self.session_id].append({"messages": messages, "tools": tools})
+            self._records[self.session_id].append({'messages': messages, 'tools': tools})
             logger.debug(
                 f"Updated messages for session {self.session_id}: {len(self._records[self.session_id])} traces total"
             )
@@ -527,7 +527,7 @@ class SessionClient:
 
         raw_input = request_data['input']
         if isinstance(raw_input, str):
-            messages = [{"role": "user", "content": raw_input}]
+            messages = [{'role': 'user', 'content': raw_input}]
         elif isinstance(raw_input, list):
             messages = raw_input
         else:
@@ -551,21 +551,25 @@ class SessionClient:
             return None
 
         messages = request_data.get('messages', [])
-        raw_msg = response_data['choices'][0]['message']
-        assistant_msg = {"role": raw_msg.get("role", "assistant")}
+        choice = response_data['choices'][0]
+        raw_msg = choice['message']
+        assistant_msg = {'role': raw_msg.get('role', 'assistant')}
         # Only keep pure standard OpenAI fields to prevent contamination.
-        allowed_fields = ["content", "tool_calls", "function_call", "refusal"]
+        allowed_fields = ['content', 'tool_calls', 'function_call', 'refusal']
 
         for field in allowed_fields:
             if raw_msg.get(field) is None:
                 continue
             val = copy.deepcopy(raw_msg[field])
-            if field == "function_call":
-                val["arguments"] = _maybe_json_loads(val.get("arguments"))
+            if field == 'function_call':
+                val['arguments'] = _maybe_json_loads(val.get('arguments'))
             assistant_msg[field] = val
         reasoning_content = _extract_openai_reasoning_delta(raw_msg)
         if reasoning_content:
-            assistant_msg["reasoning_content"] = reasoning_content
+            assistant_msg['reasoning_content'] = reasoning_content
+        finish_reason = choice.get('finish_reason')
+        if finish_reason is not None:
+            assistant_msg['finish_reason'] = finish_reason
         messages.append(assistant_msg)
         _normalize_tool_call_arguments(messages)
         return messages, request_data.get('tools')
@@ -697,13 +701,13 @@ class SessionClient:
 
         # Stream completeness checks (mirror model.py).
         if not saw_choice:
-            logger.warning("OpenAI stream ended without any choices")
+            logger.warning('OpenAI stream ended without any choices')
             return None
         if not saw_done:
-            logger.warning("OpenAI stream ended without [DONE] terminator")
+            logger.warning('OpenAI stream ended without [DONE] terminator')
             return None
         if not message['choices'][0].get('finish_reason'):
-            logger.warning("OpenAI stream ended without terminal finish_reason")
+            logger.warning('OpenAI stream ended without terminal finish_reason')
             return None
 
         msg = message['choices'][0]['message']
@@ -938,7 +942,7 @@ class SessionClient:
                 saw_message_stop = True
 
         if not saw_message_stop:
-            logger.warning("Anthropic stream ended without message_stop")
+            logger.warning('Anthropic stream ended without message_stop')
             return None
 
         # Assemble final message
@@ -970,7 +974,7 @@ class SessionClient:
 
         # Precompute one canonical key per record; comparing hashable tuples is
         # both cheaper and robust to volatile fields.
-        keyed = [(rec, tuple(_canonical_msg(m) for m in rec.get("messages", []))) for rec in records]
+        keyed = [(rec, tuple(_canonical_msg(m) for m in rec.get('messages', []))) for rec in records]
 
         filtered = []
         for i, (rec_i, key_i) in enumerate(keyed):
@@ -981,7 +985,7 @@ class SessionClient:
 
                 # Tools are rendered into the prompt: different tools => different
                 # trajectory, never a prefix.
-                if rec_i.get("tools") != rec_j.get("tools"):
+                if rec_i.get('tools') != rec_j.get('tools'):
                     continue
 
                 # Exactly identical (canonically): keep the one with the higher index.
