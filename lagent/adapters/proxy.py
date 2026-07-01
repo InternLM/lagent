@@ -45,6 +45,35 @@ from lagent.utils import ctx_session_id, get_logger
 logger = get_logger(__name__, 'info')
 
 
+# anthropic_beta flags to forward to the (possibly Bedrock-backed) upstream.
+# The Claude Code SDK injects flags Bedrock rejects (e.g. ``claude-code-*``,
+# ``oauth-*``), which surface as ``ValidationException: invalid beta flag`` on
+# InvokeModelWithResponseStream. We forward only this allowlist and drop the
+# rest. ``interleaved-thinking-2025-05-14`` is kept so the model keeps emitting
+# reasoning between tool calls. Override via the env var (comma-separated).
+_FORWARD_ANTHROPIC_BETAS = {
+    s.strip()
+    for s in os.environ.get(
+        "PROXY_ANTHROPIC_BETA_ALLOWLIST",
+        "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+    ).split(",")
+    if s.strip()
+}
+
+# Top-level Anthropic body fields the Claude Code CLI injects that some backends
+# (e.g. Bedrock) reject with "Extra inputs are not permitted". Dropped on the
+# /messages path; lmdeploy ignores them anyway (MessagesRequest extra='allow').
+# ``context_management`` is the CLI's server-side context-editing field.
+_DROP_ANTHROPIC_BODY_FIELDS = {
+    s.strip()
+    for s in os.environ.get(
+        "PROXY_ANTHROPIC_DROP_FIELDS",
+        "context_management",
+    ).split(",")
+    if s.strip()
+}
+
+
 def _is_lmdeploy_input_length_error(response_data: dict[str, Any]) -> bool:
     """Detect lmdeploy's INPUT_LENGTH_ERROR sentinel in an Anthropic response."""
     for block in response_data.get('content') or []:
@@ -350,6 +379,19 @@ class SessionClient:
             request_data['session_id'] = self.session_id
             if is_anthropic:
                 request_data['provider'] = 'anthropic'
+                # Drop SDK-injected beta flags the upstream (e.g. Bedrock) rejects;
+                # keep only the allowlist (see _FORWARD_ANTHROPIC_BETAS).
+                betas = request_data.get('anthropic_beta')
+                if isinstance(betas, list):
+                    kept = [b for b in betas if b in _FORWARD_ANTHROPIC_BETAS]
+                    if kept:
+                        request_data['anthropic_beta'] = kept
+                    else:
+                        request_data.pop('anthropic_beta', None)
+                # Drop top-level body fields the upstream rejects (e.g. Bedrock's
+                # "context_management: Extra inputs are not permitted").
+                for _f in _DROP_ANTHROPIC_BODY_FIELDS:
+                    request_data.pop(_f, None)
             request_body = json.dumps(request_data).encode('utf-8')
 
         # By default we assume the incoming request is already in the target format
@@ -370,6 +412,13 @@ class SessionClient:
             forward_headers['x-api-key'] = self.real_api_key
         if is_anthropic:
             forward_headers['anthropic-version'] = '2023-06-01'
+            # Mirror the body filter on the anthropic-beta header (comma-joined).
+            for k in [h for h in forward_headers if h.lower() == 'anthropic-beta']:
+                kept = [v.strip() for v in forward_headers[k].split(',') if v.strip() in _FORWARD_ANTHROPIC_BETAS]
+                if kept:
+                    forward_headers[k] = ','.join(kept)
+                else:
+                    forward_headers.pop(k, None)
 
         # 5. Forward to real LLM
         # Build target URL, avoiding path duplication
