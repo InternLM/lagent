@@ -11,13 +11,13 @@ themselves when they need readiness.
 """
 
 from __future__ import annotations
-
 import asyncio
 import base64
 import logging
 import time
 from pathlib import Path
 from typing import Protocol, Tuple, runtime_checkable
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 import httpx
 
@@ -32,7 +32,9 @@ class SandboxClient:
     context manager, or explicitly ``await client.aclose()`` when done.
 
     Args:
-        url (str): Base URL of the sandbox HTTP API.
+        url (str): Base URL of the sandbox HTTP API. May carry query params
+            (e.g. ``http://host?token=...``); they are stripped off and applied
+            as default query params on every request.
         timeout (float): Default request timeout in seconds. Defaults to ``60``.
         max_connections (int): Max concurrent HTTP connections to the sandbox.
             Per-sandbox concurrency is normally 1-2, so the default of 32 is
@@ -46,9 +48,11 @@ class SandboxClient:
         timeout: float = 60.0,
         max_connections: int = 32,
     ):
-        self.url = url.rstrip("/")
+        parts = urlsplit(url.rstrip("/"))
+        self.url = urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
         self._client = httpx.AsyncClient(
             base_url=self.url,
+            params=dict(parse_qsl(parts.query)),
             headers={"Content-Type": "application/json"},
             timeout=timeout,
             limits=httpx.Limits(
