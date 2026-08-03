@@ -1,5 +1,6 @@
 import asyncio
 import random
+import re
 import threading
 import time
 import warnings
@@ -22,32 +23,61 @@ warnings.filterwarnings('ignore', category=ResourceWarning, module=r'aiohttp\.cl
 warnings.filterwarnings('ignore', category=ResourceWarning, module=r'anyio\._backends\._asyncio')
 
 _failure_log_lock = threading.Lock()
-_failure_log_last: dict[tuple[str, str, str], float] = {}
+_failure_log_state: dict[tuple[str, str, str], tuple[float, int]] = {}
 _FAILURE_LOG_INTERVAL_S = 60.0
+_FAILURE_LOG_DETAIL_LIMIT = 1200
+_CANCEL_SCOPE_RE = re.compile(r'(cancel scope) [0-9a-fA-F]+')
+_HEX_ADDRESS_RE = re.compile(r'0x[0-9a-fA-F]+')
 
 
-def _log_action_failure(action_name: str, exc: Exception) -> None:
+def _normalize_failure_detail(detail: str) -> str:
+    detail = _CANCEL_SCOPE_RE.sub(r'\1 <id>', detail)
+    return _HEX_ADDRESS_RE.sub('0x<id>', detail)
+
+
+def _format_failure_detail(exc: Exception) -> tuple[str, str]:
     parts = [f"{type(exc).__name__}: {exc}"]
+    type_parts = [type(exc).__name__]
+
     # Unwrap ExceptionGroup so the actual sub-exception is visible (anyio TaskGroup
     # wraps connect/read errors into ExceptionGroup which str()s to a useless summary).
     pending = list(getattr(exc, 'exceptions', ()) or ())
     while pending:
         sub = pending.pop(0)
         parts.append(f"  -> {type(sub).__name__}: {sub}")
+        type_parts.append(type(sub).__name__)
         pending.extend(getattr(sub, 'exceptions', ()) or ())
     cause = exc.__cause__ or exc.__context__
     if cause is not None and cause is not exc:
         parts.append(f"  caused by {type(cause).__name__}: {cause}")
-    detail = '\n'.join(parts)
+        type_parts.append(f"caused_by:{type(cause).__name__}")
 
-    key = (action_name, type(exc).__name__, detail[:256])
+    detail = _normalize_failure_detail('\n'.join(parts))
+    if len(detail) > _FAILURE_LOG_DETAIL_LIMIT:
+        detail = f"{detail[:_FAILURE_LOG_DETAIL_LIMIT]}\n  ... truncated"
+    return detail, '|'.join(type_parts)
+
+
+def _log_action_failure(action_name: str, exc: Exception) -> None:
+    detail, type_signature = _format_failure_detail(exc)
+    key = (action_name, type_signature, detail[:256])
     now = time.monotonic()
     with _failure_log_lock:
-        last = _failure_log_last.get(key, 0.0)
+        last, suppressed = _failure_log_state.get(key, (0.0, 0))
         if now - last < _FAILURE_LOG_INTERVAL_S:
+            _failure_log_state[key] = (last, suppressed + 1)
             return
-        _failure_log_last[key] = now
-    logger.warning('MCP Action %s failed:\n%s', action_name, detail)
+        _failure_log_state[key] = (now, 0)
+    if suppressed:
+        logger.warning(
+            'MCP Action %s failed (%d similar failures suppressed in the last %.0fs):\n%s',
+            action_name,
+            suppressed,
+            _FAILURE_LOG_INTERVAL_S,
+            detail,
+        )
+    else:
+        logger.warning('MCP Action %s failed:\n%s', action_name, detail)
 
 
 def _get_event_loop():
