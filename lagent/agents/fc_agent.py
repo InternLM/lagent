@@ -233,19 +233,33 @@ class EnvAgent(AsyncAgent):
 
     async def execute_tool(self, tool_call: dict) -> ActionReturn:
         tool_call, tool_call_id = deepcopy(tool_call), None
+        tool_name = None
+        fallback_args = {'tool_call': tool_call}
         try:
-            tool_call_id = tool_call.get('id')
+            tool_call_id = tool_call.get('id') if isinstance(tool_call, dict) else None
             if 'function' in tool_call:
                 tool_call = tool_call['function']
-            if tool_call['name'] not in self.actions:
+            if not isinstance(tool_call, dict):
+                raise TypeError(f'tool call must be a dict, got {type(tool_call).__name__}')
+            tool_name = tool_call.get('name')
+            fallback_args = {'tool_call': tool_call}
+            if tool_name not in self.actions:
                 return ActionReturn(
-                    valid=ActionValidCode.INVALID, errmsg=f'FunctionNotFindError: Tool {tool_call["name"]} Not Found'
+                    args=fallback_args,
+                    type=str(tool_name) if tool_name else 'unknown_tool',
+                    valid=ActionValidCode.INVALID,
+                    errmsg=f'FunctionNotFindError: Tool {tool_name} Not Found',
+                    tool_call_id=tool_call_id,
                 )
             if isinstance(tool_call['arguments'], str):
                 tool_call['arguments'] = json.loads(tool_call['arguments'])
         except Exception as e:
             return ActionReturn(
-                valid=ActionValidCode.INVALID, errmsg=f'JsonLoadError: Invalid tool call format: {str(e)}'
+                args=fallback_args,
+                type=str(tool_name) if tool_name else 'unknown_tool',
+                valid=ActionValidCode.INVALID,
+                errmsg=f'JsonLoadError: Invalid tool call format: {str(e)}',
+                tool_call_id=tool_call_id,
             )
         action = self.actions[tool_call['name']]
         tool_response: ActionReturn = await action(

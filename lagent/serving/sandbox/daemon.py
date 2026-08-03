@@ -30,7 +30,6 @@ Usage::
 from __future__ import annotations
 import argparse
 import asyncio
-import inspect
 import json
 import logging
 import os
@@ -38,12 +37,14 @@ import struct
 import sys
 from functools import reduce
 from operator import add
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING
 
-from lagent.actions.base_action import BaseAction
 from lagent.schema import ActionReturn, ActionStatusCode, AgentMessage, dataclass2dict
 from lagent.utils import create_object
 from lagent.utils.config import Config
+
+if TYPE_CHECKING:
+    from lagent.actions.base_action import BaseAction
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ logger = logging.getLogger(__name__)
 # Wire protocol helpers
 # ---------------------------------------------------------------------------
 
-_HEADER_FMT = "!I"  # 4-byte unsigned big-endian
+_HEADER_FMT = '!I'  # 4-byte unsigned big-endian
 _HEADER_SIZE = struct.calcsize(_HEADER_FMT)
 _MAX_MSG_SIZE = 64 * 1024 * 1024  # 64 MiB safety cap
 
@@ -62,7 +63,7 @@ async def _send_msg(writer: asyncio.StreamWriter, data: bytes) -> None:
     await writer.drain()
 
 
-async def _recv_msg(reader: asyncio.StreamReader) -> Optional[bytes]:
+async def _recv_msg(reader: asyncio.StreamReader) -> bytes | None:
     header = await reader.readexactly(_HEADER_SIZE)
     (length,) = struct.unpack(_HEADER_FMT, header)
     if length > _MAX_MSG_SIZE:
@@ -87,11 +88,11 @@ class BaseDaemon:
         Path for the Unix domain socket.
     """
 
-    daemon_type: str = "base"
+    daemon_type: str = 'base'
 
-    def __init__(self, sock_path: str = "/tmp/lagent_action.sock"):
+    def __init__(self, sock_path: str = '/tmp/lagent_action.sock'):
         self.sock_path = sock_path
-        self._server: Optional[asyncio.AbstractServer] = None
+        self._server: asyncio.AbstractServer | None = None
 
     async def start(self) -> None:
         """Start listening. Removes stale socket file if present."""
@@ -99,7 +100,7 @@ class BaseDaemon:
             os.unlink(self.sock_path)
         self._server = await asyncio.start_unix_server(self._handle_client, path=self.sock_path)
         os.chmod(self.sock_path, 0o777)
-        logger.info("%s listening on %s", self.__class__.__name__, self.sock_path)
+        logger.info('%s listening on %s', self.__class__.__name__, self.sock_path)
         await self._server.serve_forever()
 
     async def stop(self) -> None:
@@ -108,7 +109,7 @@ class BaseDaemon:
             await self._server.wait_closed()
         if os.path.exists(self.sock_path):
             os.unlink(self.sock_path)
-        logger.info("%s stopped", self.__class__.__name__)
+        logger.info('%s stopped', self.__class__.__name__)
 
     async def _handle_client(
         self,
@@ -123,9 +124,9 @@ class BaseDaemon:
         except asyncio.IncompleteReadError:
             pass
         except Exception as e:
-            logger.exception("Error handling client request")
+            logger.exception('Error handling client request')
             try:
-                await _send_msg(writer, json.dumps({"error": str(e)}).encode())
+                await _send_msg(writer, json.dumps({'error': str(e)}).encode())
             except Exception:
                 pass
         finally:
@@ -134,10 +135,10 @@ class BaseDaemon:
 
     async def _dispatch(self, request: dict) -> dict:
         """Handle a request. Override in subclasses for domain logic."""
-        cmd = request.get("cmd")
-        if cmd == "ping":
-            return {"status": "ok", "type": self.daemon_type}
-        if cmd == "shutdown":
+        cmd = request.get('cmd')
+        if cmd == 'ping':
+            return {'status': 'ok', 'type': self.daemon_type}
+        if cmd == 'shutdown':
 
             async def _delayed_close():
                 await asyncio.sleep(0.1)
@@ -145,8 +146,8 @@ class BaseDaemon:
                     self._server.close()
 
             asyncio.create_task(_delayed_close())
-            return {"status": "shutting_down"}
-        return {"error": f"Unknown command: {cmd}"}
+            return {'status': 'shutting_down'}
+        return {'error': f"Unknown command: {cmd}"}
 
 
 # ---------------------------------------------------------------------------
@@ -172,12 +173,12 @@ class ActionDaemon(BaseDaemon):
         Unix socket path.
     """
 
-    daemon_type = "action"
+    daemon_type = 'action'
 
     def __init__(
         self,
-        actions: Union[List[BaseAction], List[Dict]],
-        sock_path: str = "/tmp/lagent_action.sock",
+        actions: list[BaseAction] | list[dict],
+        sock_path: str = '/tmp/lagent_action.sock',
     ):
         super().__init__(sock_path=sock_path)
         for i, action in enumerate(actions):
@@ -189,18 +190,18 @@ class ActionDaemon(BaseDaemon):
                 self.actions[tool['function']['name']] = action
 
     async def _dispatch(self, request: dict) -> dict:
-        cmd = request.get("cmd")
+        cmd = request.get('cmd')
 
         # Common commands
-        if cmd in ("ping", "shutdown"):
+        if cmd in ('ping', 'shutdown'):
             return await super()._dispatch(request)
 
-        if cmd == "list_tools":
-            return {"tools": reduce(add, [action.to_openai_format_tools() for action in self.actions.values()])}
+        if cmd == 'list_tools':
+            return {'tools': reduce(add, [action.to_openai_format_tools() for action in self.actions.values()])}
 
         # Action call
-        name = request.get("name")
-        parameters = request.get("parameters", {})
+        name = request.get('name')
+        parameters = request.get('parameters', {})
         if not name:
             return dataclass2dict(
                 ActionReturn(
@@ -213,7 +214,7 @@ class ActionDaemon(BaseDaemon):
             action = self.actions[name]
             action_return = await action(parameters, name.rsplit('.', 1)[-1] if action.is_toolkit else 'run')
         except Exception as e:
-            logger.exception("Action %s failed", name)
+            logger.exception('Action %s failed', name)
             action_return = ActionReturn(
                 args=parameters,
                 type=name,
@@ -246,37 +247,37 @@ class SkillsDaemon(BaseDaemon):
         Unix socket path.
     """
 
-    daemon_type = "skills"
+    daemon_type = 'skills'
 
-    def __init__(self, skills_loader, sock_path: str = "/tmp/lagent_skills.sock"):
+    def __init__(self, skills_loader, sock_path: str = '/tmp/lagent_skills.sock'):
         super().__init__(sock_path=sock_path)
         self.skills = skills_loader
 
     async def _dispatch(self, request: dict) -> dict:
-        cmd = request.get("cmd")
+        cmd = request.get('cmd')
 
-        if cmd in ("ping", "shutdown"):
+        if cmd in ('ping', 'shutdown'):
             return await super()._dispatch(request)
 
-        if cmd == "list_skills":
-            filter_unavailable = request.get("filter_unavailable", True)
-            return {"skills": await self.skills.list_skills(filter_unavailable=filter_unavailable)}
+        if cmd == 'list_skills':
+            filter_unavailable = request.get('filter_unavailable', True)
+            return {'skills': await self.skills.list_skills(filter_unavailable=filter_unavailable)}
 
-        if cmd == "skills_summary":
-            return {"summary": await self.skills.build_skills_summary()}
+        if cmd == 'skills_summary':
+            return {'summary': await self.skills.build_skills_summary()}
 
-        if cmd == "load_skill":
-            content = await self.skills.load_skill(request.get("name", ""))
-            return {"content": content}
+        if cmd == 'load_skill':
+            content = await self.skills.load_skill(request.get('name', ''))
+            return {'content': content}
 
-        if cmd == "load_skills_for_context":
-            content = await self.skills.load_skills_for_context(request.get("names", []))
-            return {"content": content}
+        if cmd == 'load_skills_for_context':
+            content = await self.skills.load_skills_for_context(request.get('names', []))
+            return {'content': content}
 
-        if cmd == "get_always_skills":
-            return {"skills": await self.skills.get_always_skills()}
+        if cmd == 'get_always_skills':
+            return {'skills': await self.skills.get_always_skills()}
 
-        return {"error": f"Unknown command: {cmd}"}
+        return {'error': f"Unknown command: {cmd}"}
 
 
 # ---------------------------------------------------------------------------
@@ -308,70 +309,70 @@ class AgentDaemon(BaseDaemon):
         Unix socket path.
     """
 
-    daemon_type = "agent"
+    daemon_type = 'agent'
 
-    def __init__(self, agent, sock_path: str = "/tmp/lagent_action.sock"):
+    def __init__(self, agent, sock_path: str = '/tmp/lagent_action.sock'):
         super().__init__(sock_path=sock_path)
         self.agent = create_object(agent)
 
     async def _dispatch(self, request: dict) -> dict:
-        cmd = request.get("cmd")
+        cmd = request.get('cmd')
 
         # Common commands
-        if cmd in ("ping", "shutdown"):
+        if cmd in ('ping', 'shutdown'):
             return await super()._dispatch(request)
 
         # Tool introspection (via EnvAgent if available)
-        if cmd == "list_tools":
+        if cmd == 'list_tools':
             env = getattr(self.agent, 'env_agent', None)
             actions: dict = getattr(env, 'actions', None) if env else None
             if actions:
-                return {"tools": reduce(add, [action.to_openai_format_tools() for action in actions.values()])}
-            return {"tools": []}
+                return {'tools': reduce(add, [action.to_openai_format_tools() for action in actions.values()])}
+            return {'tools': []}
 
         # Agent commands
-        if cmd == "chat":
-            messages = request.get("messages", [])
+        if cmd == 'chat':
+            messages = request.get('messages', [])
             try:
                 response = await self.agent(*messages)
                 return self._serialize_agent_message(response)
             except Exception as e:
-                logger.exception("Agent chat failed")
-                return {"error": str(e)}
+                logger.exception('Agent chat failed')
+                return {'error': str(e)}
 
-        if cmd == "state_dict":
+        if cmd == 'state_dict':
             try:
-                return {"state_dict": self.agent.state_dict()}
+                return {'state_dict': self.agent.state_dict()}
             except Exception as e:
-                return {"error": str(e)}
+                return {'error': str(e)}
 
-        if cmd == "load_state_dict":
+        if cmd == 'load_state_dict':
             try:
-                self.agent.load_state_dict(request["state_dict"])
-                return {"status": "ok"}
+                self.agent.load_state_dict(request['state_dict'])
+                return {'status': 'ok'}
             except Exception as e:
-                return {"error": str(e)}
+                return {'error': str(e)}
 
-        if cmd == "reset":
+        if cmd == 'reset':
             try:
-                self.agent.reset(recursive=request.get("recursive", True))
-                return {"status": "ok"}
+                self.agent.reset(recursive=request.get('recursive', True))
+                return {'status': 'ok'}
             except Exception as e:
-                return {"error": str(e)}
+                return {'error': str(e)}
 
         if cmd == 'get_messages':
             try:
                 return self.agent.get_messages()
             except Exception as e:
-                return {"error": str(e)}
+                return {'error': str(e)}
 
-        return {"error": f"Unknown command: {cmd}"}
+        return {'error': f"Unknown command: {cmd}"}
 
     @staticmethod
     def _serialize_agent_message(msg: AgentMessage) -> dict:
         data = msg.model_dump()
         if isinstance(msg.content, ActionReturn):
-            data["content"] = dataclass2dict(msg.content)
+            data['content'] = dataclass2dict(msg.content)
         return data
 
 
@@ -405,10 +406,10 @@ async def async_lagent_call(sock_path: str, request_json: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _load_config(config_path: str, mode: str) -> Union[List[Dict], Dict]:
-    if config_path.endswith(".py"):
+def _load_config(config_path: str, mode: str) -> list[dict] | dict:
+    if config_path.endswith('.py'):
         cfg = Config.fromfile(config_path)
-        expected = "agent_config" if mode == "agent" else "actions"
+        expected = 'agent_config' if mode == 'agent' else 'actions'
         if expected not in cfg:
             raise KeyError(f"{expected!r} not defined in {config_path}")
         return cfg[expected]
@@ -418,69 +419,69 @@ def _load_config(config_path: str, mode: str) -> Union[List[Dict], Dict]:
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="lagent.actions.action_daemon",
-        description="Lagent Daemon: serve actions or agents over Unix socket",
+        prog='lagent.actions.action_daemon',
+        description='Lagent Daemon: serve actions or agents over Unix socket',
     )
-    sub = parser.add_subparsers(dest="command")
+    sub = parser.add_subparsers(dest='command')
 
     # -- start --
-    p_start = sub.add_parser("start", help="Start the daemon")
+    p_start = sub.add_parser('start', help='Start the daemon')
     p_start.add_argument(
-        "--sock",
-        default="/tmp/lagent_action.sock",
-        help="Unix socket path",
+        '--sock',
+        default='/tmp/lagent_action.sock',
+        help='Unix socket path',
     )
     p_start.add_argument(
-        "--mode",
-        choices=["actions", "agent"],
-        default="actions",
+        '--mode',
+        choices=['actions', 'agent'],
+        default='actions',
         help="'actions' for Level 1 (ActionDaemon), 'agent' for Level 2 (AgentDaemon)",
     )
     p_start.add_argument(
-        "--config",
-        help="Path to config: JSON (action list / agent dict) or Python file "
+        '--config',
+        help='Path to config: JSON (action list / agent dict) or Python file '
         "defining 'actions' (mode=actions) or 'agent_config' (mode=agent)",
     )
     # Backward compat
-    p_start.add_argument("--actions-config", help=argparse.SUPPRESS)
-    p_start.add_argument("--agent-config", help=argparse.SUPPRESS)
+    p_start.add_argument('--actions-config', help=argparse.SUPPRESS)
+    p_start.add_argument('--agent-config', help=argparse.SUPPRESS)
 
     # -- call --
-    p_call = sub.add_parser("call", help="Send a one-shot request")
-    p_call.add_argument("--sock", default="/tmp/lagent_action.sock")
-    p_call.add_argument("request", help="JSON request string")
+    p_call = sub.add_parser('call', help='Send a one-shot request')
+    p_call.add_argument('--sock', default='/tmp/lagent_action.sock')
+    p_call.add_argument('request', help='JSON request string')
 
     args = parser.parse_args()
 
-    if args.command == "start":
-        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    if args.command == 'start':
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)s %(message)s')
 
         # Handle backward compat flags
         mode = args.mode
         config_path = args.config
         if args.actions_config:
-            mode = "actions"
+            mode = 'actions'
             config_path = args.actions_config
         elif args.agent_config:
-            mode = "agent"
+            mode = 'agent'
             config_path = args.agent_config
 
         if not config_path:
-            parser.error("Must provide --config (or --actions-config / --agent-config)")
+            parser.error('Must provide --config (or --actions-config / --agent-config)')
 
         config = _load_config(config_path, mode)
 
-        if mode == "agent":
+        if mode == 'agent':
             daemon = AgentDaemon(agent=config, sock_path=args.sock)
         else:
             daemon = ActionDaemon(actions=config, sock_path=args.sock)
 
-        logger.info("Starting %s", daemon.__class__.__name__)
+        logger.info('Starting %s', daemon.__class__.__name__)
         try:
             asyncio.run(daemon.start())
         except (KeyboardInterrupt, asyncio.CancelledError):
-            logger.info("Interrupted, shutting down")
-    elif args.command == "call":
+            logger.info('Interrupted, shutting down')
+    elif args.command == 'call':
         result = lagent_call(args.sock, args.request)
         print(result, flush=True)
     else:
@@ -488,5 +489,5 @@ def main():
         sys.exit(1)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
