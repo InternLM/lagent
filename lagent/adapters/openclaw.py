@@ -34,9 +34,11 @@ Usage::
     r2 = await agent("Now multiply by 3")  # multi-turn via --session-id
 """
 
+import asyncio
 import json
 import os
 import re
+import signal
 import shlex
 import shutil
 import subprocess
@@ -165,7 +167,40 @@ class OpenClawAdapter(CLIAgentAdapter):
     async def run_external_async(self, task: str, **kwargs) -> str:
         # 关键点：SessionClient 的端口在 forward() 里启动后才确定，因此配置必须运行前写。
         self._write_openclaw_config()
-        return await super().run_external_async(task, **kwargs)
+        if not self.json_output:
+            return await super().run_external_async(task, **kwargs)
+
+        argv = self._build_argv(task)
+        env = self._build_env()
+        proc = await asyncio.create_subprocess_exec(
+            *argv,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=self.working_dir,
+            env=env,
+            start_new_session=True,
+        )
+
+        try:
+            stdout_b, stderr_b, stopped_after_final = await asyncio.wait_for(
+                self._communicate_until_final_json(proc), timeout=self.timeout
+            )
+        except asyncio.TimeoutError:
+            await self._terminate_openclaw_process_group(proc)
+            raise TimeoutError(f"`{self.binary}` timed out after {self.timeout}s")
+
+        stdout = stdout_b.decode('utf-8', errors='replace')
+        stderr = stderr_b.decode('utf-8', errors='replace')
+        if proc.returncode != 0 and not stopped_after_final:
+            raise RuntimeError(
+                f"`{self.binary}` exited with code {proc.returncode}.\n"
+                f"stderr: {stderr[:2000]}"
+            )
+
+        result = self.parse_output(stdout, stderr)
+        if isinstance(result, str) and len(result) > self.max_output_chars:
+            return result[: self.max_output_chars] + '\n...(truncated)'
+        return result
 
     def _build_argv(self, task: str) -> List[str]:
         cli_args = ['agent', '--local', '--message', task, '--thinking', self.thinking]
@@ -222,6 +257,102 @@ class OpenClawAdapter(CLIAgentAdapter):
                 return data
             fallback = data
         return fallback
+
+    def _has_final_json(self, stdout: str, stderr: str) -> bool:
+        data = self._load_openclaw_json(stdout)
+        if data is None and stderr.strip():
+            data = self._load_openclaw_json(stderr)
+        if not isinstance(data, dict):
+            return False
+
+        meta = data.get('meta') if isinstance(data.get('meta'), dict) else {}
+        text = meta.get('finalAssistantVisibleText') or meta.get('finalAssistantRawText')
+        if isinstance(text, str) and text:
+            return True
+
+        payloads = data.get('payloads')
+        if isinstance(payloads, list):
+            return any(
+                isinstance(p, dict) and isinstance(p.get('text'), str) and p.get('text')
+                for p in payloads
+            )
+        return False
+
+    async def _terminate_openclaw_process_group(
+        self,
+        proc: asyncio.subprocess.Process,
+        wait_task: Optional[asyncio.Task] = None,
+    ) -> None:
+        if proc.returncode is not None:
+            return
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        except OSError:
+            proc.terminate()
+
+        waiter = asyncio.shield(wait_task) if wait_task else proc.wait()
+        try:
+            await asyncio.wait_for(waiter, timeout=5)
+            return
+        except asyncio.TimeoutError:
+            pass
+
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return
+        except OSError:
+            proc.kill()
+        waiter = asyncio.shield(wait_task) if wait_task else proc.wait()
+        await waiter
+
+    async def _communicate_until_final_json(
+        self,
+        proc: asyncio.subprocess.Process,
+    ) -> tuple[bytes, bytes, bool]:
+        stdout_chunks: list[bytes] = []
+        stderr_chunks: list[bytes] = []
+
+        async def read_stream(stream, chunks: list[bytes]) -> None:
+            if stream is None:
+                return
+            while True:
+                chunk = await stream.read(65536)
+                if not chunk:
+                    return
+                chunks.append(chunk)
+
+        stdout_task = asyncio.create_task(read_stream(proc.stdout, stdout_chunks))
+        stderr_task = asyncio.create_task(read_stream(proc.stderr, stderr_chunks))
+        wait_task = asyncio.create_task(proc.wait())
+        stopped_after_final = False
+        try:
+            while not wait_task.done():
+                stdout = b''.join(stdout_chunks).decode('utf-8', errors='replace')
+                stderr = b''.join(stderr_chunks).decode('utf-8', errors='replace')
+                if self._has_final_json(stdout, stderr):
+                    # 关键流程：install-windows-3.11 会按任务要求保留 QEMU/nginx
+                    # 后台运行；OpenClaw 2026.4.20 在 final JSON 后仍持有后台
+                    # exec session，导致 CLI 不退出。只在 OpenClaw 已产出 final
+                    # envelope 后结束 OpenClaw 自身进程组，让 client_cli chat 写 rc。
+                    stopped_after_final = True
+                    await self._terminate_openclaw_process_group(proc, wait_task)
+                    break
+                await asyncio.sleep(0.2)
+
+            await wait_task
+            await asyncio.wait_for(
+                asyncio.gather(stdout_task, stderr_task),
+                timeout=5,
+            )
+        finally:
+            for task in (stdout_task, stderr_task, wait_task):
+                if not task.done():
+                    task.cancel()
+
+        return b''.join(stdout_chunks), b''.join(stderr_chunks), stopped_after_final
 
     _IDENTITY_TEMPLATE_MARKER = 'Fill this in during your first conversation'
     _USER_TEMPLATE_MARKER = '_Learn about the person you'
