@@ -12,6 +12,7 @@ from .lmdeploy_wrapper import (
 )
 from .meta_template import INTERNLM2_META
 from .openai import GPTAPI, AsyncGPTAPI
+from .deepseek import AsyncDeepSeekAPI, DeepSeekAPI
 from .sensenova import SensenovaAPI
 from .vllm_wrapper import AsyncVllmModel, VllmModel
 
@@ -22,6 +23,8 @@ __all__ = [
     'BaseAPILLM',
     'AsyncGPTAPI',
     'GPTAPI',
+    'DeepSeekAPI',
+    'AsyncDeepSeekAPI',
     'LMDeployClient',
     'AsyncLMDeployClient',
     'LMDeployPipeline',
