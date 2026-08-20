@@ -12,6 +12,7 @@ from .lmdeploy_wrapper import (
 )
 from .meta_template import INTERNLM2_META
 from .openai import GPTAPI, AsyncGPTAPI
+from .orcarouter import AsyncOrcaRouterAPI, OrcaRouterAPI
 from .sensenova import SensenovaAPI
 from .vllm_wrapper import AsyncVllmModel, VllmModel
 
@@ -22,6 +23,8 @@ __all__ = [
     'BaseAPILLM',
     'AsyncGPTAPI',
     'GPTAPI',
+    'AsyncOrcaRouterAPI',
+    'OrcaRouterAPI',
     'LMDeployClient',
     'AsyncLMDeployClient',
     'LMDeployPipeline',
