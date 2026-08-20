@@ -483,3 +483,35 @@ bot_msg = visualizer(user_msg)
 print(bot_msg.content)
 json.dump(visualizer.state_dict(), open('visualizer.json', 'w'), ensure_ascii=False, indent=4)
 ````
+
+### Using OrcaRouter
+
+[OrcaRouter](https://www.orcarouter.ai) is a gateway that exposes open-weight
+models from many vendors through a single OpenAI-compatible endpoint. Lagent
+provides named wrappers (`OrcaRouterAPI` / `AsyncOrcaRouterAPI`) that mirror the
+OpenAI wrappers with OrcaRouter defaults.
+
+Set the API key in the environment (keys start with `sk-orca-`):
+
+```bash
+export ORCAROUTER_API_KEY=sk-orca-your-key-here
+```
+
+Then instantiate the wrapper exactly like `GPTAPI`:
+
+```python
+from lagent.llms import OrcaRouterAPI, AsyncOrcaRouterAPI
+
+# Synchronous usage
+llm = OrcaRouterAPI(model_type='orcarouter/auto', retry=5, max_new_tokens=2048)
+
+# Asynchronous usage
+llm = AsyncOrcaRouterAPI(model_type='orcarouter/auto', retry=5, max_new_tokens=2048)
+```
+
+`orcarouter/auto` routes to a suitable open-weight model on the gateway. You can
+also use vendor-qualified model names exposed by the gateway, e.g.
+`deepseek/deepseek-v4-pro` or `openai/gpt-4o-mini`. The wrappers accept any
+model name containing a `/` and forward it verbatim, so you can also pass
+gateway aliases such as `orcarouter/fusion` or `orcarouter/free`.
+
