@@ -44,6 +44,31 @@ from lagent.utils import ctx_session_id, get_logger
 
 logger = get_logger(__name__, 'info')
 
+_ENDPOINT_ANTHROPIC_MESSAGES = 'anthropic_messages'
+_ENDPOINT_OPENAI_CHAT_COMPLETIONS = 'openai_chat_completions'
+_ENDPOINT_OPENAI_RESPONSES = 'openai_responses'
+
+
+def _normalize_path(req_path: str) -> str:
+    """Return a leading-slash path without a query string."""
+    return '/' + req_path.split('?', 1)[0].lstrip('/')
+
+
+def _classify_generation_endpoint(method: str, req_path: str) -> Optional[str]:
+    """Classify endpoints whose request/response pair should be recorded."""
+    path = _normalize_path(req_path)
+    method = method.upper()
+
+    if method != 'POST':
+        return None
+    if path.endswith('/v1/messages'):
+        return _ENDPOINT_ANTHROPIC_MESSAGES
+    if path.endswith('/v1/chat/completions'):
+        return _ENDPOINT_OPENAI_CHAT_COMPLETIONS
+    if path.endswith('/v1/responses'):
+        return _ENDPOINT_OPENAI_RESPONSES
+    return None
+
 
 # anthropic_beta flags to forward to the (possibly Bedrock-backed) upstream.
 # The Claude Code SDK injects flags Bedrock rejects (e.g. ``claude-code-*``,
@@ -360,6 +385,13 @@ class SessionClient:
 
     async def _handle_request(self, request: web.Request) -> web.Response:
         """Proxy handler: extract session, forward, record, return."""
+        req_path = request.match_info['path']
+        endpoint = _classify_generation_endpoint(request.method, req_path)
+        is_generation = endpoint is not None
+        path = _normalize_path(req_path)
+        is_anthropic = path.endswith('/v1/messages') or path.endswith('/v1/messages/count_tokens')
+        is_responses = endpoint == _ENDPOINT_OPENAI_RESPONSES
+
         # 1. Read request body
         request_body = await request.read()
         request_data = None
@@ -368,13 +400,8 @@ class SessionClient:
         except (json.JSONDecodeError, UnicodeDecodeError):
             pass
 
-        # Detect provider format by inspecting the requested endpoint
-        req_path = request.match_info['path']
-        is_anthropic = req_path.endswith('/messages') or '/v1/messages' in req_path
-        is_responses = req_path.endswith('/responses') or '/v1/responses' in req_path
-
         # 2. Inject session_id into request body
-        if isinstance(request_data, dict):
+        if is_generation and isinstance(request_data, dict):
             request_data.update(self.extra_body)
             request_data['session_id'] = self.session_id
             if is_anthropic:
@@ -413,12 +440,13 @@ class SessionClient:
         if is_anthropic:
             forward_headers['anthropic-version'] = '2023-06-01'
             # Mirror the body filter on the anthropic-beta header (comma-joined).
-            for k in [h for h in forward_headers if h.lower() == 'anthropic-beta']:
-                kept = [v.strip() for v in forward_headers[k].split(',') if v.strip() in _FORWARD_ANTHROPIC_BETAS]
-                if kept:
-                    forward_headers[k] = ','.join(kept)
-                else:
-                    forward_headers.pop(k, None)
+            if is_generation:
+                for k in [h for h in forward_headers if h.lower() == 'anthropic-beta']:
+                    kept = [v.strip() for v in forward_headers[k].split(',') if v.strip() in _FORWARD_ANTHROPIC_BETAS]
+                    if kept:
+                        forward_headers[k] = ','.join(kept)
+                    else:
+                        forward_headers.pop(k, None)
 
         # 5. Forward to real LLM
         # Build target URL, avoiding path duplication
@@ -485,6 +513,11 @@ class SessionClient:
                         },
                         body=raw_response,
                     )
+
+        # Non-generation endpoints are proxied without being interpreted as an
+        # assistant turn or entering the trajectory recorder.
+        if not is_generation:
+            return response
 
         # 6. Parse response for recording
         response_data = None
