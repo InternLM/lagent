@@ -13,36 +13,157 @@ Usage::
 
     # Or run the file directly (no package imports needed)
     python /path/to/lagent/serving/sandbox/server.py --port 8080
-"""
 
-from __future__ import annotations
+Set ``LAGENT_SANDBOX_TOKEN`` to require a matching ``?token=...`` query
+parameter or ``Authorization: Bearer ...`` header on every endpoint.
+"""
 
 import argparse
 import base64
+import hmac
 import json
 import logging
+import math
 import os
+import signal
 import subprocess
+import tempfile
+import threading
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 logger = logging.getLogger(__name__)
+
+
+def _authorized(path, authorization, token):
+    if not token:
+        return True
+    candidates = parse_qs(urlsplit(path).query).get("token", [])
+    scheme, _, value = (authorization or "").partition(" ")
+    if scheme.lower() == "bearer":
+        candidates.append(value)
+    return any(hmac.compare_digest(candidate.encode(), token.encode()) for candidate in candidates)
+
+
+def _signal_process_group(process, sig):
+    try:
+        os.killpg(process.pid, sig)
+    except ProcessLookupError:
+        pass
+
+
+def _execute_command(command, cwd="/root", timeout_sec=60, detach=False):
+    """Run Bash, keeping detached processes separate from HTTP request lifetime."""
+    try:
+        timeout = float(timeout_sec)
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError("timeout_sec must be finite and positive")
+        if not isinstance(detach, bool):
+            raise ValueError("detach must be a boolean")
+        process = subprocess.Popen(
+            ["/bin/bash", "-c", command],
+            cwd=cwd,
+            start_new_session=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL if detach else subprocess.PIPE,
+            stderr=subprocess.DEVNULL if detach else subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if detach:
+            # Reap the direct child without holding a request thread or output pipe.
+            threading.Thread(target=process.wait, daemon=True).start()
+            return {"ok": True, "stdout": "", "stderr": "", "return_code": 0, "pid": process.pid}
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _signal_process_group(process, signal.SIGTERM)
+            try:
+                process.communicate(timeout=0.5)
+            except subprocess.TimeoutExpired:
+                pass
+            finally:
+                # Also kill descendants which ignored TERM and closed their output pipes.
+                _signal_process_group(process, signal.SIGKILL)
+            stdout, stderr = process.communicate()
+            return {
+                "ok": False,
+                "stdout": stdout,
+                "stderr": stderr + f"\nCommand timed out after {timeout_sec}s",
+                "return_code": 124,
+            }
+        return {
+            "ok": process.returncode == 0,
+            "stdout": stdout,
+            "stderr": stderr,
+            "return_code": process.returncode,
+        }
+    except Exception as error:
+        return {"ok": False, "stdout": "", "stderr": str(error), "return_code": 1}
+
+
+def _upload_file(target_path, content_b64):
+    try:
+        content = base64.b64decode(content_b64, validate=True)
+        target = Path(target_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        return {"ok": True, "target_path": str(target), "size": len(content)}
+    except Exception as error:
+        return {"ok": False, "error": str(error)}
+
+
+def _download_file(source_path):
+    try:
+        data = Path(source_path).read_bytes()
+        return {"ok": True, "content_b64": base64.b64encode(data).decode("utf-8")}
+    except Exception as error:
+        return {"ok": False, "error": str(error)}
+
+
+def _write_ready_file(path, host, port):
+    """Atomically publish the bound address using a private file."""
+    if path is None:
+        return
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".sandbox-ready-", dir=destination.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump({"host": host, "port": port}, stream)
+            stream.write("\n")
+        os.replace(temporary, destination)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 # ---------------------------------------------------------------------------
 # FastAPI backend
 # ---------------------------------------------------------------------------
 
+
 def create_fastapi_app():
     """Create a FastAPI application."""
-    from fastapi import FastAPI
+    from fastapi import FastAPI, Request
+    from fastapi.responses import JSONResponse
     from pydantic import BaseModel
 
     app = FastAPI(title="Lagent SandboxServer")
+    token = os.environ.get("LAGENT_SANDBOX_TOKEN", "")
+
+    @app.middleware("http")
+    async def authenticate(request: Request, call_next):
+        if not _authorized(str(request.url), request.headers.get("authorization"), token):
+            return JSONResponse({"ok": False, "error": "Unauthorized"}, status_code=401)
+        return await call_next(request)
 
     class ExecRequest(BaseModel):
         command: str
         cwd: str = "/root"
-        timeout_sec: int = 60
+        timeout_sec: float = 60
+        detach: bool = False
 
     class UploadRequest(BaseModel):
         target_path: str
@@ -53,43 +174,15 @@ def create_fastapi_app():
 
     @app.post("/exec")
     def execute(req: ExecRequest):
-        try:
-            result = subprocess.run(
-                req.command, shell=True, capture_output=True, text=True,
-                cwd=req.cwd, timeout=req.timeout_sec,
-            )
-            return {
-                "ok": result.returncode == 0,
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "return_code": result.returncode,
-            }
-        except subprocess.TimeoutExpired:
-            return {
-                "ok": False, "stdout": "",
-                "stderr": f"Command timed out after {req.timeout_sec} seconds",
-                "return_code": 124,
-            }
-        except Exception as e:
-            return {"ok": False, "stdout": "", "stderr": str(e), "return_code": 1}
+        return _execute_command(req.command, req.cwd, req.timeout_sec, req.detach)
 
     @app.post("/upload")
     def upload(req: UploadRequest):
-        try:
-            target = Path(req.target_path)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(base64.b64decode(req.content_b64))
-            return {"ok": True, "target_path": req.target_path, "size": target.stat().st_size}
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
+        return _upload_file(req.target_path, req.content_b64)
 
     @app.post("/download")
     def download(req: DownloadRequest):
-        try:
-            data = Path(req.source_path).read_bytes()
-            return {"ok": True, "content_b64": base64.b64encode(data).decode("utf-8")}
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
+        return _download_file(req.source_path)
 
     @app.get("/health")
     def health():
@@ -102,18 +195,25 @@ def create_fastapi_app():
 # Stdlib backend (zero deps fallback)
 # ---------------------------------------------------------------------------
 
+
 def create_stdlib_server(host: str, port: int):
     """Create an http.server based server (no third-party deps)."""
-    from http.server import HTTPServer, BaseHTTPRequestHandler
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    token = os.environ.get("LAGENT_SANDBOX_TOKEN", "")
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            if self.path == "/health":
+            if not self._authenticate():
+                return
+            if urlsplit(self.path).path == "/health":
                 self._respond({"ok": True})
             else:
                 self._respond({"error": "Not found"}, 404)
 
         def do_POST(self):
+            if not self._authenticate():
+                return
             body = self._read_body()
             if body is None:
                 return
@@ -122,7 +222,7 @@ def create_stdlib_server(host: str, port: int):
                 "/upload": self._handle_upload,
                 "/download": self._handle_download,
             }
-            handler = handlers.get(self.path)
+            handler = handlers.get(urlsplit(self.path).path)
             if handler:
                 handler(body)
             else:
@@ -132,47 +232,28 @@ def create_stdlib_server(host: str, port: int):
             command = body.get("command", "")
             cwd = body.get("cwd", "/root")
             timeout_sec = body.get("timeout_sec", 60)
-            try:
-                result = subprocess.run(
-                    command, shell=True, capture_output=True, text=True,
-                    cwd=cwd, timeout=timeout_sec,
-                )
-                self._respond({
-                    "ok": result.returncode == 0,
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
-                    "return_code": result.returncode,
-                })
-            except subprocess.TimeoutExpired:
-                self._respond({
-                    "ok": False, "stdout": "",
-                    "stderr": f"Command timed out after {timeout_sec}s",
-                    "return_code": 124,
-                })
-            except Exception as e:
-                self._respond({"ok": False, "stdout": "", "stderr": str(e), "return_code": 1})
+            self._respond(_execute_command(command, cwd, timeout_sec, body.get("detach", False)))
 
         def _handle_upload(self, body):
-            try:
-                target = Path(body["target_path"])
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(base64.b64decode(body["content_b64"]))
-                self._respond({"ok": True, "target_path": str(target), "size": target.stat().st_size})
-            except Exception as e:
-                self._respond({"ok": False, "error": str(e)})
+            self._respond(_upload_file(body.get("target_path"), body.get("content_b64")))
 
         def _handle_download(self, body):
-            try:
-                data = Path(body["source_path"]).read_bytes()
-                self._respond({"ok": True, "content_b64": base64.b64encode(data).decode("utf-8")})
-            except Exception as e:
-                self._respond({"ok": False, "error": str(e)})
+            self._respond(_download_file(body.get("source_path")))
+
+        def _authenticate(self):
+            if _authorized(self.path, self.headers.get("Authorization"), token):
+                return True
+            self._respond({"ok": False, "error": "Unauthorized"}, 401)
+            return False
 
         def _read_body(self):
             try:
                 length = int(self.headers.get("Content-Length", 0))
                 raw = self.rfile.read(length)
-                return json.loads(raw) if raw else {}
+                body = json.loads(raw) if raw else {}
+                if not isinstance(body, dict):
+                    raise ValueError("JSON body must be an object")
+                return body
             except Exception as e:
                 self._respond({"error": f"Bad request: {e}"}, 400)
                 return None
@@ -186,14 +267,15 @@ def create_stdlib_server(host: str, port: int):
             self.wfile.write(body)
 
         def log_message(self, format, *args):
-            logger.debug("%s %s", self.address_string(), format % args)
+            logger.debug("%s %s %s", self.address_string(), self.command, urlsplit(self.path).path)
 
-    return HTTPServer((host, port), Handler)
+    return ThreadingHTTPServer((host, port), Handler)
 
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -202,8 +284,11 @@ def main():
     )
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--ready-file", help="Write the bound host/port as JSON (mode 0600); supports --port 0.")
     parser.add_argument(
-        "--backend", choices=["auto", "fastapi", "stdlib"], default="auto",
+        "--backend",
+        choices=["auto", "fastapi", "stdlib"],
+        default="auto",
         help="Server backend: fastapi (uvicorn), stdlib (http.server), or auto-detect",
     )
     args = parser.parse_args()
@@ -214,21 +299,33 @@ def main():
     if backend == "auto":
         try:
             import fastapi, uvicorn  # noqa: F401
+
             backend = "fastapi"
         except ImportError:
             backend = "stdlib"
 
     if backend == "fastapi":
         import uvicorn
+
         logger.info("Starting SandboxServer (fastapi) on %s:%d", args.host, args.port)
-        uvicorn.run(create_fastapi_app(), host=args.host, port=args.port)
+        # Query tokens must not be emitted in uvicorn access logs.
+        config = uvicorn.Config(create_fastapi_app(), host=args.host, port=args.port, access_log=False)
+        sock = config.bind_socket()
+        try:
+            _write_ready_file(args.ready_file, *sock.getsockname()[:2])
+            uvicorn.Server(config).run(sockets=[sock])
+        finally:
+            sock.close()
     else:
         server = create_stdlib_server(args.host, args.port)
-        logger.info("Starting SandboxServer (stdlib) on %s:%d", args.host, args.port)
+        _write_ready_file(args.ready_file, *server.server_address[:2])
+        logger.info("Starting SandboxServer (stdlib) on %s:%d", *server.server_address[:2])
         try:
             server.serve_forever()
         except KeyboardInterrupt:
-            server.shutdown()
+            pass
+        finally:
+            server.server_close()
 
 
 if __name__ == "__main__":

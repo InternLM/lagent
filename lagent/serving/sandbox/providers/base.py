@@ -39,6 +39,7 @@ class SandboxClient:
         max_connections (int): Max concurrent HTTP connections to the sandbox.
             Per-sandbox concurrency is normally 1-2, so the default of 32 is
             generous. Defaults to ``32``.
+        trust_env (bool): Honor HTTP proxy environment settings. Defaults to True.
     """
 
     def __init__(
@@ -47,6 +48,7 @@ class SandboxClient:
         *,
         timeout: float = 60.0,
         max_connections: int = 32,
+        trust_env: bool = True,
     ):
         parts = urlsplit(url.rstrip("/"))
         self.url = urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
@@ -55,6 +57,7 @@ class SandboxClient:
             params=dict(parse_qsl(parts.query)),
             headers={"Content-Type": "application/json"},
             timeout=timeout,
+            trust_env=trust_env,
             limits=httpx.Limits(
                 max_connections=max_connections,
                 max_keepalive_connections=max(max_connections // 2, 4),
