@@ -34,6 +34,27 @@ from urllib.parse import parse_qs, urlsplit
 
 logger = logging.getLogger(__name__)
 
+RUNTIME_ENVIRONMENT_NAMES = frozenset({
+    "RL_LLM_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENROUTER_API_KEY",
+    "HF_TOKEN", "MY_HF_TOKEN",
+})
+
+
+def _set_runtime_environment(values):
+    """Validate the whole credential mapping before changing process state."""
+    if not isinstance(values, dict) or any(
+        name not in RUNTIME_ENVIRONMENT_NAMES
+        or (value is not None and (not isinstance(value, str) or "\0" in value))
+        for name, value in values.items()
+    ):
+        return {"ok": False, "error": "Invalid runtime environment mapping"}
+    for name, value in values.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+    return {"ok": True, "names": sorted(values)}
+
 
 def _authorized(path, authorization, token):
     if not token:
@@ -172,6 +193,15 @@ def create_fastapi_app():
     class DownloadRequest(BaseModel):
         source_path: str
 
+    class EnvironmentRequest(BaseModel):
+        values: dict[str, str | None]
+
+    @app.post("/environment")
+    def environment(req: EnvironmentRequest):
+        if not token:
+            return JSONResponse({"ok": False, "error": "Authentication must be configured"}, status_code=403)
+        return _set_runtime_environment(req.values)
+
     @app.post("/exec")
     def execute(req: ExecRequest):
         return _execute_command(req.command, req.cwd, req.timeout_sec, req.detach)
@@ -221,6 +251,7 @@ def create_stdlib_server(host: str, port: int):
                 "/exec": self._handle_exec,
                 "/upload": self._handle_upload,
                 "/download": self._handle_download,
+                "/environment": self._handle_environment,
             }
             handler = handlers.get(urlsplit(self.path).path)
             if handler:
@@ -233,6 +264,12 @@ def create_stdlib_server(host: str, port: int):
             cwd = body.get("cwd", "/root")
             timeout_sec = body.get("timeout_sec", 60)
             self._respond(_execute_command(command, cwd, timeout_sec, body.get("detach", False)))
+
+        def _handle_environment(self, body):
+            if not token:
+                self._respond({"ok": False, "error": "Authentication must be configured"}, 403)
+                return
+            self._respond(_set_runtime_environment(body.get("values")))
 
         def _handle_upload(self, body):
             self._respond(_upload_file(body.get("target_path"), body.get("content_b64")))

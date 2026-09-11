@@ -378,7 +378,7 @@ class SessionClient:
             request_data.update(self.extra_body)
             request_data['session_id'] = self.session_id
             if is_anthropic:
-                request_data['provider'] = 'anthropic'
+                request_data.setdefault('provider', 'anthropic')
                 # Drop SDK-injected beta flags the upstream (e.g. Bedrock) rejects;
                 # keep only the allowlist (see _FORWARD_ANTHROPIC_BETAS).
                 betas = request_data.get('anthropic_beta')

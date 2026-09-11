@@ -159,6 +159,8 @@ def cmd_chat(args: argparse.Namespace) -> int:
         response = _call_json(args.sock, {"cmd": "chat", "messages": [instruction]})
         _write_json(args.response_out, response)
         _print_json(response)
+        if isinstance(response, dict) and (response.get("extra_info") or {}).get("error"):
+            return 5
         return 0
     except Exception as exc:
         return _die(f"daemon error in chat: {exc}", 5, log=args.log)

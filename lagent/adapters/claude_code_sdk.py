@@ -147,6 +147,7 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         messages = []
         result_text = ''
         result_msg = None
+        query_error = None
 
         try:
             async for message in query(prompt=task, options=options):
@@ -199,6 +200,7 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
 
                 messages.append(record)
         except Exception as exc:
+            query_error = exc
             # SDK may error after yielding some messages.
             # Log but don't lose what we already captured.
             import logging
@@ -220,6 +222,11 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
                     break
 
         self._call_count += 1
+
+        if query_error is not None:
+            raise RuntimeError(f"Claude Code SDK failed: {query_error}") from query_error
+        if result_msg and result_msg.is_error:
+            raise RuntimeError(result_msg.result or 'Claude Code reported an error')
 
         # Return the final result
         if result_msg and result_msg.result:

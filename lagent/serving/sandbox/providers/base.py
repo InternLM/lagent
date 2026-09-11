@@ -104,6 +104,15 @@ class SandboxClient:
         blob = Path(local_path).read_bytes()
         return await self.upload_bytes(remote_path, blob)
 
+    async def set_runtime_environment(self, values: dict[str, str | None]) -> dict:
+        """Inject credentials in memory without serializing them in shell commands."""
+        response = await self._client.post("/environment", json={"values": values})
+        response.raise_for_status()
+        result = response.json()
+        if not result.get("ok"):
+            raise RuntimeError("Sandbox runtime environment injection failed")
+        return result
+
     async def upload_bytes(self, remote_path: str, content: bytes) -> dict:
         """Upload in-memory bytes to the sandbox.
 
