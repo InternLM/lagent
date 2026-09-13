@@ -412,8 +412,8 @@ class ClusterXProvider:
                     info = await self._rpc("get", cluster_name=job.get("cluster"), job_id=job_id)
                 except Exception:
                     raise stop_error
-                if str(info.get("status", "")).lower() not in _TERMINAL:
-                    raise
+                if not isinstance(info, dict) or str(info.get("status", "")).lower() not in _TERMINAL:
+                    raise stop_error
         finally:
             if job.get("client") is not None:
                 await job["client"].aclose()

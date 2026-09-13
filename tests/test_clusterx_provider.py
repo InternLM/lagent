@@ -38,7 +38,7 @@ def test_delete_is_idempotent_for_terminal_job(sandbox, status):
     assert provider.list() == []
 
 
-@pytest.mark.parametrize("lookup", [{"status": "Running"}, {}, RuntimeError("lookup failed")])
+@pytest.mark.parametrize("lookup", [{"status": "Running"}, {}, None, [], "Stopped", RuntimeError("lookup failed")])
 def test_delete_preserves_unconfirmed_job(sandbox, lookup):
     provider, client, state = sandbox
     error = RuntimeError("Job can't be stopped")
