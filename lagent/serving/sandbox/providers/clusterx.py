@@ -403,7 +403,17 @@ class ClusterXProvider:
         job = self._jobs.get(job_id, {})
         await self._ensure_runtime(job.get("cluster"))
         try:
-            await self._rpc("stop", cluster_name=job.get("cluster"), job_id=job_id)
+            try:
+                await self._rpc("stop", cluster_name=job.get("cluster"), job_id=job_id)
+            except Exception as stop_error:
+                # An external stop can race with cleanup. Require scheduler
+                # confirmation before treating a failed stop as successful.
+                try:
+                    info = await self._rpc("get", cluster_name=job.get("cluster"), job_id=job_id)
+                except Exception:
+                    raise stop_error
+                if str(info.get("status", "")).lower() not in _TERMINAL:
+                    raise
         finally:
             if job.get("client") is not None:
                 await job["client"].aclose()
