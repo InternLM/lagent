@@ -399,6 +399,9 @@ def test_outer_timeout_cancels_recovery_without_resetting_call(sdk):
     asyncio.run(bounded())
     assert calls == [None, 'synthetic-session']
     assert agent._call_count == 1
+    assert agent._last_finish_info['error']['kind'] == 'cancelled'
+    assert agent._last_finish_info['empty_recoveries'] == 1
+    assert any(event['type'] == 'QueryCancelled' for event in agent._sdk_trace)
 
 
 def test_zero_argument_anthropic_tool_stream_keeps_dict_input():

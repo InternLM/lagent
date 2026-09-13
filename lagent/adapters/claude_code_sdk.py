@@ -463,6 +463,11 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
                 else:
                     attach_attempt_metadata()
                     return result
+        except asyncio.CancelledError:
+            # The query has already recorded the partial terminal state; add
+            # any earlier retry history before the caller handles cancellation.
+            attach_attempt_metadata()
+            raise
         finally:
             # Recovery attempts belong to one outer agent call and therefore
             # must not advance the call counter or reset the caller's budget.
