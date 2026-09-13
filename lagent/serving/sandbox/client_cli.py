@@ -23,7 +23,9 @@ _HEADER_SIZE = struct.calcsize(_HEADER_FMT)
 
 
 class DaemonCallError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, payload: dict[str, Any] | list | None = None):
+        super().__init__(message)
+        self.payload = payload
 
 
 def _call_json(
@@ -38,7 +40,7 @@ def _call_json(
         raise DaemonCallError(f"daemon response must be a JSON object or array, got {type(obj).__name__}")
     if isinstance(obj, dict):
         if obj.get("error"):
-            raise DaemonCallError(str(obj["error"]))
+            raise DaemonCallError(str(obj["error"]), payload=obj)
         extra_info = obj.get("extra_info")
         if isinstance(extra_info, dict) and extra_info.get("error"):
             if allow_agent_error:
@@ -176,6 +178,21 @@ def cmd_chat(args: argparse.Namespace) -> int:
         if isinstance(response, dict) and (response.get("extra_info") or {}).get("error"):
             return 5
         return 0
+    except DaemonCallError as exc:
+        if not (isinstance(exc.payload, dict) and exc.payload.get("error")):
+            return _die(f"daemon error in chat: {exc}", 5, log=args.log)
+        # Preserve the daemon's actual error envelope.  Do not synthesize an
+        # AgentMessage that could be mistaken for a model response.
+        try:
+            _write_json(args.response_out, exc.payload)
+        except Exception as write_exc:
+            return _die(
+                f"daemon error in chat: {exc}; failed to save response: {write_exc}",
+                5,
+                log=args.log,
+            )
+        _print_json(exc.payload)
+        return 5
     except Exception as exc:
         return _die(f"daemon error in chat: {exc}", 5, log=args.log)
 

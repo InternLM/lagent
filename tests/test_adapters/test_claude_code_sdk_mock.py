@@ -10,6 +10,8 @@ import pytest
 
 from lagent.adapters.claude_code_sdk import ClaudeCodeSDKAdapter
 from lagent.adapters.proxy import SessionClient
+from lagent.schema import AgentMessage
+from lagent.serving.sandbox.daemon import AgentDaemon, _json_bytes
 
 
 @dataclass
@@ -385,3 +387,75 @@ def test_client_rejects_malformed_error_payload(tmp_path, monkeypatch):
 
     assert client_cli.cmd_chat(args) == 5
     assert not response_out.exists()
+
+
+def test_client_records_top_level_daemon_error(tmp_path, monkeypatch):
+    from lagent.serving.sandbox import client_cli
+
+    async def serialized_response(*args):
+        return json.dumps({'error': 'synthetic daemon failure', 'error_type': 'TypeError'})
+
+    monkeypatch.setattr(client_cli, '_async_call', serialized_response)
+    instruction = tmp_path / 'instruction.md'
+    instruction.write_text('Synthetic task', encoding='utf-8')
+    response_out = tmp_path / 'response.json'
+    args = SimpleNamespace(
+        sock='unused',
+        instruction_file=str(instruction),
+        response_out=str(response_out),
+        log=None,
+    )
+
+    assert client_cli.cmd_chat(args) == 5
+    payload = json.loads(response_out.read_text(encoding='utf-8'))
+    assert payload == {
+        'error': 'synthetic daemon failure',
+        'error_type': 'TypeError',
+    }
+
+
+def test_client_keeps_daemon_error_when_receipt_cannot_be_written(tmp_path, monkeypatch):
+    from lagent.serving.sandbox import client_cli
+
+    async def serialized_response(*args):
+        return json.dumps({'error': 'synthetic daemon failure', 'error_type': 'TypeError'})
+
+    monkeypatch.setattr(client_cli, '_async_call', serialized_response)
+    instruction = tmp_path / 'instruction.md'
+    instruction.write_text('Synthetic task', encoding='utf-8')
+    args = SimpleNamespace(
+        sock='unused',
+        instruction_file=str(instruction),
+        response_out=str(tmp_path / 'missing' / 'response.json'),
+        log=None,
+    )
+
+    assert client_cli.cmd_chat(args) == 5
+
+
+def test_daemon_wire_serializer_preserves_message_with_unknown_metadata_object():
+    class ThirdPartyMetadata:
+        pass
+
+    message = AgentMessage(
+        sender='synthetic-agent',
+        content='done',
+        finish_info={'result': {'usage': ThirdPartyMetadata()}},
+    )
+
+    payload = json.loads(_json_bytes(AgentDaemon._serialize_agent_message(message)))
+
+    assert payload['content'] == 'done'
+    assert payload['finish_info']['result']['usage']['__non_json_type__'].endswith(
+        '.ThirdPartyMetadata'
+    )
+
+
+def test_daemon_wire_serializer_rejects_unknown_message_content():
+    class ThirdPartyContent:
+        pass
+
+    message = AgentMessage(sender='synthetic-agent', content=ThirdPartyContent())
+
+    with pytest.raises(TypeError):
+        _json_bytes(AgentDaemon._serialize_agent_message(message))

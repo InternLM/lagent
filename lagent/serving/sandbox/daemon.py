@@ -30,8 +30,11 @@ Usage::
 from __future__ import annotations
 import argparse
 import asyncio
+from dataclasses import asdict, is_dataclass
+from enum import Enum
 import json
 import logging
+import math
 import os
 import struct
 import sys
@@ -55,6 +58,61 @@ logger = logging.getLogger(__name__)
 _HEADER_FMT = '!I'  # 4-byte unsigned big-endian
 _HEADER_SIZE = struct.calcsize(_HEADER_FMT)
 _MAX_MSG_SIZE = 64 * 1024 * 1024  # 64 MiB safety cap
+
+
+def _json_default(value):
+    """Keep an unexpected SDK metadata value from killing the wire response.
+
+    Agent responses are assembled from third-party SDK objects.  A single
+    non-JSON value in diagnostic metadata must not turn an otherwise valid
+    response into a top-level daemon error (which the CLI cannot associate
+    with the original agent message).  Preserve common structured objects and
+    use a type marker for anything else; the marker deliberately avoids
+    serializing arbitrary object representations or secrets.
+    """
+    if isinstance(value, Enum):
+        return value.value
+    if is_dataclass(value):
+        return asdict(value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            return model_dump(mode="python")
+        except TypeError:
+            return model_dump()
+    return {
+        "__non_json_type__": f"{type(value).__module__}.{type(value).__qualname__}"
+    }
+
+
+def _json_metadata(value):
+    """Convert diagnostic metadata without relaxing the response schema."""
+    return json.loads(
+        json.dumps(value, ensure_ascii=False, allow_nan=False, default=_json_default)
+    )
+
+
+def _json_bytes(value) -> bytes:
+    return json.dumps(value, ensure_ascii=False, allow_nan=False).encode()
+
+
+def _error_payload(error: Exception) -> dict:
+    """Return a small, machine-readable daemon error envelope."""
+    try:
+        detail = str(error)
+    except Exception:
+        detail = "<unprintable exception>"
+    payload = {"error": detail[:4096], "error_type": type(error).__name__}
+    for name in ("status_code", "api_error_status", "subtype", "terminal_reason", "exit_code"):
+        try:
+            value = getattr(error, name, None)
+        except Exception:
+            continue
+        if isinstance(value, float) and not math.isfinite(value):
+            continue
+        if isinstance(value, (str, int, float, bool)):
+            payload[name] = value
+    return payload
 
 
 async def _send_msg(writer: asyncio.StreamWriter, data: bytes) -> None:
@@ -120,13 +178,13 @@ class BaseDaemon:
             raw = await _recv_msg(reader)
             request = json.loads(raw)
             response = await self._dispatch(request)
-            await _send_msg(writer, json.dumps(response, ensure_ascii=False).encode())
+            await _send_msg(writer, _json_bytes(response))
         except asyncio.IncompleteReadError:
             pass
         except Exception as e:
             logger.exception('Error handling client request')
             try:
-                await _send_msg(writer, json.dumps({'error': str(e)}).encode())
+                await _send_msg(writer, _json_bytes(_error_payload(e)))
             except Exception:
                 pass
         finally:
@@ -338,33 +396,33 @@ class AgentDaemon(BaseDaemon):
                 return self._serialize_agent_message(response)
             except Exception as e:
                 logger.exception('Agent chat failed')
-                return {'error': str(e)}
+                return _error_payload(e)
 
         if cmd == 'state_dict':
             try:
                 return {'state_dict': self.agent.state_dict()}
             except Exception as e:
-                return {'error': str(e)}
+                return _error_payload(e)
 
         if cmd == 'load_state_dict':
             try:
                 self.agent.load_state_dict(request['state_dict'])
                 return {'status': 'ok'}
             except Exception as e:
-                return {'error': str(e)}
+                return _error_payload(e)
 
         if cmd == 'reset':
             try:
                 self.agent.reset(recursive=request.get('recursive', True))
                 return {'status': 'ok'}
             except Exception as e:
-                return {'error': str(e)}
+                return _error_payload(e)
 
         if cmd == 'get_messages':
             try:
                 return self.agent.get_messages()
             except Exception as e:
-                return {'error': str(e)}
+                return _error_payload(e)
 
         return {'error': f"Unknown command: {cmd}"}
 
@@ -373,6 +431,13 @@ class AgentDaemon(BaseDaemon):
         data = msg.model_dump()
         if isinstance(msg.content, ActionReturn):
             data['content'] = dataclass2dict(msg.content)
+        # Claude SDK diagnostic fields can contain Pydantic or dataclass
+        # objects.  Normalize only those fields: primary response content and
+        # protocol state remain strict, so an invalid success cannot be hidden
+        # behind a lossy type marker.
+        for name in ('extra_info', 'finish_info', 'env_info'):
+            if data.get(name) is not None:
+                data[name] = _json_metadata(data[name])
         return data
 
 
