@@ -264,6 +264,143 @@ def test_parse_error_retry_resumes_same_session_when_enabled(sdk):
     }
 
 
+def test_empty_result_recovery_resumes_same_session(sdk):
+    calls = install_script(sdk, [
+        [SystemMessage(), ResultMessage(result=None, stop_reason='max_tokens')],
+        [AssistantMessage([TextBlock('visible')]), ResultMessage(result='done')],
+    ])
+
+    response = run(ClaudeCodeSDKAdapter(max_empty_recoveries=1))
+
+    assert response.content == 'done'
+    assert calls[0]['resume'] is None
+    assert calls[1]['resume'] == 'synthetic-session'
+    assert 'original time limit' in calls[1]['prompt']
+    assert response.finish_info['empty_recoveries'] == 1
+    assert response.finish_info['empty_recovery_attempts'][0]['error'] == {
+        'kind': 'incomplete_terminal',
+        'reason': 'empty_result',
+    }
+
+
+def test_empty_result_recovery_is_bounded(sdk):
+    calls = install_script(sdk, [[SystemMessage(), ResultMessage(result=None)]] * 3)
+
+    response = run(ClaudeCodeSDKAdapter(max_empty_recoveries=2))
+
+    assert response.finish_reason == 'error'
+    assert len(calls) == 3
+    assert all(call['resume'] == 'synthetic-session' for call in calls[1:])
+    assert response.finish_info['empty_recoveries'] == 2
+    assert len(response.finish_info['empty_recovery_attempts']) == 3
+
+
+def test_empty_result_recovery_requires_existing_session(sdk):
+    calls = install_script(sdk, [[ResultMessage(result=None, session_id=None)]])
+
+    response = run(ClaudeCodeSDKAdapter(max_empty_recoveries=2))
+
+    assert response.finish_reason == 'error'
+    assert len(calls) == 1
+    assert response.finish_info['empty_recoveries'] == 0
+
+
+def test_empty_result_recovery_does_not_bypass_max_turns(sdk):
+    calls = install_script(sdk, [[SystemMessage(), ResultMessage(result=None)]])
+
+    response = run(ClaudeCodeSDKAdapter(max_turns=1, max_empty_recoveries=2))
+
+    assert response.finish_reason == 'error'
+    assert len(calls) == 1
+    assert response.finish_info['empty_recoveries'] == 0
+
+
+def test_explicit_sdk_error_is_not_retried_as_empty_result(sdk):
+    calls = install_script(sdk, [[
+        ResultMessage(result=None, is_error=True, errors=['synthetic SDK failure']),
+    ]])
+
+    response = run(ClaudeCodeSDKAdapter(max_empty_recoveries=2))
+
+    assert response.finish_reason == 'error'
+    assert len(calls) == 1
+    assert response.finish_info['error']['kind'] == 'result_error'
+
+
+def test_explicit_sdk_error_wins_over_parse_stop_reason(sdk):
+    calls = install_script(sdk, [[
+        ResultMessage(
+            result=None,
+            is_error=True,
+            errors=['synthetic SDK failure'],
+            stop_reason='parse_error',
+        ),
+    ]])
+
+    response = run(ClaudeCodeSDKAdapter(parse_error_retries=2))
+
+    assert response.finish_reason == 'error'
+    assert len(calls) == 1
+    assert response.finish_info['error']['kind'] == 'result_error'
+
+
+def test_recovery_attempts_keep_one_outer_call_index(sdk):
+    install_script(sdk, [
+        [SystemMessage(), ResultMessage(result=None)],
+        [AssistantMessage([TextBlock('visible')]), ResultMessage(result='done')],
+        [ResultMessage(result='next')],
+    ])
+    agent = ClaudeCodeSDKAdapter(max_empty_recoveries=1)
+
+    first = run(agent)
+    second = run(agent, 'next task')
+
+    assert first.content == 'done'
+    assert second.content == 'next'
+    assert agent._call_count == 2
+    first_events = [event for event in agent._sdk_trace if event['call_index'] == 0]
+    second_events = [event for event in agent._sdk_trace if event['call_index'] == 1]
+    assert {event['attempt_index'] for event in first_events} == {0, 1}
+    assert {event['attempt_index'] for event in second_events} == {0}
+
+
+def test_transport_error_after_recovery_keeps_prior_diagnostics(sdk):
+    calls = install_script(sdk, [
+        [SystemMessage(), ResultMessage(result=None)],
+        [RuntimeError('synthetic transport failure')],
+    ])
+
+    response = run(ClaudeCodeSDKAdapter(max_empty_recoveries=1))
+
+    assert response.finish_reason == 'error'
+    assert len(calls) == 2
+    assert response.finish_info['error']['kind'] == 'query_error'
+    assert len(response.finish_info['empty_recovery_attempts']) == 1
+
+
+def test_outer_timeout_cancels_recovery_without_resetting_call(sdk):
+    calls = []
+
+    async def query(*, prompt, options):
+        calls.append(getattr(options, 'resume', None))
+        yield SystemMessage()
+        if len(calls) == 1:
+            yield ResultMessage(result=None)
+        else:
+            await asyncio.sleep(60)
+
+    sdk.query = query
+    agent = ClaudeCodeSDKAdapter(max_empty_recoveries=2)
+
+    async def bounded():
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(agent.run_external_async('synthetic task'), timeout=0.05)
+
+    asyncio.run(bounded())
+    assert calls == [None, 'synthetic-session']
+    assert agent._call_count == 1
+
+
 def test_zero_argument_anthropic_tool_stream_keeps_dict_input():
     parsed = SessionClient._parse_anthropic_stream([
         {

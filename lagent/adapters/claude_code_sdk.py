@@ -19,6 +19,7 @@ Usage::
     trace = agent.state_dict()['sdk_trace']
 """
 
+import asyncio
 import copy
 from dataclasses import asdict
 from datetime import datetime
@@ -31,6 +32,10 @@ from .base import AsyncExternalAgent
 
 class ClaudeCodeParseError(RuntimeError):
     """The SDK returned a malformed terminal message."""
+
+
+class ClaudeCodeIncompleteError(RuntimeError):
+    """The SDK finished without a usable visible terminal response."""
 
 
 class ClaudeCodeSDKAdapter(AsyncExternalAgent):
@@ -54,6 +59,9 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         thinking: Thinking config dict. Default: adaptive.
         parse_error_retries: Same-session continuation attempts after malformed
             SDK messages. Default: 0 (disabled).
+        max_empty_recoveries: Same-session continuation attempts after a missing
+            or empty terminal result. Default: 0 (disabled). All attempts stay
+            inside the enclosing task deadline.
         **kwargs: Passed to AsyncExternalAgent (name, timeout, proxy, hooks).
     """
 
@@ -74,6 +82,7 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         thinking: Optional[dict] = None,
         parse_error_retries: int = 0,
         extra_options: Optional[dict] = None,
+        max_empty_recoveries: int = 0,
         **kwargs,
     ):
         kwargs.setdefault('name', 'claude-code-sdk')
@@ -82,6 +91,12 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
 
         if isinstance(parse_error_retries, bool) or not isinstance(parse_error_retries, int) or parse_error_retries < 0:
             raise ValueError('parse_error_retries must be a nonnegative integer')
+        if (
+            isinstance(max_empty_recoveries, bool)
+            or not isinstance(max_empty_recoveries, int)
+            or max_empty_recoveries < 0
+        ):
+            raise ValueError('max_empty_recoveries must be a nonnegative integer')
         self.max_turns = max_turns
         self.permission_mode = permission_mode
         self.model = model
@@ -96,6 +111,7 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         self.effort = effort
         self.thinking = thinking
         self.parse_error_retries = parse_error_retries
+        self.max_empty_recoveries = max_empty_recoveries
         self.extra_options = extra_options or {}
         self._session_id: Optional[str] = None
         self._sdk_trace: List[dict] = []
@@ -133,7 +149,7 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         )
         return response
 
-    async def _query_once(self, task: str) -> str:
+    async def _query_once(self, task: str, attempt_index: int = 0) -> str:
         from claude_agent_sdk import (
             AssistantMessage,
             ClaudeAgentOptions,
@@ -192,6 +208,7 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
                     'timestamp': datetime.now().isoformat(),
                     'type': type(message).__name__,
                     'call_index': self._call_count,
+                    'attempt_index': attempt_index,
                 }
 
                 if isinstance(message, AssistantMessage):
@@ -248,11 +265,34 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
                         self._session_id = message.data['session_id']
 
                 messages.append(record)
+        except asyncio.CancelledError:
+            # The outer task deadline also covers recovery. Preserve events
+            # already received before propagating cancellation.
+            self._sdk_trace.extend(messages)
+            self._sdk_trace.append({
+                'timestamp': datetime.now().isoformat(),
+                'type': 'QueryCancelled',
+                'call_index': self._call_count,
+                'attempt_index': attempt_index,
+            })
+            self._last_finish_info = {
+                'event_count': len(messages),
+                'event_types': [message['type'] for message in messages],
+                'last_assistant': last_assistant,
+                'tool_call_count': tool_call_count,
+                'result': {},
+                'terminal': {
+                    'has_result_message': result_msg is not None,
+                    'result_nonempty': False,
+                    'visible_text_chars': len(result_text),
+                },
+                'error': {'kind': 'cancelled'},
+            }
+            raise
         except Exception as exc:
             query_error = exc
 
         self._sdk_trace.extend(messages)
-        self._call_count += 1
         if result_msg is not None and getattr(result_msg, 'session_id', None):
             self._session_id = result_msg.session_id
 
@@ -290,7 +330,13 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
 
         exception_type = type(query_error).__name__ if query_error is not None else None
         stop_reason = getattr(result_msg, 'stop_reason', None)
-        if exception_type in {'CLIJSONDecodeError', 'MessageParseError'} or str(stop_reason).lower() == 'parse_error':
+        if (
+            not (result_msg is not None and result_msg.is_error)
+            and (
+                exception_type in {'CLIJSONDecodeError', 'MessageParseError'}
+                or str(stop_reason).lower() == 'parse_error'
+            )
+        ):
             self._last_finish_info['error'] = {
                 'kind': 'parse_error',
                 'exception_type': exception_type,
@@ -338,33 +384,86 @@ class ClaudeCodeSDKAdapter(AsyncExternalAgent):
         reason = 'missing_result' if result_msg is None else 'empty_result'
         self._last_finish_info['terminal_kind'] = 'incomplete'
         self._last_finish_info['error'] = {'kind': 'incomplete_terminal', 'reason': reason}
-        raise RuntimeError(f'Claude Code SDK returned no final text: {reason}')
+        raise ClaudeCodeIncompleteError(f'Claude Code SDK returned no final text: {reason}')
 
     async def run_external_async(self, task: str, **kwargs) -> str:
         parse_failures = []
+        empty_failures = []
         current_task = task
-        for attempt in range(self.parse_error_retries + 1):
-            try:
-                result = await self._query_once(current_task)
-            except ClaudeCodeParseError:
-                parse_failures.append(copy.deepcopy(self._last_finish_info))
-                retry_allowed = (
-                    attempt < self.parse_error_retries
-                    and bool(self._session_id)
-                    and self.max_turns is None
-                    and self.extra_options.get('max_turns') is None
-                )
-                if not retry_allowed:
-                    self._last_finish_info['parse_error_attempts'] = parse_failures
-                    self._last_finish_info['parse_error_retries'] = attempt
+        parse_attempt = 0
+        empty_recoveries = 0
+        attempt_index = 0
+
+        def attach_attempt_metadata() -> None:
+            """Keep all retry diagnostics on the final outer-call result."""
+            if parse_failures:
+                self._last_finish_info['parse_error_attempts'] = parse_failures
+            if empty_failures:
+                self._last_finish_info['empty_recovery_attempts'] = empty_failures
+            self._last_finish_info['parse_error_retries'] = parse_attempt
+            self._last_finish_info['empty_recoveries'] = empty_recoveries
+
+        try:
+            while True:
+                try:
+                    result = await self._query_once(current_task, attempt_index=attempt_index)
+                except ClaudeCodeParseError:
+                    parse_failures.append(copy.deepcopy(self._last_finish_info))
+                    retry_allowed = (
+                        parse_attempt < self.parse_error_retries
+                        and bool(self._session_id)
+                        and self.max_turns is None
+                        and self.extra_options.get('max_turns') is None
+                    )
+                    if not retry_allowed:
+                        attach_attempt_metadata()
+                        raise
+                    parse_attempt += 1
+                    attempt_index += 1
+                    current_task = (
+                        'Continue the current task in the existing session. '
+                        'The previous response could not be parsed.'
+                    )
+                except ClaudeCodeIncompleteError:
+                    empty_failures.append(copy.deepcopy(self._last_finish_info))
+                    retry_allowed = (
+                        empty_recoveries < self.max_empty_recoveries
+                        and bool(self._session_id)
+                        and self.max_turns is None
+                        and self.extra_options.get('max_turns') is None
+                    )
+                    if not retry_allowed:
+                        attach_attempt_metadata()
+                        raise
+                    empty_recoveries += 1
+                    self._sdk_trace.append({
+                        'timestamp': datetime.now().isoformat(),
+                        'type': 'Recovery',
+                        'call_index': self._call_count,
+                        'attempt_index': attempt_index,
+                        'reason': self._last_finish_info.get('error', {}).get('reason'),
+                    })
+                    attempt_index += 1
+                    # This continuation is deliberately generic: it does not
+                    # add benchmark content, and remains inside the caller's
+                    # original coroutine/deadline.
+                    current_task = (
+                        'Continue the current task in the existing session. '
+                        'The previous turn ended without a usable final response. '
+                        'Inspect the current files and processes, preserve completed work and the original time limit, '
+                        'and finish the requested task. Before ending, provide a non-empty visible final response '
+                        'describing the current status and deliverable paths.'
+                    )
+                except Exception:
+                    # Preserve retry history even when the next attempt fails
+                    # with an explicit SDK or transport error. Do not catch
+                    # CancelledError, so the caller's deadline remains intact.
+                    attach_attempt_metadata()
                     raise
-                current_task = (
-                    'Continue the current task in the existing session. '
-                    'The previous response could not be parsed.'
-                )
-            else:
-                if parse_failures:
-                    self._last_finish_info['parse_error_attempts'] = parse_failures
-                self._last_finish_info['parse_error_retries'] = attempt
-                return result
-        raise AssertionError('unreachable')
+                else:
+                    attach_attempt_metadata()
+                    return result
+        finally:
+            # Recovery attempts belong to one outer agent call and therefore
+            # must not advance the call counter or reset the caller's budget.
+            self._call_count += 1
