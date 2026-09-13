@@ -26,7 +26,9 @@ class DaemonCallError(RuntimeError):
     pass
 
 
-def _call_json(sock: str, payload: dict[str, Any]) -> dict[str, Any] | list:
+def _call_json(
+    sock: str, payload: dict[str, Any], *, allow_agent_error: bool = False
+) -> dict[str, Any] | list:
     raw = asyncio.run(_async_call(sock, json.dumps(payload, ensure_ascii=False).encode()))
     try:
         obj = json.loads(raw or "{}")
@@ -39,6 +41,14 @@ def _call_json(sock: str, payload: dict[str, Any]) -> dict[str, Any] | list:
             raise DaemonCallError(str(obj["error"]))
         extra_info = obj.get("extra_info")
         if isinstance(extra_info, dict) and extra_info.get("error"):
+            if allow_agent_error:
+                from lagent.schema import AgentMessage
+
+                try:
+                    AgentMessage.model_validate(obj)
+                except ValueError as exc:
+                    raise DaemonCallError(str(extra_info["error"])) from exc
+                return obj
             raise DaemonCallError(str(extra_info["error"]))
     return obj
 
@@ -156,7 +166,11 @@ def cmd_start_agent_daemon(args: argparse.Namespace) -> int:
 def cmd_chat(args: argparse.Namespace) -> int:
     try:
         instruction = Path(args.instruction_file).read_text(encoding="utf-8")
-        response = _call_json(args.sock, {"cmd": "chat", "messages": [instruction]})
+        response = _call_json(
+            args.sock,
+            {"cmd": "chat", "messages": [instruction]},
+            allow_agent_error=True,
+        )
         _write_json(args.response_out, response)
         _print_json(response)
         if isinstance(response, dict) and (response.get("extra_info") or {}).get("error"):
