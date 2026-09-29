@@ -121,9 +121,13 @@ class JSONParser(StrParser):
             for field_name, value in data_dict.items():
                 if field_name in self.fields:
                     metadata = self.fields[field_name]
-                    if value in [
-                            'str', 'int', 'float', 'bool', 'list', 'dict'
-                    ]:
+                    if metadata['annotation'] is not None:
+                        type_name = get_field_type_name(metadata['annotation'])
+                    else:
+                        type_name = 'Any'
+                    # The template prints this field's type as the placeholder.
+                    # A real answer can be another type's name, such as "list".
+                    if value == type_name:
                         if metadata['default'] == '<required>':
                             raise ValueError(
                                 f"Field '{field_name}' is required but not provided"
