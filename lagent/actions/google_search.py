@@ -196,7 +196,7 @@ class AsyncGoogleSearch(AsyncActionMixin, GoogleSearch):
             tool_return.errmsg = response
             tool_return.state = ActionStatusCode.HTTP_ERROR
         elif status_code == 200:
-            parsed_res = self._parse_results(response)
+            parsed_res = self._parse_results(response, k)
             tool_return.result = [dict(type='text', content=str(parsed_res))]
             tool_return.state = ActionStatusCode.SUCCESS
         else:
