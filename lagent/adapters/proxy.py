@@ -34,13 +34,15 @@ import os
 import re
 import uuid
 from collections import defaultdict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse
 
 import aiohttp
 from aiohttp import web
 
-from lagent.utils import ctx_session_id, get_logger
+from lagent.utils import create_object, ctx_session_id, get_logger
+
+from .request_processor import ProxyRequestContext, ProxyRequestProcessor
 
 logger = get_logger(__name__, 'info')
 
@@ -117,6 +119,7 @@ _NON_TOKENIZED_KEYS = ('cache_control',)
 _TOKENIZED_MSG_KEYS = ('tool_call_id', 'name', 'reasoning_content', 'function_call', 'refusal')
 _OPENAI_REASONING_DELTA_KEYS = ('reasoning_content', 'reasoning', 'thinking')
 _OPENCLAW_TOOL_CALL_ID_RE = re.compile(r'^call_?([0-9a-fA-F]{8,})$')
+_PREFIX_TRIE_TERMINAL = object()
 
 
 def _extract_openai_reasoning_delta(delta: dict[str, Any]) -> Optional[str]:
@@ -209,6 +212,42 @@ def _canonical_msg(msg: Any) -> tuple:
                 val = _canonical_tool_call_id(val)
             key.append((field, val if isinstance(val, str) else json.dumps(val, sort_keys=True, ensure_ascii=False)))
     return tuple(key)
+
+
+def _toolset_key(tools: Any) -> str:
+    """Stable key for the exact tool schema rendered into the prompt."""
+    return json.dumps(tools, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+
+
+def _maximal_prefix_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep only maximal strict-prefix leaves, grouped by exact tool schema."""
+    roots: dict[str, dict[Any, Any]] = {}
+    for index, record in enumerate(records):
+        node = roots.setdefault(_toolset_key(record.get('tools')), {})
+        for message in record.get('messages', []):
+            node = node.setdefault(_canonical_msg(message), {})
+        # Canonical duplicates share a terminal; the latest record wins.
+        node[_PREFIX_TRIE_TERMINAL] = index
+
+    retained: set[int] = set()
+
+    for root in roots.values():
+        subtree_has_terminal: dict[int, bool] = {}
+        stack = [(root, False)]
+        while stack:
+            node, expanded = stack.pop()
+            children = [child for key, child in node.items() if key is not _PREFIX_TRIE_TERMINAL]
+            if not expanded:
+                stack.append((node, True))
+                stack.extend((child, False) for child in children)
+                continue
+
+            descendant_has_terminal = any(subtree_has_terminal[id(child)] for child in children)
+            terminal = node.get(_PREFIX_TRIE_TERMINAL)
+            if terminal is not None and not descendant_has_terminal:
+                retained.add(terminal)
+            subtree_has_terminal[id(node)] = terminal is not None or descendant_has_terminal
+    return [records[index] for index in sorted(retained)]
 
 
 def _anthropic_response_to_assistant_message(response: dict[str, Any]) -> dict[str, Any]:
@@ -317,6 +356,8 @@ class SessionClient:
         real_api_key: The actual API key to use when forwarding requests.
         real_base_url: The actual LLM API base URL to forward to.
         port: Port to listen on. 0 means auto-assign.
+        request_processor: Optional stateful request/response processor. It is
+            disabled by default, preserving direct proxy behavior.
     """
 
     def __init__(
@@ -327,6 +368,7 @@ class SessionClient:
         session_id: Optional[str] = None,
         extra_body: Optional[dict] = None,
         http_proxy: Optional[str] = None,
+        request_processor: Optional[Union[dict, ProxyRequestProcessor]] = None,
     ):
         self.real_api_key = real_api_key
         self.real_base_url = real_base_url.rstrip('/')
@@ -334,6 +376,11 @@ class SessionClient:
         self.http_proxy = http_proxy
         self.session_id = session_id or ctx_session_id.get() or os.getenv('XTUNER_SESSION_ID') or str(uuid.uuid4().int)
         self.extra_body = extra_body or {}
+        self.request_processor = create_object(request_processor)
+        self._request_index = 0
+        self._request_processor_disabled = False
+        self._request_processor_errors = 0
+        self._processor_stats_logged = False
         self._records: Dict[str, List[Dict[str, list]]] = defaultdict(list)
         self._app: Optional[web.Application] = None
         self._runner: Optional[web.AppRunner] = None
@@ -383,6 +430,73 @@ class SessionClient:
         self._app = None
         logger.info('LLM proxy stopped')
 
+    def _apply_request_processor(
+        self,
+        request_data: dict[str, Any],
+        context: ProxyRequestContext,
+    ) -> dict[str, Any]:
+        if self.request_processor is None or self._request_processor_disabled:
+            return request_data
+        fallback = copy.deepcopy(request_data)
+        try:
+            processed = self.request_processor.before_forward(copy.deepcopy(request_data), context)
+            if not isinstance(processed, dict):
+                raise TypeError('request processor must return a dict')
+            return processed
+        except Exception as exc:
+            self._request_processor_errors += 1
+            self._request_processor_disabled = True
+            logger.warning(
+                'Disabling request processor %s for session %s after before_forward failed: %s',
+                type(self.request_processor).__name__,
+                self.session_id,
+                exc,
+            )
+            return fallback
+
+    def _observe_request_processor_response(
+        self,
+        request_data: dict[str, Any],
+        response_data: dict[str, Any],
+        context: ProxyRequestContext,
+    ) -> None:
+        if self.request_processor is None or self._request_processor_disabled:
+            return
+        try:
+            self.request_processor.after_response(
+                copy.deepcopy(request_data),
+                copy.deepcopy(response_data),
+                context,
+            )
+        except Exception as exc:
+            self._request_processor_errors += 1
+            self._request_processor_disabled = True
+            logger.warning(
+                'Disabling request processor %s for session %s after after_response failed: %s',
+                type(self.request_processor).__name__,
+                self.session_id,
+                exc,
+            )
+
+    def get_request_processor_stats(self) -> dict[str, Any]:
+        stats: dict[str, Any] = {}
+        if self.request_processor is not None:
+            try:
+                stats.update(self.request_processor.get_stats())
+            except Exception:
+                stats['stats_unavailable'] = True
+        stats['processor_errors'] = self._request_processor_errors
+        stats['processor_disabled'] = self._request_processor_disabled
+        return stats
+
+    def _log_request_processor_stats(self, records: int, retained: int) -> None:
+        if self.request_processor is None or self._processor_stats_logged:
+            return
+        stats = self.get_request_processor_stats()
+        stats.update({'records': records, 'retained_records': retained})
+        logger.info('Request processor summary for session %s: %s', self.session_id, json.dumps(stats, sort_keys=True))
+        self._processor_stats_logged = True
+
     async def _handle_request(self, request: web.Request) -> web.Response:
         """Proxy handler: extract session, forward, record, return."""
         req_path = request.match_info['path']
@@ -419,6 +533,16 @@ class SessionClient:
                 # "context_management: Extra inputs are not permitted").
                 for _f in _DROP_ANTHROPIC_BODY_FIELDS:
                     request_data.pop(_f, None)
+            if 'messages' in request_data or 'input' in request_data:
+                provider = 'anthropic' if is_anthropic else ('responses' if is_responses else 'openai')
+                request_context = ProxyRequestContext(
+                    session_id=self.session_id,
+                    request_index=self._request_index,
+                    provider=provider,
+                    path=req_path,
+                )
+                self._request_index += 1
+                request_data = self._apply_request_processor(request_data, request_context)
             request_body = json.dumps(request_data).encode('utf-8')
 
         # By default we assume the incoming request is already in the target format
@@ -556,6 +680,9 @@ class SessionClient:
 
         if not response_data:
             return response
+
+        if isinstance(request_data, dict) and ('messages' in request_data or 'input' in request_data):
+            self._observe_request_processor_response(request_data, response_data, request_context)
 
         # 7. Record
         if isinstance(request_data, dict) and ('messages' in request_data or 'input' in request_data):
@@ -1074,39 +1201,21 @@ class SessionClient:
         """
         records = self._records.get(self.session_id, [])
         if not records:
+            self._log_request_processor_stats(0, 0)
             return []
-
-        # Precompute one canonical key per record; comparing hashable tuples is
-        # both cheaper and robust to volatile fields.
-        keyed = [(rec, tuple(_canonical_msg(m) for m in rec.get('messages', []))) for rec in records]
-
-        filtered = []
-        for i, (rec_i, key_i) in enumerate(keyed):
-            is_prefix = False
-            for j, (rec_j, key_j) in enumerate(keyed):
-                if i == j:
-                    continue
-
-                # Tools are rendered into the prompt: different tools => different
-                # trajectory, never a prefix.
-                if rec_i.get('tools') != rec_j.get('tools'):
-                    continue
-
-                # Exactly identical (canonically): keep the one with the higher index.
-                if len(key_i) == len(key_j) and key_i == key_j:
-                    if i < j:
-                        is_prefix = True
-                        break
-                # Strict prefix: drop the shorter one.
-                elif len(key_i) < len(key_j) and key_j[: len(key_i)] == key_i:
-                    is_prefix = True
-                    break
-
-            if not is_prefix:
-                filtered.append(rec_i)
-
+        filtered = _maximal_prefix_records(records)
+        self._log_request_processor_stats(len(records), len(filtered))
         return filtered
 
     def release_trace(self):
         """Clear recorded data for this session."""
         self._records.pop(self.session_id, None)
+        if self.request_processor is not None:
+            try:
+                self.request_processor.reset()
+            except Exception as exc:
+                logger.warning('Failed to reset request processor %s: %s', type(self.request_processor).__name__, exc)
+        self._request_index = 0
+        self._request_processor_disabled = False
+        self._request_processor_errors = 0
+        self._processor_stats_logged = False
