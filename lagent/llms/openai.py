@@ -56,7 +56,7 @@ class GPTAPI(BaseAPILLM):
 
     def __init__(
         self,
-        model_type: str = 'gpt-3.5-turbo',
+        model_type: str = 'gpt-4o-mini',
         retry: int = 2,
         json_mode: bool = False,
         key: Union[str, List[str]] = 'ENV',
@@ -447,7 +447,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
 
     def __init__(
         self,
-        model_type: str = 'gpt-3.5-turbo',
+        model_type: str = 'gpt-4o-mini',
         retry: int = 2,
         json_mode: bool = False,
         key: Union[str, List[str]] = 'ENV',
