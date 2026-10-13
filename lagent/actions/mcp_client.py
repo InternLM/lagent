@@ -272,6 +272,11 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
         tool_name = self.tool_info.name
 
         # 2. 初始化父类 BaseAction
+        exposed_required = [
+            param
+            for param in self.tool_info.inputSchema.get('required', [])
+            if param not in self.extra_args
+        ]
         super().__init__(
             description={
                 'name': tool_name,
@@ -281,7 +286,7 @@ class AsyncMCPClient(AsyncActionMixin, BaseAction):
                     for k, v in self.tool_info.inputSchema['properties'].items()
                     if k not in self.extra_args
                 ],
-                'required': self.tool_info.inputSchema.get('required', []),
+                'required': exposed_required,
             },
             parser=JsonParser,
         )
