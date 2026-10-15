@@ -5,7 +5,8 @@ This proxy intercepts API calls from external agents, forwards them
 to the actual model backend, and quietly records the full conversation history (trajectories).
 
 Key Features:
-- **Direct Passthrough**: Calls OpenAI models using OpenAI format, and Anthropic models using Anthropic format. Returns matching formats identically without forced translation.
+- **Direct Passthrough**: Calls OpenAI and Anthropic models using their native formats.
+  Returns matching formats identically without forced translation.
 - **Trajectory Recording**: Merges and retains conversation turns into `_records`.
   Interrupted or duplicate prefix traces are intelligently filtered when calling
   `get_messages()`.
@@ -1022,10 +1023,11 @@ class SessionClient:
                 if current_block:
                     # Parse partial_json into input for tool_use blocks
                     if 'partial_json' in current_block:
+                        partial_json = current_block.pop('partial_json')
                         try:
-                            current_block['input'] = json.loads(current_block.pop('partial_json'))
+                            current_block['input'] = json.loads(partial_json)
                         except json.JSONDecodeError:
-                            current_block['input'] = current_block.pop('partial_json')
+                            current_block['input'] = partial_json
                     content_blocks.append(current_block)
                     current_block = {}
 
