@@ -318,9 +318,6 @@ class SessionClient:
         real_api_key: The actual API key to use when forwarding requests.
         real_base_url: The actual LLM API base URL to forward to.
         port: Port to listen on. 0 means auto-assign.
-        forward_timeout: HTTP request budget; None preserves aiohttp defaults.
-        stream_timeout: Optional streaming override. Use total=None with a
-            bounded sock_read to allow long, active generations.
     """
 
     def __init__(
@@ -331,17 +328,11 @@ class SessionClient:
         session_id: Optional[str] = None,
         extra_body: Optional[dict] = None,
         http_proxy: Optional[str] = None,
-        forward_timeout: Optional[aiohttp.ClientTimeout] = None,
-        stream_timeout: Optional[aiohttp.ClientTimeout] = None,
     ):
         self.real_api_key = real_api_key
         self.real_base_url = real_base_url.rstrip('/')
         self.port = port
         self.http_proxy = http_proxy
-        # None preserves aiohttp's defaults. Streaming can have a separate
-        # idle-read budget without imposing a total generation deadline.
-        self.forward_timeout = forward_timeout
-        self.stream_timeout = stream_timeout
         self.session_id = session_id or ctx_session_id.get() or os.getenv('XTUNER_SESSION_ID') or str(uuid.uuid4().int)
         self.extra_body = extra_body or {}
         self._records: Dict[str, List[Dict[str, list]]] = defaultdict(list)
@@ -474,9 +465,9 @@ class SessionClient:
 
         is_stream = provider_request_data.get('stream', False) if provider_request_data else False
 
-        timeout = self.stream_timeout if is_stream and self.stream_timeout is not None else self.forward_timeout
-        timeout_kwargs = {} if timeout is None else {'timeout': timeout}
-        async with aiohttp.ClientSession(**timeout_kwargs) as client:
+        # Long generations can exceed aiohttp's default 300s total timeout.
+        # The caller owns the overall execution deadline.
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=None)) as client:
             async with client.request(
                 method=request.method,
                 url=target_url,
