@@ -50,8 +50,7 @@ def parse_requirements(fname='requirements.txt', with_version=True):
                     if ';' in rest:
                         # Handle platform specific dependencies
                         # http://setuptools.readthedocs.io/en/latest/setuptools.html#declaring-platform-specific-dependencies
-                        version, platform_deps = map(str.strip,
-                                                     rest.split(';'))
+                        version, platform_deps = map(str.strip, rest.split(';'))
                         info['platform_deps'] = platform_deps
                     else:
                         version = rest  # NOQA
@@ -84,8 +83,7 @@ def parse_requirements(fname='requirements.txt', with_version=True):
 
 
 if __name__ == '__main__':
-    with Path(Path(__file__).parent,
-              'README.md').open(encoding='utf-8') as file:
+    with Path(Path(__file__).parent, 'README.md').open(encoding='utf-8') as file:
         long_description = file.read()
 
     setup(
@@ -102,6 +100,7 @@ if __name__ == '__main__':
         url='https://github.com/InternLM/lagent',
         install_requires=parse_requirements('requirements/runtime.txt'),
         extras_require={
+            'mcp': ['mcp>=1.26,<2'],
             'all': parse_requirements('requirements.txt'),
             'optional': parse_requirements('requirements/optional.txt'),
         },

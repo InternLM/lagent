@@ -398,3 +398,66 @@ ret.result
 ```python
 [{'type': 'text', 'content': '10.0'}]
 ```
+
+### Parallel web search and page fetching
+
+`AsyncParallelSearch` gives agents free web search and page extraction through
+[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp).
+Anonymous search uses Fast mode and needs no account or API key. Free access is
+subject to service limits. Install the optional MCP dependency from source:
+
+```bash
+pip install -e '.[mcp]'
+```
+
+Register the toolkit with `EnvAgent` and mark both APIs as stateful so it supplies
+the current conversation ID. `get_tool_prompt` hides this host argument from the
+model. Use this environment with `FunctionCallAgent`, or call its dispatcher
+directly from an asynchronous workflow:
+
+```python
+import asyncio
+
+from lagent.actions import AsyncParallelSearch
+from lagent.agents.fc_agent import EnvAgent, get_tool_prompt
+
+search = AsyncParallelSearch(timeout=30)
+env = EnvAgent(
+    actions=[search],
+    stateful_tools=['AsyncParallelSearch.search', 'AsyncParallelSearch.fetch'],
+)
+tool_prompt = get_tool_prompt([search])
+
+
+async def research():
+    result = await env.execute_tool(
+        dict(
+            name='AsyncParallelSearch.search',
+            arguments=dict(
+                objective='Find the official Python asyncio documentation',
+                search_queries=['Python asyncio documentation'],
+            ),
+        ),
+        session_id='research-1',
+    )
+    print(result.format_result() if result.result else result.errmsg)
+
+
+asyncio.run(research())
+```
+
+Call `AsyncParallelSearch.fetch` with `urls` and an extraction `objective` to read
+selected sources. The results contain source URLs and excerpts and pass through
+the normal action response. Related searches, fetches and retries share one opaque
+UUID per host conversation; host IDs are never sent to Parallel. Give independent
+conversations different host IDs. Call `search.reset(session_id)` when discarding
+a conversation or reusing its host ID for a new chat. A direct toolkit call that
+omits `session_id` uses the single default conversation `0`.
+
+Registration is opt-in: existing browser providers and the DuckDuckGo default
+remain available. Omit the toolkit from `actions` to disable it. Errors become
+action errors without switching providers; cancellation propagates to the caller.
+The timeout covers connection setup and the tool call. Applications using higher
+service limits can explicitly pass authentication in `headers`, for example
+`headers={'Authorization': 'Bearer YOUR_PARALLEL_API_KEY'}`. The toolkit does not
+read API keys from the environment.
