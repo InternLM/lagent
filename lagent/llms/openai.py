@@ -396,6 +396,7 @@ class GPTAPI(BaseAPILLM):
             # temperature/top_p are unsupported; effort=none keeps them valid.
             if model_type.lower().startswith('gpt-6'):
                 gen_params.setdefault('reasoning_effort', 'none')
+                gen_params['max_completion_tokens'] = gen_params.pop('max_tokens')
             data = {'model': model_type, 'messages': messages, 'n': 1, **gen_params}
             if json_mode:
                 data['response_format'] = {'type': 'json_object'}
@@ -799,6 +800,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
             # temperature/top_p are unsupported; effort=none keeps them valid.
             if model_type.lower().startswith('gpt-6'):
                 gen_params.setdefault('reasoning_effort', 'none')
+                gen_params['max_completion_tokens'] = gen_params.pop('max_tokens')
 
             data = {'model': model_type, 'messages': messages, 'n': 1, **gen_params}
             if json_mode:
