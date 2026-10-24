@@ -56,7 +56,7 @@ class GPTAPI(BaseAPILLM):
 
     def __init__(
         self,
-        model_type: str = 'gpt-4o-mini',
+        model_type: str = 'gpt-6-luna',
         retry: int = 2,
         json_mode: bool = False,
         key: Union[str, List[str]] = 'ENV',
@@ -391,6 +391,11 @@ class GPTAPI(BaseAPILLM):
                 gen_params.pop('top_k')
             gen_params.pop('skip_special_tokens', None)
             gen_params.pop('session_id', None)
+            # Preserve the legacy sampling behavior when using GPT-6 through
+            # Chat Completions. GPT-6 Luna defaults to reasoning, where
+            # temperature/top_p are unsupported; effort=none keeps them valid.
+            if model_type.lower().startswith('gpt-6'):
+                gen_params.setdefault('reasoning_effort', 'none')
             data = {'model': model_type, 'messages': messages, 'n': 1, **gen_params}
             if json_mode:
                 data['response_format'] = {'type': 'json_object'}
@@ -447,7 +452,7 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
 
     def __init__(
         self,
-        model_type: str = 'gpt-4o-mini',
+        model_type: str = 'gpt-6-luna',
         retry: int = 2,
         json_mode: bool = False,
         key: Union[str, List[str]] = 'ENV',
@@ -789,6 +794,11 @@ class AsyncGPTAPI(AsyncBaseAPILLM):
                 gen_params.pop('top_k')
             gen_params.pop('skip_special_tokens', None)
             gen_params.pop('session_id', None)
+            # Preserve the legacy sampling behavior when using GPT-6 through
+            # Chat Completions. GPT-6 Luna defaults to reasoning, where
+            # temperature/top_p are unsupported; effort=none keeps them valid.
+            if model_type.lower().startswith('gpt-6'):
+                gen_params.setdefault('reasoning_effort', 'none')
 
             data = {'model': model_type, 'messages': messages, 'n': 1, **gen_params}
             if json_mode:
