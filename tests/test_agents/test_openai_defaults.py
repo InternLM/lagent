@@ -19,7 +19,9 @@ def test_default_openai_model_builds_a_chat_completion_request(model_class):
     assert header['content-type'] == 'application/json'
     assert payload['model'] == 'gpt-5.6-terra'
     assert payload['messages'] == messages
-    assert payload['max_tokens'] > 0
+    assert payload['max_completion_tokens'] > 0
+    assert 'max_tokens' not in payload
+    assert payload['reasoning_effort'] == 'none'
 
 
 @pytest.mark.parametrize('model_class', [GPTAPI, AsyncGPTAPI])
