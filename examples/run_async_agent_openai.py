@@ -26,7 +26,7 @@ interpreter_prompt = (
 
 async_llm = dict(
     type=AsyncGPTAPI,
-    model_type='gpt-4o',
+    model_type='gpt-6-luna',
     retry=50,
     key='',
     max_new_tokens=2048,
