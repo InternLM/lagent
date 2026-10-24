@@ -132,7 +132,7 @@ if __name__ == '__main__':
     agent = ReAct(
         llm=dict(
             type=GPTAPI,
-            model_type='gpt-4o-2024-05-13',
+            model_type='gpt-5.6-sol',
             max_new_tokens=4096,
             proxies=dict(),
             retry=1000,
@@ -150,7 +150,7 @@ if __name__ == '__main__':
     async_agent = AsyncReAct(
         llm=dict(
             type=AsyncGPTAPI,
-            model_type='gpt-4o-2024-05-13',
+            model_type='gpt-5.6-sol',
             max_new_tokens=4096,
             proxies=dict(),
             retry=1000,
