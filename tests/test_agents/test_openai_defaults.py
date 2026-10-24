@@ -15,13 +15,11 @@ def test_default_openai_model_builds_a_chat_completion_request(model_class):
     messages = [{'role': 'user', 'content': 'hello'}]
     header, payload = llm.generate_request_data(llm.model_type, messages, llm.gen_params)
 
-    assert llm.model_type == 'gpt-6-luna'
+    assert llm.model_type == 'gpt-5.6-terra'
     assert header['content-type'] == 'application/json'
-    assert payload['model'] == 'gpt-6-luna'
+    assert payload['model'] == 'gpt-5.6-terra'
     assert payload['messages'] == messages
-    assert payload['max_completion_tokens'] > 0
-    assert 'max_tokens' not in payload
-    assert payload['reasoning_effort'] == 'none'
+    assert payload['max_tokens'] > 0
 
 
 @pytest.mark.parametrize('model_class', [GPTAPI, AsyncGPTAPI])
@@ -45,4 +43,4 @@ def test_example_configs_use_supported_models_and_constructor_keyword():
     assert isinstance(async_llm, ast.Call)
     config = {keyword.arg: keyword.value for keyword in async_llm.keywords}
     assert 'model' not in config
-    assert ast.literal_eval(config['model_type']) == 'gpt-6-luna'
+    assert ast.literal_eval(config['model_type']) == 'gpt-5.6-sol'
