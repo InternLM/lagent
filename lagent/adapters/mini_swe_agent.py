@@ -60,7 +60,7 @@ class MiniSWEAgentAdapter(AsyncExternalAgent):
                 "drop_params": True,
                 "custom_llm_provider": "openai",
                 **self.model_kwargs,
-                "api_base": self.proxy.url
+                "api_base": self.proxy.openai_base_url
                 if self.proxy
                 else self.api_base or os.environ.get("RL_LLM_BASE_URL") or os.environ.get("OPENAI_BASE_URL", ""),
             }

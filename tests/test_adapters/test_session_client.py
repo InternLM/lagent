@@ -365,3 +365,47 @@ async def test_session_client_claude():
 
     proxy.release_trace()
     await proxy.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('branch', ['continuation', 'different_messages', 'different_tools'])
+async def test_request_ids_follow_only_matching_transcript_prefixes(branch):
+    response_index = 0
+
+    def respond(_path):
+        nonlocal response_index
+        response_index += 1
+        body = {'id': f'request-{response_index}', 'choices': [
+            {'message': {'role': 'assistant', 'content': f'answer-{response_index}'},
+             'finish_reason': 'stop'}]}
+        return 200, {'Content-Type': 'application/json'}, json.dumps(body).encode()
+
+    async with _running_session_client(respond) as (proxy, calls):
+        messages = [{'role': 'user', 'content': 'first'}]
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f'{proxy.openai_base_url}/chat/completions',
+                                    json={'messages': messages}) as response:
+                assert response.status == 200
+            messages += [{'role': 'assistant', 'content': 'answer-1'},
+                         {'role': 'user', 'content': 'second'}]
+            payload = {'messages': messages}
+            if branch == 'different_messages':
+                messages[0]['content'] = 'another task'
+            elif branch == 'different_tools':
+                payload['tools'] = [{'type': 'function', 'function': {
+                    'name': 'bash', 'parameters': {'type': 'object'}}}]
+            async with session.post(f'{proxy.openai_base_url}/chat/completions',
+                                    json=payload) as response:
+                assert response.status == 200
+        records = proxy.get_messages()
+        if branch == 'continuation':
+            assert len(records) == 1
+            assert records[0]['request_ids'] == ['request-1', 'request-2']
+        else:
+            assert [record['request_ids'] for record in records] == [
+                ['request-1'], ['request-2']]
+        assert all('request_ids' not in message for record in records
+                   for message in record['messages'])
+        assert len(calls) == 2
+        proxy.release_trace()
+        assert proxy.get_messages() == []
