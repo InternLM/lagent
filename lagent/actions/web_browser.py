@@ -142,6 +142,7 @@ class BingSearch(BaseSearch):
         self.api_key = api_key
         self.market = region
         self.proxy = kwargs.get('proxy')
+        self.endpoint = kwargs.get('endpoint', 'https://api.bing.microsoft.com/v7.0/search')
         super().__init__(topk, black_list)
 
     @cached(cache=TTLCache(maxsize=100, ttl=600))
@@ -169,7 +170,7 @@ class BingSearch(BaseSearch):
         raise Exception('Failed to get search results from Bing Search after retries.')
 
     def _call_bing_api(self, query: str) -> dict:
-        endpoint = 'https://api.bing.microsoft.com/v7.0/search'
+        endpoint = self.endpoint
         params = {'q': query, 'mkt': self.market, 'count': f'{self.topk * 2}'}
         headers = {'Ocp-Apim-Subscription-Key': self.api_key}
         response = requests.get(endpoint, headers=headers, params=params, proxies=self.proxy)
@@ -177,7 +178,7 @@ class BingSearch(BaseSearch):
         return response.json()
 
     async def _async_call_bing_api(self, query: str) -> dict:
-        endpoint = 'https://api.bing.microsoft.com/v7.0/search'
+        endpoint = self.endpoint
         params = {'q': query, 'mkt': self.market, 'count': f'{self.topk * 2}'}
         headers = {'Ocp-Apim-Subscription-Key': self.api_key}
         async with aiohttp.ClientSession(raise_for_status=True) as session:
