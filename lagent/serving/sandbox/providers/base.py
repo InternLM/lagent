@@ -14,14 +14,21 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import shlex
 import time
 from pathlib import Path
-from typing import Protocol, Tuple, runtime_checkable
+from typing import Any, Protocol, Tuple, runtime_checkable
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+class SandboxProcessError(httpx.HTTPError, RuntimeError):
+    """A process probe failed without proving that the process exited."""
+
+    phase = "process_probe"
 
 
 class SandboxClient:
@@ -47,7 +54,11 @@ class SandboxClient:
         *,
         timeout: float = 60.0,
         max_connections: int = 32,
+        sandbox_id: str | None = None,
+        lifecycle_provider: Any = None,
     ):
+        self._sandbox_id = sandbox_id
+        self._lifecycle_provider = lifecycle_provider
         parts = urlsplit(url.rstrip("/"))
         self.url = urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
         self._client = httpx.AsyncClient(
@@ -152,11 +163,47 @@ class SandboxClient:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+    async def get_lifecycle_state(self) -> str | None:
+        """Query the control plane independently of sandbox command execution.
+
+        Returns:
+            str | None: Provider lifecycle state, or None if unavailable.
+        """
+        if self._lifecycle_provider is None or self._sandbox_id is None:
+            return None
+        response = await self._lifecycle_provider.get(self._sandbox_id)
+        state = response.get("env", response).get("status")
+        return state.lower() if isinstance(state, str) else None
+
     async def is_pid_running(self, pid: int) -> bool:
-        """Return whether ``pid`` is currently alive inside the sandbox."""
+        # kill -0 also succeeds for zombies. A reaped/exited process must let
+        # DetachedShellEntry collect its rc file instead of waiting to timeout.
         pid = int(pid)
-        result = await self.execute(f"kill -0 {pid} >/dev/null 2>&1", cwd="/tmp", timeout_sec=5)
-        return result.get("return_code") == 0
+        if pid <= 0:
+            raise ValueError("A positive process ID is required")
+        rc = await self._run_process_probe(self._process_probe_command(pid))
+        if type(rc) is not int or rc not in {0, 1}:
+            raise self._process_probe_error()
+        return rc == 0
+
+    @staticmethod
+    def _process_probe_command(pid: int) -> str:
+        # Exit 0: running; 1: exited, reaped or zombie; 2: unknown state.
+        code = (
+            "from pathlib import Path; import sys\n"
+            "try: state=Path('/proc/" + str(pid) + "/stat').read_text().rsplit(')',1)[1].split()[0]\n"
+            "except FileNotFoundError: sys.exit(1)\n"
+            "except (OSError,IndexError,UnicodeError): sys.exit(2)\n"
+            "sys.exit(1 if state in {'Z','X'} else 0 if state in {'R','S','D','T','t','I','P','W'} else 2)"
+        )
+        return "python3 -c " + shlex.quote(code)
+
+    async def _run_process_probe(self, command: str) -> int | None:
+        result = await self.execute(command, cwd="/tmp", timeout_sec=5)
+        return result.get("return_code")
+
+    def _process_probe_error(self) -> Exception:
+        return SandboxProcessError("Sandbox process probe returned no valid process state")
 
     async def wait_pid_exit(
         self,

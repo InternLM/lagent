@@ -1,12 +1,14 @@
 """Sandbox providers — create, manage, and connect to sandbox environments."""
 
 from .base import SandboxClient, SandboxProvider
+from .dbox import DBoxProvider
 from .gateway import GatewayProvider
 from .local import LocalClient, LocalProvider
 
 __all__ = [
     "SandboxClient",
     "SandboxProvider",
+    "DBoxProvider",
     "GatewayProvider",
     "LocalProvider",
     "LocalClient",
