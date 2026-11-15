@@ -9,6 +9,7 @@ its environment, or its remote-exec HTTP client.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 import json
 import ipaddress
 import math
@@ -25,6 +26,12 @@ from .base import SandboxClient
 from .dbox_client import DBoxSandboxClient
 
 
+class DBoxCredentialError(ValueError):
+    """The create request could not be authenticated and was never sent."""
+
+    allocation_state = "not_allocated"
+
+
 class DBoxProvider:
     """Manage original task images through DBox's native REST API.
 
@@ -35,9 +42,11 @@ class DBoxProvider:
 
     ``sandbox_group`` defaults to a fresh UUID, scoped to this provider. Reuse
     this instance for dependencies of one Trial, never for unrelated Trials.
-    ``credential_file`` accepts a plain AK:SK or JSON with ``aksk``/``api_key``.
+    ``credential_file`` accepts plain AK:SK, JSON ``aksk``/``api_key``, or
+    JSON ``access_key_id``/``secret_key`` fields. Values stay in host memory.
     """
 
+    supports_allocation_callback = True
     _AUTH_HEADER = "OPEN-SANDBOX-API-KEY"
     _ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,159}\Z")
     _TERMINAL_STATES = frozenset({
@@ -102,6 +111,11 @@ class DBoxProvider:
             except ValueError:
                 parsed = raw
             key = parsed.get("aksk") or parsed.get("api_key") if isinstance(parsed, dict) else parsed
+            if isinstance(parsed, dict) and not key:
+                parts = [parsed.get("access_key_id"), parsed.get("secret_key")]
+                if not all(isinstance(part, str) and part and ":" not in part for part in parts):
+                    raise ValueError("invalid credential")
+                key = ":".join(parts)
             if (not isinstance(key, str) or key.count(":") != 1
                     or any(c.isspace() for c in key) or not all(key.split(":"))):
                 raise ValueError("invalid credential")
@@ -111,7 +125,16 @@ class DBoxProvider:
         return {self._AUTH_HEADER: key}
 
     async def _request(self, method: str, path: str, *, timeout: float, payload: dict | None = None) -> httpx.Response:
-        headers = self._auth_headers()
+        try:
+            headers = self._auth_headers()
+        except ValueError:
+            if method == "POST" and path == "/v1/sandboxes":
+                # Only this pre-request failure proves that no allocation occurred.
+                # A credential failure during readiness GET follows a successful POST.
+                raise DBoxCredentialError(
+                    "DBox create requires a readable trusted credential file containing complete AK:SK"
+                ) from None
+            raise
         try:
             # POST is deliberately not retried: a lost response may already
             # have allocated a sandbox and no idempotency contract is known.
@@ -207,12 +230,18 @@ class DBoxProvider:
         }
 
     async def create(self, image_tag: str, ttl_seconds: int = 1800, timeout: float | None = None,
-                     user: str | None = None, **kwargs) -> tuple[SandboxClient, str]:
+                     user: str | None = None, *,
+                     on_allocated: Callable[[str], Awaitable[None]] | None = None,
+                     **kwargs) -> tuple[SandboxClient, str]:
         """Allocate once, then wait for platform readiness and return a client."""
         # XTuner's generic provider interface requires a user identifier.
         # DBox authorization comes from the trusted project/credential pair;
         # this bookkeeping field is not a sandbox environment or API override.
-        payload = self._payload(image_tag, ttl_seconds, kwargs)
+        try:
+            payload = self._payload(image_tag, ttl_seconds, kwargs)
+        except (ValueError, TypeError) as exc:
+            setattr(exc, "allocation_state", "not_allocated")
+            raise
         token = secrets.token_urlsafe(40)
         payload["env"] = {"EXECD_ACCESS_TOKEN": token}
         response = await self._request("POST", "/v1/sandboxes", payload=payload,
@@ -224,6 +253,8 @@ class DBoxProvider:
         self.owned_env_ids.add(env_id)
         self._execd_tokens[env_id] = token
         try:
+            if on_allocated is not None:
+                await on_allocated(env_id)
             info = self._normalize(value, env_id)["env"]
             deadline = time.monotonic() + self.ready_timeout
             while info["status"] != "ready":

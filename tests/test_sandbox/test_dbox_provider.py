@@ -90,6 +90,50 @@ class DBoxProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(first.sandbox_group, second.sandbox_group)
         self.assertEqual(first.sandbox_group, explicit.sandbox_group)
 
+    async def test_allocation_is_reported_before_readiness_wait(self):
+        recorded = []
+
+        def handler(request):
+            if request.method == "POST":
+                return httpx.Response(201, json={"id": "cprod2-pending", "state": "pending"})
+            self.assertEqual(recorded, ["cprod2-pending"])
+            return httpx.Response(200, json={"id": "cprod2-pending", "state": "running"})
+
+        provider = await self.provider(handler)
+
+        async def on_allocated(env_id):
+            self.assertIn(env_id, provider.owned_env_ids)
+            self.assertEqual([r.method for r in self.requests], ["POST"])
+            recorded.append(env_id)
+
+        client, env_id = await provider.create(image_tag="task:main", on_allocated=on_allocated)
+        self.addAsyncCleanup(client.aclose)
+        self.assertEqual(recorded, [env_id])
+
+    async def test_allocation_callback_failure_rolls_back_without_readiness(self):
+        def handler(request):
+            if request.method == "POST":
+                return httpx.Response(201, json={"id": "cprod2-pending", "state": "pending"})
+            self.assertEqual(request.method, "DELETE")
+            return httpx.Response(404)
+
+        provider = await self.provider(handler)
+
+        async def on_allocated(env_id):
+            raise OSError("journal write failed")
+
+        with self.assertRaisesRegex(OSError, "journal write failed"):
+            await provider.create(image_tag="task:main", on_allocated=on_allocated)
+        self.assertEqual([r.method for r in self.requests], ["POST", "DELETE"])
+        self.assertFalse(provider.owned_env_ids)
+
+    async def test_input_validation_failure_proves_no_allocation(self):
+        provider = await self.provider(lambda request: self.fail("must not send request"))
+        with self.assertRaises(ValueError) as error:
+            await provider.create(image_tag="bad image")
+        self.assertEqual(error.exception.allocation_state, "not_allocated")
+        self.assertEqual(self.requests, [])
+
     async def test_pending_and_nested_status_normalize_without_raw_response(self):
         states = [
             {"sandboxID": "cprod2-pair", "status": {"state": "Pending"}},
@@ -355,7 +399,8 @@ class DBoxProviderTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_credential_formats_read_per_request(self):
         provider = await self.provider(lambda request: httpx.Response(404))
-        for serialized in (self.secret, json.dumps({"aksk": self.secret}), json.dumps({"api_key": self.secret})):
+        for serialized in (self.secret, json.dumps({"aksk": self.secret}), json.dumps({"api_key": self.secret}),
+                           json.dumps(dict(zip(("access_key_id", "secret_key"), self.secret.split(":"))))):
             self.credential.write_text(serialized)
             await provider.get("cprod2-read")
             self.assertEqual(self.requests[-1].headers[DBoxProvider._AUTH_HEADER], self.secret)
@@ -372,6 +417,47 @@ class DBoxProviderTests(unittest.IsolatedAsyncioTestCase):
                     await provider.get("cprod2-invalid")
                 self.assertNotIn(invalid, str(caught.exception))
         self.assertFalse(self.requests)
+
+    async def test_json_pair_create_keeps_credentials_out_of_sandbox(self):
+        self.credential.write_text(json.dumps(dict(zip(("access_key_id", "secret_key"), self.secret.split(":")))))
+        provider = await self.provider(lambda request: httpx.Response(202, json={"id": "cprod2-json", "state": "running"}))
+        client, _ = await provider.create("image")
+        self.addAsyncCleanup(client.aclose)
+        self.assertEqual(self.requests[0].headers[DBoxProvider._AUTH_HEADER], self.secret)
+        self.assertNotIn(self.secret, self.requests[0].content.decode())
+        self.assertNotIn(DBoxProvider._AUTH_HEADER, client._client.headers)
+
+    async def test_credential_failure_before_create_is_not_allocated(self):
+        provider = await self.provider(lambda request: httpx.Response(404))
+        for fields in ({"access_key_id": "private-ak"}, {"secret_key": "private-sk"},
+                       {"access_key_id": "private:ak", "secret_key": "private-sk"},
+                       {"access_key_id": "private-ak", "secret_key": 123},
+                       {"access_key_id": "private-ak", "secret_key": "private sk"}):
+            self.credential.write_text(json.dumps(fields))
+            with self.assertRaises(ValueError) as caught:
+                await provider.create("image")
+            self.assertEqual(caught.exception.allocation_state, "not_allocated")
+            self.assertNotIn("private", ''.join(traceback.format_exception(caught.exception)))
+        self.credential.unlink()
+        with self.assertRaises(ValueError) as caught:
+            await provider.create("image")
+        self.assertEqual(caught.exception.allocation_state, "not_allocated")
+        self.assertFalse(self.requests)
+
+    async def test_get_credential_failure_and_sent_post_remain_uncertain(self):
+        provider = await self.provider(lambda request: httpx.Response(404))
+        self.credential.write_text("incomplete")
+        with self.assertRaises(ValueError) as caught:
+            await provider.get("cprod2-existing")
+        self.assertFalse(hasattr(caught.exception, "allocation_state"))
+        self.credential.write_text(self.secret)
+        def timeout(request):
+            raise httpx.ReadTimeout("lost POST response", request=request)
+        provider = await self.provider(timeout)
+        with self.assertRaises(RuntimeError) as caught:
+            await provider.create("image")
+        self.assertNotEqual(getattr(caught.exception, "allocation_state", None), "not_allocated")
+        self.assertEqual(len(self.requests), 1)
 
     async def test_rejects_unsupported_or_unsafe_create_inputs_before_http(self):
         provider = await self.provider(lambda request: httpx.Response(404))
