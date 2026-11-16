@@ -371,7 +371,8 @@ class SessionClient:
         """Start the proxy HTTP server."""
         if self.is_running:
             return
-        self._app = web.Application()
+        # Long-context JSON requests can exceed aiohttp's default 1 MiB.
+        self._app = web.Application(client_max_size=16 * 1024 * 1024)
         # Catch-all route to proxy any path
         self._app.router.add_route('*', '/{path:.*}', self._handle_request)
         self._runner = web.AppRunner(self._app)
@@ -402,7 +403,14 @@ class SessionClient:
         is_responses = endpoint == _ENDPOINT_OPENAI_RESPONSES
 
         # 1. Read request body
-        request_body = await request.read()
+        try:
+            request_body = await request.read()
+        except web.HTTPRequestEntityTooLarge:
+            logger.warning(
+                "SessionClient rejected request body: content_length=%s limit_bytes=16777216"
+                % request.content_length
+            )
+            raise
         request_data = None
         try:
             request_data = json.loads(request_body) if request_body else None
