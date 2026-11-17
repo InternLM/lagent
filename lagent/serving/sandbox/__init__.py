@@ -18,17 +18,12 @@ __all__ = [
     "SkillsDaemon",
     "AgentDaemon",
     "SandboxAgent",
-    "SandboxNetwork",
     "lagent_call",
     "async_lagent_call",
 ]
 
 
 def __getattr__(name):
-    if name == "SandboxNetwork":
-        from .network import SandboxNetwork
-
-        return SandboxNetwork
     if name == "SandboxAgent":
         from .agent import SandboxAgent
 

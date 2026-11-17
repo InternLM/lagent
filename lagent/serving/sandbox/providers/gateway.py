@@ -9,15 +9,15 @@ control belong to callers such as the agent loop.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-from pathlib import Path
 import time
-from typing import Tuple
+from typing import Any
 
 import httpx
 
-from lagent.serving.sandbox.providers.base import SandboxClient
+from .base import AllocationCallback, SandboxClient, SandboxEnvironment, SandboxStatus
+from .credentials import read_trusted_aksk
+from .lifecycle import allocated_sandbox, allocation_preflight, wait_ready
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,9 @@ class GatewayProvider:
         delete_timeout (float): HTTP timeout for ``delete``. Defaults to ``30``.
         get_timeout (float): HTTP timeout for ``get``. Defaults to ``15``.
     """
+
+    supports_allocation_callback = True
+    supports_deletion_confirmation = True
 
     def __init__(
         self,
@@ -82,13 +85,15 @@ class GatewayProvider:
         image_tag: str,
         ttl_seconds: int = 1800,
         timeout: float | None = None,
-        **kwargs,
-    ) -> Tuple[SandboxClient, str]:
+        *,
+        on_allocated: AllocationCallback | None = None,
+        **kwargs: Any,
+    ) -> tuple[SandboxClient, str]:
         """Create a new sandbox environment.
 
-        Returns as soon as the gateway has allocated a URL + env_id.  Does NOT
-        wait for the sandbox to become healthy — callers (e.g. runner
-        ``_acquire_ready_sandbox``) poll ``/health`` themselves.
+        Publish the ID before waiting for DBox platform readiness. Legacy
+        Gateway allocation returns immediately. Callers still poll application
+        ``/health`` for both transports.
 
         Args:
             image_tag (str): Docker image tag for the sandbox.
@@ -101,13 +106,30 @@ class GatewayProvider:
         """
         request_timeout = self._create_timeout if timeout is None else timeout
         is_dbox = kwargs.get("cluster_name") == "dbox"
+        with allocation_preflight():
+            if is_dbox:
+                payload = self._dbox_payload(image_tag, ttl_seconds, kwargs)
+            else:
+                # Preserve the legacy gateway contract for existing recipes.
+                payload = {"image_tag": image_tag, "ttl_seconds": ttl_seconds, **kwargs}
+        info = await self._allocate(payload, is_dbox=is_dbox, timeout=request_timeout)
+        env_id = info["env_id"]
         if is_dbox:
-            payload = self._dbox_payload(image_tag, ttl_seconds, kwargs)
-        else:
-            # Preserve the legacy gateway contract for existing recipes.
-            payload = {"image_tag": image_tag, "ttl_seconds": ttl_seconds, **kwargs}
+            self._dbox_env_ids.add(env_id)
+        async with allocated_sandbox(env_id, self.owned_env_ids, on_allocated, self._rollback_allocated):
+            if is_dbox:
+                info = await wait_ready(env_id, info, self.get, timeout=self.ready_timeout, poll_interval=2)
+            url = info.get("url")
+            if not url:
+                raise RuntimeError("Gateway has no remote-exec URL")
+            client = SandboxClient(url, sandbox_id=env_id, lifecycle_provider=self)
+        logger.info("Created sandbox: env_id=%s", env_id)
+        return client, env_id
+
+    async def _allocate(self, payload: dict, *, is_dbox: bool, timeout: float) -> SandboxEnvironment:
+        """Send exactly one POST and validate its allocated ID without leaking credentials."""
         try:
-            resp = await self._client.post("/envs", json=payload, timeout=request_timeout)
+            resp = await self._client.post("/envs", json=payload, timeout=timeout)
             resp.raise_for_status()
             ret = resp.json()
         except Exception as exc:
@@ -120,38 +142,13 @@ class GatewayProvider:
             raise RuntimeError("Gateway rejected sandbox creation")
         info = ret.get("env") or {}
         env_id = info.get("env_id")
-        if not env_id:
+        if not isinstance(env_id, str) or not env_id:
             raise RuntimeError("Gateway creation response has no environment ID")
-        self.owned_env_ids.add(env_id)
-        if is_dbox:
-            self._dbox_env_ids.add(env_id)
-        try:
-            if is_dbox:
-                # Platform readiness and remote-exec health are different.
-                # Pool still checks the latter after this allocation completes.
-                deadline = time.monotonic() + self.ready_timeout
-                while info.get("status") != "ready":
-                    if info.get("status") in {"error", "failed", "deleted", "deleting"}:
-                        raise RuntimeError("DBox reached a terminal state before ready")
-                    if time.monotonic() >= deadline:
-                        raise TimeoutError("DBox platform readiness timed out")
-                    await asyncio.sleep(2)
-                    current = await self.get(env_id)
-                    info = current.get("env", current)
-            url = info.get("url")
-            if not url:
-                raise RuntimeError("Gateway has no remote-exec URL")
-            client = SandboxClient(url, sandbox_id=env_id, lifecycle_provider=self)
-        except BaseException:
-            # An allocated but failed sandbox never becomes a Pool lease.
-            # Keep its ID if rollback fails; the owning pool retries cleanup.
-            try:
-                await asyncio.shield(self.delete(env_id))
-            except Exception:
-                pass
-            raise
-        logger.info("Created sandbox: env_id=%s", env_id)
-        return client, env_id
+        return info
+
+    async def _rollback_allocated(self, env_id: str) -> None:
+        """Shield the Gateway delete; allocation ownership survives failure."""
+        await asyncio.shield(self.delete(env_id))
 
     def _dbox_payload(self, image_tag: str, ttl_seconds: int, kwargs: dict) -> dict:
         fields = dict(kwargs)
@@ -162,12 +159,7 @@ class GatewayProvider:
         credential_file = fields.pop("credential_file", None) or self.credential_file
         key = fields.pop("key", None)
         if credential_file:
-            raw = Path(credential_file).read_text().strip()
-            try:
-                parsed = json.loads(raw)
-            except ValueError:
-                parsed = raw
-            key = parsed.get("aksk") if isinstance(parsed, dict) else parsed
+            key = read_trusted_aksk(credential_file)
         key = key or extra.get("aksk")
         if not isinstance(key, str) or key.count(":") != 1 or any(c.isspace() for c in key) or not all(key.split(":")):
             raise ValueError("DBox requires a complete AK:SK credential in its trusted credential file")
@@ -182,7 +174,9 @@ class GatewayProvider:
             if name not in {"cpu", "memory"} or type(value) is not int or value <= 0:
                 raise ValueError("DBox resources require positive integer cpu and memory (GiB)")
         if fields.pop("env_vars", None):
-            raise ValueError("DBox gateway does not document env_vars; inject task runtime through a trusted provisioner")
+            raise ValueError(
+                "DBox gateway does not document env_vars; inject task runtime through a trusted provisioner"
+            )
         if fields:
             raise ValueError("Unsupported DBox creation fields")
         extra.update(project=project, aksk=key)
@@ -220,7 +214,7 @@ class GatewayProvider:
         self._dbox_env_ids.discard(env_id)
         logger.info("Deleted sandbox: env_id=%s", env_id)
 
-    async def get(self, env_id: str) -> dict:
+    async def get(self, env_id: str) -> SandboxStatus:
         """Get sandbox status.
 
         Args:
@@ -234,7 +228,8 @@ class GatewayProvider:
             if resp.status_code == 404:
                 return {"ok": True, "env": {"env_id": env_id, "status": "deleted"}}
             resp.raise_for_status()
-            return resp.json()
+            result = resp.json()
+            return {**result, "env": result.get("env", result), "ok": result.get("ok", True)}
         except Exception as exc:
             raise RuntimeError(f"Gateway status request failed ({type(exc).__name__})") from None
 

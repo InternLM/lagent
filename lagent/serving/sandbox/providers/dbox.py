@@ -9,21 +9,21 @@ its environment, or its remote-exec HTTP client.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
-import json
 import ipaddress
 import math
-from pathlib import Path
 import re
 import secrets
 import time
+from typing import Any
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 import httpx
 
-from .base import SandboxClient
+from .base import AllocationCallback, SandboxClient, SandboxEnvironment, SandboxStatus
+from .credentials import read_trusted_aksk
 from .dbox_client import DBoxSandboxClient
+from .lifecycle import allocated_sandbox, allocation_preflight, wait_ready
 
 
 class DBoxCredentialError(ValueError):
@@ -47,12 +47,9 @@ class DBoxProvider:
     """
 
     supports_allocation_callback = True
+    supports_deletion_confirmation = True
     _AUTH_HEADER = "OPEN-SANDBOX-API-KEY"
     _ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,159}\Z")
-    _TERMINAL_STATES = frozenset({
-        "error", "failed", "deleted", "deleting", "terminated", "terminating",
-        "expired", "stopped", "stopping", "paused", "succeeded", "completed",
-    })
 
     def __init__(
         self,
@@ -69,16 +66,27 @@ class DBoxProvider:
         pool_size: int = 32,
     ):
         parts = urlsplit(api_url)
-        if (parts.scheme not in {"http", "https"} or not parts.hostname
-                or parts.username or parts.password or parts.query or parts.fragment
-                or parts.path.rstrip("/")):
+        if (
+            parts.scheme not in {"http", "https"}
+            or not parts.hostname
+            or parts.username
+            or parts.password
+            or parts.query
+            or parts.fragment
+            or parts.path.rstrip("/")
+        ):
             raise ValueError("DBox api_url must be an HTTP(S) origin without credentials")
         if not isinstance(project, str) or not self._ID_PATTERN.fullmatch(project):
             raise ValueError("DBox requires an explicit project name")
         if not credential_file:
             raise ValueError("DBox requires a trusted credential file")
         for value in (ready_timeout, create_timeout, delete_timeout, get_timeout, poll_interval):
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0
+            ):
                 raise ValueError("DBox timeouts and poll_interval must be finite positive numbers")
         try:
             self.sandbox_group = str(UUID(sandbox_group)) if sandbox_group is not None else str(uuid4())
@@ -93,7 +101,6 @@ class DBoxProvider:
         self._get_timeout = float(get_timeout)
         self._poll_interval = float(poll_interval)
         self.owned_env_ids: set[str] = set()
-        self._execd_tokens: dict[str, str] = {}
         self._client = httpx.AsyncClient(
             base_url=self.api_url,
             headers={"Content-Type": "application/json"},
@@ -104,25 +111,7 @@ class DBoxProvider:
         )
 
     def _auth_headers(self) -> dict[str, str]:
-        try:
-            raw = Path(self.credential_file).read_text().strip()
-            try:
-                parsed = json.loads(raw)
-            except ValueError:
-                parsed = raw
-            key = parsed.get("aksk") or parsed.get("api_key") if isinstance(parsed, dict) else parsed
-            if isinstance(parsed, dict) and not key:
-                parts = [parsed.get("access_key_id"), parsed.get("secret_key")]
-                if not all(isinstance(part, str) and part and ":" not in part for part in parts):
-                    raise ValueError("invalid credential")
-                key = ":".join(parts)
-            if (not isinstance(key, str) or key.count(":") != 1
-                    or any(c.isspace() for c in key) or not all(key.split(":"))):
-                raise ValueError("invalid credential")
-        except Exception:
-            # A JSON parse exception or filesystem exception can include input.
-            raise ValueError("DBox requires a readable trusted credential file containing complete AK:SK") from None
-        return {self._AUTH_HEADER: key}
+        return {self._AUTH_HEADER: read_trusted_aksk(self.credential_file)}
 
     async def _request(self, method: str, path: str, *, timeout: float, payload: dict | None = None) -> httpx.Response:
         try:
@@ -175,7 +164,7 @@ class DBoxProvider:
             raise ValueError("DBox returned an invalid sandbox identifier")
         return env_id
 
-    def _normalize(self, value: dict, env_id: str) -> dict:
+    def _normalize(self, value: dict, env_id: str) -> SandboxStatus:
         # DBox has published both {state: 'running'} and
         # {status: {state: 'Running'}} representations.
         state = value.get("state") or value.get("status") or "pending"
@@ -185,7 +174,7 @@ class DBoxProvider:
             raise RuntimeError("DBox returned an invalid sandbox state")
         state = state.lower()
         status = "ready" if state in {"running", "ready"} else state
-        info = {
+        info: SandboxEnvironment = {
             "env_id": env_id,
             "status": status,
             "sbx_name": env_id,
@@ -208,81 +197,93 @@ class DBoxProvider:
         if cluster != "dbox":
             raise ValueError("Direct DBox provider only supports cluster_name='dbox'")
         resources = fields.pop("resources", None) or {"cpu": 2, "memory": 4}
-        if (not isinstance(resources, dict) or set(resources) != {"cpu", "memory"}
-                or any(type(v) is not int or v <= 0 for v in resources.values())):
+        if (
+            not isinstance(resources, dict)
+            or set(resources) != {"cpu", "memory"}
+            or any(type(v) is not int or v <= 0 for v in resources.values())
+        ):
             raise ValueError("DBox resources require positive integer cpu and memory (GiB)")
         if fields:
-            raise ValueError("Unsupported direct DBox creation fields; inject task runtime through a trusted provisioner")
+            raise ValueError(
+                "Unsupported direct DBox creation fields; inject task runtime through a trusted provisioner"
+            )
         return {
             "image": {"uri": image_tag},
             "entrypoint": ["/mnt/llm-ai-infra/tools/remote-exec-server", "--host", "127.0.0.1", "--port", "18000"],
             "timeout": ttl_seconds,
             "resourceRequests": {"cpu": str(resources["cpu"]), "memory": f"{resources['memory']}Gi"},
             "ports": [{"containerPort": 44772, "name": "execd", "protocol": "tcp", "purpose": "system service"}],
-            "volumes": [{"name": "shared", "mountPath": "/mnt/llm-ai-infra/", "subPath": "/mnt/llm-ai-infra", "readOnly": True}],
+            "volumes": [
+                {"name": "shared", "mountPath": "/mnt/llm-ai-infra/", "subPath": "/mnt/llm-ai-infra", "readOnly": True}
+            ],
             # The trusted provisioner needs namespaced NET_ADMIN for the agent
             # UID firewall. Default runc lacks it; no Docker daemon is required.
-            "extensions": {"project": self.project, "sandboxGroup": self.sandbox_group,
-                           "runtimeClassName": "sysbox-runc", "disableProjectDataMount": "true"},
-            "networkPolicy": {"defaultAction": "deny", "egress": [], "ingress": {
-                "defaultAction": "allow", "rules": [{"action": "deny", "from": "sandbox:any"}],
-            }},
+            "extensions": {
+                "project": self.project,
+                "sandboxGroup": self.sandbox_group,
+                "runtimeClassName": "sysbox-runc",
+                "disableProjectDataMount": "true",
+            },
+            "networkPolicy": {
+                "defaultAction": "deny",
+                "egress": [],
+                "ingress": {
+                    "defaultAction": "allow",
+                    "rules": [{"action": "deny", "from": "sandbox:any"}],
+                },
+            },
         }
 
-    async def create(self, image_tag: str, ttl_seconds: int = 1800, timeout: float | None = None,
-                     user: str | None = None, *,
-                     on_allocated: Callable[[str], Awaitable[None]] | None = None,
-                     **kwargs) -> tuple[SandboxClient, str]:
+    async def create(
+        self,
+        image_tag: str,
+        ttl_seconds: int = 1800,
+        timeout: float | None = None,
+        user: str | None = None,
+        *,
+        on_allocated: AllocationCallback | None = None,
+        **kwargs: Any,
+    ) -> tuple[SandboxClient, str]:
         """Allocate once, then wait for platform readiness and return a client."""
         # XTuner's generic provider interface requires a user identifier.
         # DBox authorization comes from the trusted project/credential pair;
         # this bookkeeping field is not a sandbox environment or API override.
-        try:
+        with allocation_preflight():
             payload = self._payload(image_tag, ttl_seconds, kwargs)
-        except (ValueError, TypeError) as exc:
-            setattr(exc, "allocation_state", "not_allocated")
-            raise
         token = secrets.token_urlsafe(40)
         payload["env"] = {"EXECD_ACCESS_TOKEN": token}
-        response = await self._request("POST", "/v1/sandboxes", payload=payload,
-                                       timeout=self._create_timeout if timeout is None else timeout)
+        response = await self._request(
+            "POST", "/v1/sandboxes", payload=payload, timeout=self._create_timeout if timeout is None else timeout
+        )
         if response.status_code not in {200, 201, 202}:
             raise RuntimeError("DBox creation was not accepted; allocation may be ambiguous")
         value = self._json(response)
         env_id = self._check_id(value.get("id") or value.get("sandboxID"))
-        self.owned_env_ids.add(env_id)
-        self._execd_tokens[env_id] = token
-        try:
-            if on_allocated is not None:
-                await on_allocated(env_id)
-            info = self._normalize(value, env_id)["env"]
-            deadline = time.monotonic() + self.ready_timeout
-            while info["status"] != "ready":
-                if info["status"] in self._TERMINAL_STATES:
-                    raise RuntimeError("DBox reached a terminal state before ready")
-                if time.monotonic() >= deadline:
-                    raise TimeoutError("DBox platform readiness timed out")
-                await asyncio.sleep(min(self._poll_interval, max(0.0, deadline - time.monotonic())))
-                info = (await self.get(env_id))["env"]
-            client = DBoxSandboxClient(info["url"], auth_headers=self._auth_headers, execd_token=token,
-                                       sandbox_id=env_id, provider=self)
-        except BaseException:
-            # The Pool has not received a lease yet. Retain ownership if
-            # rollback fails so its final cleanup can try this known ID again.
-            cleanup = asyncio.create_task(self.delete(env_id))
-            try:
-                await asyncio.shield(cleanup)
-            except asyncio.CancelledError:
-                try:
-                    await cleanup
-                except Exception:
-                    pass
-            except Exception:
-                pass
-            raise
+        async with allocated_sandbox(env_id, self.owned_env_ids, on_allocated, self._rollback_allocated):
+            info = await wait_ready(
+                env_id,
+                self._normalize(value, env_id)["env"],
+                self.get,
+                timeout=self.ready_timeout,
+                poll_interval=self._poll_interval,
+            )
+            client = DBoxSandboxClient(
+                info["url"], auth_headers=self._auth_headers, execd_token=token, sandbox_id=env_id, provider=self
+            )
         return client, env_id
 
-    async def get(self, env_id: str) -> dict:
+    async def _rollback_allocated(self, env_id: str) -> None:
+        """Keep the direct transport alive through a repeated cancellation."""
+        cleanup = asyncio.create_task(self.delete(env_id))
+        try:
+            await asyncio.shield(cleanup)
+        except asyncio.CancelledError:
+            try:
+                await cleanup
+            except Exception:
+                pass
+
+    async def get(self, env_id: str) -> SandboxStatus:
         """Return sanitized Gateway-shaped status, compatible with provisioners."""
         self._check_id(env_id)
         response = await self._request("GET", f"/v1/sandboxes/{env_id}", timeout=self._get_timeout)
@@ -294,8 +295,9 @@ class DBoxProvider:
         """Compatibility entry point for a single peer."""
         return await self.configure_network(env_id, peer_ids=[peer_id], external_targets=external_targets)
 
-    async def configure_network(self, env_id: str, *, peer_ids: list[str] | None = None,
-                                external_targets: list[str] | None = None) -> dict:
+    async def configure_network(
+        self, env_id: str, *, peer_ids: list[str] | None = None, external_targets: list[str] | None = None
+    ) -> dict:
         """Set and verify deny-by-default egress for any owned sandbox."""
         peers = list(dict.fromkeys(peer_ids or []))
         for value in [env_id, *peers]:
@@ -319,17 +321,26 @@ class DBoxProvider:
         ingress = {"action": "deny", "from": "sandbox:any", "protocol": "tcp"}
         if exceptions:
             ingress["except"] = exceptions
-        policy = {"defaultAction": "deny", "egress": [
-            *[{"action": "allow", "target": peer} for peer in exceptions],
-            *[{"action": "allow", "target": target} for target in targets],
-        ], "ingress": {"defaultAction": "allow", "rules": [ingress]}}
-        response = await self._request("PUT", f"/v1/sandboxes/{env_id}/networkpolicy",
-                                       payload=policy, timeout=self._get_timeout)
+        policy = {
+            "defaultAction": "deny",
+            "egress": [
+                *[{"action": "allow", "target": peer} for peer in exceptions],
+                *[{"action": "allow", "target": target} for target in targets],
+            ],
+            "ingress": {"defaultAction": "allow", "rules": [ingress]},
+        }
+        response = await self._request(
+            "PUT", f"/v1/sandboxes/{env_id}/networkpolicy", payload=policy, timeout=self._get_timeout
+        )
         result = self._json(response)
         actual = result.get("policy", {})
-        if (response.status_code != 200 or result.get("status") != "ok"
-                or actual.get("defaultAction") != "deny" or actual.get("egress") != policy["egress"]
-                or actual.get("ingress") != policy["ingress"]):
+        if (
+            response.status_code != 200
+            or result.get("status") != "ok"
+            or actual.get("defaultAction") != "deny"
+            or actual.get("egress") != policy["egress"]
+            or actual.get("ingress") != policy["ingress"]
+        ):
             raise RuntimeError("DBox did not confirm the requested network policy")
         return result
 
@@ -347,7 +358,6 @@ class DBoxProvider:
                     raise TimeoutError("DBox deletion was not confirmed by platform status")
                 await asyncio.sleep(min(self._poll_interval, max(0.0, deadline - time.monotonic())))
         self.owned_env_ids.discard(env_id)
-        self._execd_tokens.pop(env_id, None)
 
     async def aclose(self) -> None:
         """Close HTTP connections; owning Pool is responsible for allocations."""

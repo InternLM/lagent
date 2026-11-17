@@ -10,8 +10,12 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import posixpath
 import shlex
 import time
+from collections.abc import Sequence
+from textwrap import indent
+from uuid import uuid4
 
 import httpx
 
@@ -21,8 +25,17 @@ from .base import SandboxClient
 class DBoxTransportError(httpx.HTTPError, RuntimeError):
     """Sanitized data-plane failure compatible with existing PID polling retries."""
 
-    def __init__(self, message, *, status_code=None, error_code=None, phase="execd_transport",
-                 transport_error_type=None, elapsed_seconds=None, response_received=False):
+    def __init__(
+        self,
+        message,
+        *,
+        status_code=None,
+        error_code=None,
+        phase="execd_transport",
+        transport_error_type=None,
+        elapsed_seconds=None,
+        response_received=False,
+    ):
         super().__init__(message)
         self.status_code = status_code
         self.error_code = error_code
@@ -36,13 +49,24 @@ async def _safe_error_code(response):
     """Classify a bounded error body without retaining free-form server text."""
     data = bytearray()
     async for chunk in response.aiter_bytes(chunk_size=4096):
-        data.extend(chunk[:4096 - len(data)])
+        data.extend(chunk[: 4096 - len(data)])
         if len(data) >= 4096:
             break
-    known = {"SANDBOX_NOT_RUNNING", "SANDBOX_NOT_FOUND", "INVALID_STATE", "RATE_LIMITED",
-             "QUOTA_EXCEEDED", "UNAUTHORIZED", "FORBIDDEN", "PROXY_POOL_EXHAUSTED",
-             "BACKEND_CONNECTION_FAILED", "BACKEND_TIMEOUT", "BACKEND_RESPONSE_FAILED",
-             "SERVICE_UNAVAILABLE", "PORT_NOT_FOUND"}
+    known = {
+        "SANDBOX_NOT_RUNNING",
+        "SANDBOX_NOT_FOUND",
+        "INVALID_STATE",
+        "RATE_LIMITED",
+        "QUOTA_EXCEEDED",
+        "UNAUTHORIZED",
+        "FORBIDDEN",
+        "PROXY_POOL_EXHAUSTED",
+        "BACKEND_CONNECTION_FAILED",
+        "BACKEND_TIMEOUT",
+        "BACKEND_RESPONSE_FAILED",
+        "SERVICE_UNAVAILABLE",
+        "PORT_NOT_FOUND",
+    }
     try:
         body = json.loads(data)
         error = body.get("detail") or body.get("error") or body
@@ -52,7 +76,9 @@ async def _safe_error_code(response):
     except (ValueError, AttributeError):
         pass
     if bytes(data).strip().lower().rstrip(b".") in {
-        b"sandbox is not running", b"sandbox not running", b"sandbox is not ready",
+        b"sandbox is not running",
+        b"sandbox not running",
+        b"sandbox is not ready",
     }:
         return "SANDBOX_NOT_RUNNING"
     return None
@@ -75,18 +101,24 @@ class DBoxSandboxClient(SandboxClient):
         code = (
             "import base64,json,urllib.request; "
             "payload=base64.b64decode(" + repr(encoded) + ") if " + repr(encoded) + " else None; "
-            "request=urllib.request.Request(" + repr("http://127.0.0.1:18000/" + path)
+            "request=urllib.request.Request("
+            + repr("http://127.0.0.1:18000/" + path)
             + ",data=payload,headers={'Content-Type':'application/json'}); "
             "response=urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request,timeout="
-            + repr(timeout) + "); "
+            + repr(timeout)
+            + "); "
             "print('DBOX_RESPONSE:'+base64.b64encode(response.read()).decode())"
         )
         text = await self._execd_stdout("python3 -c " + shlex.quote(code), timeout + 15)
         if not text.startswith("DBOX_RESPONSE:"):
-            raise DBoxTransportError("DBox execution response incomplete or failed", status_code=200,
-                                     phase="execd_response_stream", response_received=True)
+            raise DBoxTransportError(
+                "DBox execution response incomplete or failed",
+                status_code=200,
+                phase="execd_response_stream",
+                response_received=True,
+            )
         try:
-            result = json.loads(base64.b64decode(text[len("DBOX_RESPONSE:"):], validate=True))
+            result = json.loads(base64.b64decode(text[len("DBOX_RESPONSE:") :], validate=True))
             if not isinstance(result, dict):
                 raise ValueError("not a response object")
             return result
@@ -99,16 +131,24 @@ class DBoxSandboxClient(SandboxClient):
         # fail process monitoring. Report the probe's status on stdout because
         # execd's own completion is the printf below.
         try:
-            async with asyncio.timeout(self.process_probe_deadline_sec):
-                text = await self._execd_stdout(command + "; printf 'DBOX_PID:%s\\n' \"$?\"", 20)
-        except TimeoutError:
-            raise DBoxTransportError("DBox process probe deadline exceeded", phase="process_probe",
-                                     transport_error_type="TimeoutError") from None
+            text = await asyncio.wait_for(
+                self._execd_stdout(command + "; printf 'DBOX_PID:%s\\n' \"$?\"", 20),
+                timeout=self.process_probe_deadline_sec,
+            )
+        except asyncio.TimeoutError:
+            raise DBoxTransportError(
+                "DBox process probe deadline exceeded", phase="process_probe", transport_error_type="TimeoutError"
+            ) from None
         marker, _, value = text.partition(":")
         return int(value) if marker == "DBOX_PID" and value in {"0", "1", "2"} else None
 
     async def _execd_stdout(self, command: str, timeout: float) -> str:
-        """Read one execd command stream without exposing commands or credentials."""
+        """Read an execd stream within one wall budget, preserving legacy EOF.
+
+        An integer completion exit_code terminates modern streams immediately;
+        zero is required for success. Legacy completion without exit_code only
+        marks completion: output/error events may follow until HTTP EOF.
+        """
         headers = self._auth_headers()
         headers["X-EXECD-ACCESS-TOKEN"] = self._execd_token
         stdout = []
@@ -117,25 +157,38 @@ class DBoxSandboxClient(SandboxClient):
         started = time.monotonic()
         response_status = None
         phase = "execd_response_headers"
+
         def failure(message, **details):
-            return DBoxTransportError(message, status_code=response_status,
+            return DBoxTransportError(
+                message,
+                status_code=response_status,
                 elapsed_seconds=round(time.monotonic() - started, 6),
-                response_received=response_status is not None, **details)
-        try:
+                response_received=response_status is not None,
+                **details,
+            )
+
+        async def read_stream():
+            nonlocal response_status, phase, complete, failed
             async with self._client.stream(
-                "POST", "command", headers=headers, json={"command": command}, timeout=timeout,
+                "POST",
+                "command",
+                headers=headers,
+                json={"command": command},
+                timeout=timeout,
             ) as response:
                 response_status = response.status_code
                 if response.status_code != 200:
+                    phase = "execd_proxy"
                     try:
                         code = await asyncio.wait_for(_safe_error_code(response), timeout=2.0)
-                    except (httpx.HTTPError, TimeoutError):
+                    except (httpx.HTTPError, asyncio.TimeoutError):
                         # An incomplete diagnostic body must not erase the HTTP
                         # status already observed from the control endpoint.
                         code = None
                     raise failure(
                         f"DBox execd returned HTTP {response.status_code}" + (f" ({code})" if code else ""),
-                        error_code=code, phase="execd_proxy",
+                        error_code=code,
+                        phase="execd_proxy",
                     )
                 phase = "execd_response_stream"
                 async for line in response.aiter_lines():
@@ -153,15 +206,25 @@ class DBoxSandboxClient(SandboxClient):
                         failed = True
                     elif event.get("type") == "execution_complete":
                         complete = True
-                        # This event terminates the execution protocol. Waiting
-                        # for HTTP EOF can time out after a completed command and
-                        # holds a proxy pool connection for no useful work.
-                        break
+                        if "exit_code" in event:
+                            # Only modern integer completion proves a terminal
+                            # result. Legacy completion must drain through EOF.
+                            exit_code = event["exit_code"]
+                            failed = failed or type(exit_code) is not int or exit_code != 0
+                            break
+
+        try:
+            # httpx timeouts apply per operation; a legacy stream can keep
+            # producing chunks forever. Bound headers, body and close together.
+            await asyncio.wait_for(read_stream(), timeout=timeout)
         except DBoxTransportError:
             raise
         except Exception as exc:
-            raise failure(f"DBox authenticated transport failed ({type(exc).__name__})",
-                          phase=phase, transport_error_type=type(exc).__name__) from None
+            raise failure(
+                f"DBox authenticated transport failed ({type(exc).__name__})",
+                phase=phase,
+                transport_error_type=type(exc).__name__,
+            ) from None
         finally:
             headers.clear()
         if failed or not complete:
@@ -170,36 +233,144 @@ class DBoxSandboxClient(SandboxClient):
 
     async def execute(self, command: str, cwd: str = "/root", timeout_sec: int = 60, detach: bool = False) -> dict:
         return await self._remote_request(
-            "exec", {"command": command, "cwd": cwd, "timeout_sec": int(timeout_sec), "detach": detach},
+            "exec",
+            {"command": command, "cwd": cwd, "timeout_sec": int(timeout_sec), "detach": detach},
             timeout=int(timeout_sec) + 10,
+        )
+
+    async def configure_network(
+        self,
+        *,
+        peer_clients: Sequence[DBoxSandboxClient] = (),
+        external_targets: Sequence[str] = (),
+    ) -> dict:
+        """Configure owned peers without exposing provider identity to recipes."""
+        if any(peer.provider is not self.provider for peer in peer_clients):
+            raise ValueError("Network peers must belong to the same provider")
+        return await self.provider.configure_network(
+            self.sandbox_id,
+            peer_ids=[peer.sandbox_id for peer in peer_clients],
+            external_targets=list(external_targets),
+        )
+
+    async def get_diagnostics(self, kind: str = "state", *, timeout: float = 2) -> httpx.Response:
+        """Read a supported control-plane diagnostic without exposing transport internals."""
+        suffixes = {"state": "", "inspect": "/inspect", "events": "/events"}
+        if kind not in suffixes:
+            raise ValueError("Diagnostic kind must be state, inspect, or events")
+        sandbox_id = self.provider._check_id(self.sandbox_id)
+        return await self.provider._request(
+            "GET",
+            f"/v1/sandboxes/{sandbox_id}{suffixes[kind]}",
+            timeout=timeout,
         )
 
     def _process_probe_error(self) -> Exception:
         return DBoxTransportError("DBox process probe returned no valid process state", phase="process_probe")
 
     async def upload_bytes(self, remote_path: str, content: bytes) -> dict:
-        # execd invokes a shell: keep each command well below ARG_MAX. Assemble
-        # chunks in a private staging path and rename only after all succeed.
+        """Atomically upload to an absolute path, preserving existing metadata.
+
+        New files are private (0600). Both sizes use the same commit rules;
+        larger payloads are chunked to stay below execd's shell argument limit.
+        """
+        if not isinstance(remote_path, str) or not posixpath.isabs(remote_path):
+            raise ValueError('DBox upload requires an absolute POSIX destination path')
+        staging_name = '.dbox-transfer-' + uuid4().hex
+        commit = (
+            'try:\n'
+            '    metadata = os.stat(target)\n'
+            'except FileNotFoundError:\n'
+            '    metadata = None\n'
+            'if metadata is not None:\n'
+            '    current = os.stat(staging)\n'
+            '    if (current.st_uid, current.st_gid) != (metadata.st_uid, metadata.st_gid):\n'
+            '        os.chown(staging, metadata.st_uid, metadata.st_gid)\n'
+            '    os.chmod(staging, stat.S_IMODE(metadata.st_mode))\n'
+            'else:\n'
+            '    os.chmod(staging, 0o600)\n'
+            'os.replace(staging, target)\n'
+        )
+        # Resolve destination symlinks as the existing upload endpoint does,
+        # then stage beside the resolved target for a same-filesystem rename.
+        setup = (
+            'import os,stat\ntarget=os.path.realpath(' + repr(remote_path) + ')\n'
+            'staging=os.path.join(os.path.dirname(target),' + repr(staging_name) + ')\n'
+        )
+        create = (
+            'os.makedirs(os.path.dirname(target), exist_ok=True)\n'
+            'fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)\n'
+        )
         if len(content) <= 24000:
-            return await self._remote_request(
-                "upload", {"target_path": remote_path, "content_b64": base64.b64encode(content).decode()},
+            # Keep the common small upload to one transport request, including
+            # metadata restoration and cleanup; no payload exceeds ARG_MAX.
+            code = (
+                setup
+                + 'import base64,sys\nowned = False\ntry:\n'
+                + indent(create, '    ')
+                + '    owned = True\n    with os.fdopen(fd, "wb") as stream:\n'
+                + '        stream.write(base64.b64decode('
+                + repr(base64.b64encode(content).decode())
+                + '))\n'
+                + indent(commit, '    ')
+                + 'finally:\n    if owned:\n        failed = sys.exc_info()[0] is not None\n'
+                + '        try: os.unlink(staging)\n'
+                + '        except FileNotFoundError: pass\n'
+                + '        except BaseException:\n            if not failed: raise\n'
             )
-        from uuid import uuid4
-        staging = "/tmp/dbox-transfer-" + uuid4().hex
+            result = await self.execute('python3 -c ' + shlex.quote(code), cwd='/tmp')
+            if result.get('return_code') != 0:
+                raise RuntimeError('DBox atomic upload failed')
+            return {'ok': True, 'target_path': remote_path, 'size': len(content)}
+        failed = False
+        staged = False
         try:
-            await self.execute("umask 077; : > " + shlex.quote(staging), cwd="/tmp")
+            code = (
+                setup + create + 'os.close(fd)\nimport json\n'
+                'print(json.dumps({"target": target, "staging": staging}))\n'
+            )
+            result = await self.execute('python3 -c ' + shlex.quote(code), cwd='/tmp')
+            if result.get("return_code") != 0:
+                raise RuntimeError("DBox upload staging failed")
+            try:
+                snapshot = json.loads(result['stdout'])
+                target, staging = snapshot['target'], snapshot['staging']
+                if (
+                    not isinstance(target, str)
+                    or not posixpath.isabs(target)
+                    or staging != posixpath.join(posixpath.dirname(target), staging_name)
+                ):
+                    raise ValueError('invalid upload destination')
+            except (KeyError, TypeError, ValueError):
+                raise RuntimeError('DBox upload staging returned an invalid destination') from None
+            # Freeze the resolved target and staging, including when a caller
+            # changes a destination symlink while chunks are in flight.
+            setup = 'import os,stat\ntarget=' + repr(target) + '\nstaging=' + repr(staging) + '\n'
+            staged = True
             for offset in range(0, len(content), 24000):
-                chunk = base64.b64encode(content[offset:offset + 24000]).decode()
-                code = "import base64;open(" + repr(staging) + ",'ab').write(base64.b64decode(" + repr(chunk) + "))"
+                chunk = base64.b64encode(content[offset : offset + 24000]).decode()
+                code = setup + 'import base64\nopen(staging,"ab").write(base64.b64decode(' + repr(chunk) + '))\n'
                 result = await self.execute("python3 -c " + shlex.quote(code), cwd="/tmp")
                 if result.get("return_code") != 0:
                     raise RuntimeError("DBox chunk upload failed")
-            result = await self.execute("mv -- " + shlex.quote(staging) + " " + shlex.quote(remote_path), cwd="/tmp")
+            code = setup + commit
+            result = await self.execute("python3 -c " + shlex.quote(code), cwd="/tmp")
             if result.get("return_code") != 0:
                 raise RuntimeError("DBox upload commit failed")
-            return {"ok": True}
+            return {"ok": True, "target_path": remote_path, "size": len(content)}
+        except BaseException:
+            failed = True
+            raise
         finally:
-            await self.execute("rm -f -- " + shlex.quote(staging), cwd="/tmp")
+            if staged:
+                try:
+                    code = setup + 'try: os.unlink(staging)\nexcept FileNotFoundError: pass\n'
+                    result = await self.execute('python3 -c ' + shlex.quote(code), cwd='/tmp')
+                    if result.get("return_code") != 0:
+                        raise RuntimeError("DBox upload staging cleanup failed")
+                except BaseException:
+                    if not failed:
+                        raise
 
     async def download_file(self, remote_path: str) -> bytes:
         result = await self._remote_request("download", {"source_path": remote_path})
