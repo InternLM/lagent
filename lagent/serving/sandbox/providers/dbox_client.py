@@ -255,7 +255,11 @@ class DBoxSandboxClient(SandboxClient):
 
     async def get_diagnostics(self, kind: str = "state", *, timeout: float = 2) -> httpx.Response:
         """Read a supported control-plane diagnostic without exposing transport internals."""
-        suffixes = {"state": "", "inspect": "/inspect", "events": "/events"}
+        suffixes = {
+            "state": "",
+            "inspect": "/diagnostics/inspect",
+            "events": "/diagnostics/events",
+        }
         if kind not in suffixes:
             raise ValueError("Diagnostic kind must be state, inspect, or events")
         sandbox_id = self.provider._check_id(self.sandbox_id)

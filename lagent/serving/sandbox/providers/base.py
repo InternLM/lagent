@@ -19,7 +19,7 @@ import shlex
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Protocol, TypedDict, runtime_checkable
+from typing import Any, Protocol, TypedDict, TypeVar, runtime_checkable
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 import httpx
@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 AllocationCallback = Callable[[str], Awaitable[None]]
+ClientT = TypeVar("ClientT", covariant=True)
 
 
 class SandboxEnvironment(TypedDict, total=False):
@@ -76,7 +77,7 @@ class SandboxClient:
         timeout: float = 60.0,
         max_connections: int = 32,
         sandbox_id: str | None = None,
-        lifecycle_provider: SandboxProvider | None = None,
+        lifecycle_provider: SandboxProvider[Any] | None = None,
     ):
         self._lifecycle_observation = (
             (lifecycle_provider, sandbox_id) if (lifecycle_provider is not None and sandbox_id is not None) else None
@@ -261,7 +262,7 @@ class SandboxClient:
 
 
 @runtime_checkable
-class SandboxProvider(Protocol):
+class SandboxProvider(Protocol[ClientT]):
     """Async lifecycle contract used by persistent sandbox owners.
 
     An allocation callback runs once an ID is known, before readiness polling.
@@ -271,7 +272,9 @@ class SandboxProvider(Protocol):
     404 to ``env.status=deleted``; other terminal states are not deletion proof.
     Closing transport connections never releases allocated resources.
 
-    This protocol covers tracked HTTP providers. LocalProvider and
+    The client return type preserves each adapter's operations without requiring
+    unrelated HTTP transports to inherit SandboxClient. This protocol covers
+    tracked HTTP providers. LocalProvider and
     ClusterXProvider keep separate creation contracts and do not implement it.
     """
 
@@ -287,11 +290,11 @@ class SandboxProvider(Protocol):
         *,
         on_allocated: AllocationCallback | None = None,
         **kwargs: Any,
-    ) -> tuple[SandboxClient, str]:
+    ) -> tuple[ClientT, str]:
         """Create a new sandbox.
 
         Returns:
-            tuple[SandboxClient, str]: Client for the new sandbox and an
+            tuple[ClientT, str]: Client for the new sandbox and an
                 identifier for lifecycle management (delete, status).
         """
         ...
