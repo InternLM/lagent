@@ -11,17 +11,46 @@ themselves when they need readiness.
 """
 
 from __future__ import annotations
+
 import asyncio
 import base64
 import logging
+import shlex
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Protocol, Tuple, runtime_checkable
+from typing import Any, Protocol, TypedDict, TypeVar, runtime_checkable
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+AllocationCallback = Callable[[str], Awaitable[None]]
+ClientT = TypeVar("ClientT", covariant=True)
+
+
+class SandboxEnvironment(TypedDict, total=False):
+    """Normalized lifecycle fields; task commands must not receive credentials."""
+
+    env_id: str
+    status: str
+    url: str
+    sbx_name: str
+    sandbox_group: str
+    cluster: str
+
+
+class SandboxStatus(TypedDict):
+    ok: bool
+    env: SandboxEnvironment
+
+
+class SandboxProcessError(httpx.HTTPError, RuntimeError):
+    """A process probe failed without proving that the process exited."""
+
+    phase = "process_probe"
 
 
 class SandboxClient:
@@ -47,7 +76,12 @@ class SandboxClient:
         *,
         timeout: float = 60.0,
         max_connections: int = 32,
+        sandbox_id: str | None = None,
+        lifecycle_provider: SandboxProvider[Any] | None = None,
     ):
+        self._lifecycle_observation = (
+            (lifecycle_provider, sandbox_id) if (lifecycle_provider is not None and sandbox_id is not None) else None
+        )
         parts = urlsplit(url.rstrip("/"))
         self.url = urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
         self._client = httpx.AsyncClient(
@@ -152,11 +186,48 @@ class SandboxClient:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+    async def get_lifecycle_state(self) -> str | None:
+        """Query the control plane independently of sandbox command execution.
+
+        Returns:
+            str | None: Provider lifecycle state, or None if unavailable.
+        """
+        if self._lifecycle_observation is None:
+            return None
+        provider, sandbox_id = self._lifecycle_observation
+        response = await provider.get(sandbox_id)
+        state = response.get("env", response).get("status")
+        return state.lower() if isinstance(state, str) else None
+
     async def is_pid_running(self, pid: int) -> bool:
-        """Return whether ``pid`` is currently alive inside the sandbox."""
+        # kill -0 also succeeds for zombies. A reaped/exited process must let
+        # DetachedShellEntry collect its rc file instead of waiting to timeout.
         pid = int(pid)
-        result = await self.execute(f"kill -0 {pid} >/dev/null 2>&1", cwd="/tmp", timeout_sec=5)
-        return result.get("return_code") == 0
+        if pid <= 0:
+            raise ValueError("A positive process ID is required")
+        rc = await self._run_process_probe(self._process_probe_command(pid))
+        if type(rc) is not int or rc not in {0, 1}:
+            raise self._process_probe_error()
+        return rc == 0
+
+    @staticmethod
+    def _process_probe_command(pid: int) -> str:
+        # Exit 0: running; 1: exited, reaped or zombie; 2: unknown state.
+        code = (
+            "from pathlib import Path; import sys\n"
+            "try: state=Path('/proc/" + str(pid) + "/stat').read_text().rsplit(')',1)[1].split()[0]\n"
+            "except FileNotFoundError: sys.exit(1)\n"
+            "except (OSError,IndexError,UnicodeError): sys.exit(2)\n"
+            "sys.exit(1 if state in {'Z','X'} else 0 if state in {'R','S','D','T','t','I','P','W'} else 2)"
+        )
+        return "python3 -c " + shlex.quote(code)
+
+    async def _run_process_probe(self, command: str) -> int | None:
+        result = await self.execute(command, cwd="/tmp", timeout_sec=5)
+        return result.get("return_code")
+
+    def _process_probe_error(self) -> Exception:
+        return SandboxProcessError("Sandbox process probe returned no valid process state")
 
     async def wait_pid_exit(
         self,
@@ -191,22 +262,51 @@ class SandboxClient:
 
 
 @runtime_checkable
-class SandboxProvider(Protocol):
-    """Protocol for sandbox lifecycle management.
+class SandboxProvider(Protocol[ClientT]):
+    """Async lifecycle contract used by persistent sandbox owners.
 
-    Different implementations manage different infrastructure: k8s Gateway,
-    ClusterX, Docker, local subprocess, etc.
+    An allocation callback runs once an ID is known, before readiness polling.
+    Callback/readiness failure rolls back that ID; unsuccessful rollback keeps
+    it owned. Only a failure before sending POST may be ``not_allocated``.
+    Unknown POST outcomes must not be retried blindly. ``get`` normalizes HTTP
+    404 to ``env.status=deleted``; other terminal states are not deletion proof.
+    Closing transport connections never releases allocated resources.
+
+    The client return type preserves each adapter's operations without requiring
+    unrelated HTTP transports to inherit SandboxClient. This protocol covers
+    tracked HTTP providers. LocalProvider and
+    ClusterXProvider keep separate creation contracts and do not implement it.
     """
 
-    async def create(self, **kwargs) -> Tuple[SandboxClient, str]:
+    supports_allocation_callback: bool
+    supports_deletion_confirmation: bool
+    owned_env_ids: set[str]
+
+    async def create(
+        self,
+        image_tag: str,
+        ttl_seconds: int = 1800,
+        timeout: float | None = None,
+        *,
+        on_allocated: AllocationCallback | None = None,
+        **kwargs: Any,
+    ) -> tuple[ClientT, str]:
         """Create a new sandbox.
 
         Returns:
-            tuple[SandboxClient, str]: Client for the new sandbox and an
+            tuple[ClientT, str]: Client for the new sandbox and an
                 identifier for lifecycle management (delete, status).
         """
         ...
 
-    async def delete(self, sandbox_id: str) -> None:
+    async def delete(self, env_id: str) -> None:
         """Delete a sandbox."""
+        ...
+
+    async def get(self, env_id: str) -> SandboxStatus:
+        """Return normalized status; deletion confirmation uses only deleted/404."""
+        ...
+
+    async def aclose(self) -> None:
+        """Close management connections without silently deleting resources."""
         ...

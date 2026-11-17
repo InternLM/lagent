@@ -581,7 +581,22 @@ class SessionClient:
                 return response
 
             messages, tools = built
-            self._records[self.session_id].append({'messages': messages, 'tools': tools})
+            record = {'messages': messages, 'tools': tools}
+            response_id = response_data.get('id')
+            if response_id:
+                # Preserve provenance outside tokenized OpenAI messages. Prefix
+                # filtering must keep IDs from the exact preceding transcript.
+                request_ids = []
+                for previous in self._records[self.session_id]:
+                    old = previous.get('messages', [])
+                    if (previous.get('tools') == tools and len(old) < len(messages) and
+                            tuple(_canonical_msg(m) for m in messages[:len(old)]) ==
+                            tuple(_canonical_msg(m) for m in old)):
+                        for request_id in previous.get('request_ids', []):
+                            if request_id not in request_ids:
+                                request_ids.append(request_id)
+                record['request_ids'] = request_ids + [response_id]
+            self._records[self.session_id].append(record)
             logger.debug(
                 f"Updated messages for session {self.session_id}: {len(self._records[self.session_id])} traces total"
             )
